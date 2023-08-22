@@ -1,0 +1,9 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "nbmodular"
+  site-url: "https://JaumeAmoresDS.github.io/nbmodular"
+  description: "Convert notebooks to modular code"
+  repo-branch: main
+  repo-url: "https://github.com/JaumeAmoresDS/nbmodular"
