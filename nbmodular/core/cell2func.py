@@ -16,6 +16,9 @@ from fastcore.all import argnames
 # %% ../../nbs/cell2func.ipynb 3
 @magics_class
 class Cell2Func(Magics):
+    """
+    Base magic class for converting cells to modular functions.
+    """
     def __init__(self, shell):
         super().__init__(shell)
         self.variable_values = {}
@@ -34,7 +37,7 @@ class Cell2Func(Magics):
     
     @cell_magic
     def function (self, func, cell):
-        "my cell magic"
+        "Converts cell to function"
         
         get_variables_before = f'\nkeep_variables ("before_{func}", locals ())'
         get_ipython().run_cell(get_variables_before)
@@ -50,18 +53,19 @@ class Cell2Func(Magics):
         self.variables[func] = sorted ({node.id for node in ast.walk(root) if isinstance(node, ast.Name) and not callable(eval(node.id))})
         print (self.variables[func])
 
+# %% ../../nbs/cell2func.ipynb 4
 def load_ipython_extension(ipython):
     """
-    Any module file that define a function named `load_ipython_extension`
-    can be loaded via `%load_ext module.path` or be configured to be
-    autoloaded by IPython at startup time.
+    This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
     """
     magics = Cell2Func(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 4
+# %% ../../nbs/cell2func.ipynb 5
 def keep_variables (function, variables, self=None):
-    "Store params named in comma-separated `names` from calling context into attrs in `self`"
+    """
+    Store `variables` in dictionary entry `self.variables_field[function]`
+    """
     frame_number = 1
     while not isinstance (self, Cell2Func):
         fr = sys._getframe(frame_number)
