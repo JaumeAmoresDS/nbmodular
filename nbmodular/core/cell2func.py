@@ -12,12 +12,13 @@ import ast
 from IPython import get_ipython
 from IPython.core.magic import (Magics, magics_class, line_magic,
                                 cell_magic, line_cell_magic)
+from IPython.core.magic_arguments import (argument, magic_arguments, parse_argstring)
 import ipynbname
 from sklearn.utils import Bunch
 from fastcore.all import argnames
 import nbdev
 
-# %% ../../nbs/cell2func.ipynb 3
+# %% ../../nbs/cell2func.ipynb 4
 class FunctionProcessor (Bunch):
     def to_file (self, file_path, mode='w'):
         with open (file_path, mode=mode) as file:
@@ -25,6 +26,9 @@ class FunctionProcessor (Bunch):
     
     def write (self, file):
         file.write (self.code)
+        
+    def print (self):
+        print (self.code)
     
     def update_code (
         self, 
@@ -53,7 +57,7 @@ class FunctionProcessor (Bunch):
         if display:
             print (function_code)
 
-# %% ../../nbs/cell2func.ipynb 4
+# %% ../../nbs/cell2func.ipynb 5
 class CellProcessor():
     """
     Processes the cell's code according to the magic command.
@@ -64,7 +68,9 @@ class CellProcessor():
         self.file_name = ipynbname.name().replace ('.ipynb', '.py')
         self.nbs_folder = self.get_nbs_path ()
         self.lib_folder = self.get_lib_path ()
-        self.file_path = Path(ipynbname.path ().replace(self.nbs_folder, self.lib_folder)) / self.file_name
+        nb_path = ipynbname.path ()
+        index = nb_path.parts.index(self.nbs_folder.name)
+        self.file_path = (self.nbs_folder.parent / self.lib_folder.name).joinpath (*nb_path.parts[index+1:])
         
     def cell2file (self, folder, cell):
         folder = Path(folder)
@@ -90,7 +96,8 @@ class CellProcessor():
             idx=len(self.function_list), 
             original_code=cell, 
             name=func, 
-            discover_outputs=discover_outputs
+            discover_outputs=discover_outputs,
+            values_before=[]
         )
         if func not in self.function_info:
             self.function_info[func] = this_function
@@ -133,10 +140,14 @@ class CellProcessor():
             if update_previous_functions and function.discover_outputs:
                 this_function.update_code (function, return_values=function.variables_after, tab_size=tab_size)
     
-    def write_functions (self, line):
+    def write (self):
         with open (str(self.file_path), 'w') as file:
             for function in self.function_list:
                 function.write (file)
+                
+    def print (self):
+        for function in self.function_list:
+            function.print ()
         
     def get_lib_path (self):
         return nbdev.config.get_config()['lib_path']
@@ -144,7 +155,7 @@ class CellProcessor():
     def get_nbs_path (self):
         return nbdev.config.get_config()['nbs_path']
 
-# %% ../../nbs/cell2func.ipynb 5
+# %% ../../nbs/cell2func.ipynb 6
 @magics_class
 class CellProcessorMagic (Magics):
     """
@@ -164,14 +175,26 @@ class CellProcessorMagic (Magics):
         self.processor.function (func, cell)
     
     @line_magic
-    def write_functions (self, line):
-        return self.write_functions (line)
+    def write (self, line):
+        return self.processor.write ()
+    
+    @line_magic
+    def print (self, line):
+        return self.processor.print ()
         
     @line_magic
     def cell_processor (self, line):
         return self.processor
 
-# %% ../../nbs/cell2func.ipynb 6
+    @magic_arguments()
+    @argument ('-o','--output', help='function output')
+    @argument ('arg', type=str, help='argument')
+    @cell_magic
+    def other (self, line, cell):
+        args = parse_argstring (other, line)
+        print (args)
+
+# %% ../../nbs/cell2func.ipynb 7
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -179,13 +202,13 @@ def load_ipython_extension(ipython):
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 7
+# %% ../../nbs/cell2func.ipynb 8
 def keep_variables (function, field, variable_values, self=None):
     """
     Store `variables` in dictionary entry `self.variables_field[function]`
     """
     frame_number = 1
-    while not isinstance (self, Cell2Func):
+    while not isinstance (self, CellProcessor):
         fr = sys._getframe(frame_number)
         args = argnames(fr, True)
         if len(args)>0:
