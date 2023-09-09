@@ -75,11 +75,21 @@ class CellProcessor():
         nb_path = ipynbname.path ()
         index = nb_path.parts.index(self.nbs_folder.name)
         self.file_path = (self.nbs_folder.parent / self.lib_folder.name).joinpath (*nb_path.parts[index+1:])
+        self.calls = []
         
         self.parser = argparse.ArgumentParser(description='Process some integers.')
         self.parser.add_argument('-i', '--input', type=str, nargs='+', help='input')
         self.parser.add_argument('-o', '--output', type=str, nargs='+', help='output')
+        
+    def process_function_call (self, line, cell, add_call=True):
+        call = (line, cell)
+        if add_call:
+            self.add_call (call)
+        function_name, signature = self.parse_signature (line)
+        self.function (function_name, cell, call=call, **signature)
 
+    def add_call (self, call):
+        self.calls.append (call)
         
     def cell2file (self, folder, cell):
         folder = Path(folder)
@@ -94,6 +104,7 @@ class CellProcessor():
         self,
         func, 
         cell,
+        call=None,
         input=None,
         unknown_input=True,
         output=None,
@@ -108,7 +119,8 @@ class CellProcessor():
             idx=len(self.function_list), 
             original_code=cell, 
             name=func, 
-            values_before=[]
+            values_before=[],
+            call=call
         )
         if func not in self.function_info:
             self.function_info[func] = this_function
@@ -170,10 +182,10 @@ class CellProcessor():
             pars = self.parser.parse_args(argv[idx:])
             unknown_input = 'input' not in pars
             if not unknown_input:
-                signature.update (input=pars.input, unknown_input=False)
+                signature.update (input=() if pars.input==['None'] else pars.input, unknown_input=pars.input is None)
             unknown_output = 'output' not in pars
             if not unknown_output:
-                signature.update (output=pars.output, unknown_output=False)
+                signature.update (output=() if pars.output==['None'] else pars.output, unknown_output=pars.output is None)
             
         print (function_name, signature)
         return function_name, signature
@@ -210,8 +222,7 @@ class CellProcessorMagic (Magics):
     @cell_magic
     def function (self, line, cell):
         "Converts cell to function"
-        function_name, signature = self.processor.parse_signature (line)
-        self.processor.function (function_name, cell, **signature)
+        self.processor.process_function_call (line, cell)
     
     @line_magic
     def write (self, line):
