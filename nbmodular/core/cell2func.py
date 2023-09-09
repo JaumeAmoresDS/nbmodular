@@ -4,6 +4,10 @@
 __all__ = ['FunctionProcessor', 'CellProcessor', 'CellProcessorMagic', 'load_ipython_extension', 'keep_variables']
 
 # %% ../../nbs/cell2func.ipynb 2
+import os
+import re
+import argparse
+import shlex
 from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
@@ -57,7 +61,7 @@ class FunctionProcessor (Bunch):
         if display:
             print (function_code)
 
-# %% ../../nbs/cell2func.ipynb 5
+# %% ../../nbs/cell2func.ipynb 6
 class CellProcessor():
     """
     Processes the cell's code according to the magic command.
@@ -72,6 +76,11 @@ class CellProcessor():
         index = nb_path.parts.index(self.nbs_folder.name)
         self.file_path = (self.nbs_folder.parent / self.lib_folder.name).joinpath (*nb_path.parts[index+1:])
         
+        self.parser = argparse.ArgumentParser(description='Process some integers.')
+        self.parser.add_argument('-i', '--input', type=str, nargs='+', help='input')
+        self.parser.add_argument('-o', '--output', type=str, nargs='+', help='output')
+
+        
     def cell2file (self, folder, cell):
         folder = Path(folder)
         folder.mkdir(parents=True, exist_ok=True)
@@ -85,18 +94,20 @@ class CellProcessor():
         self,
         func, 
         cell,
+        input=None,
+        unknown_input=True,
+        output=None,
+        unknown_output=True,
         collect_variables_values=True,
         make_function=True,
         tab_size=4,
-        update_previous_functions=True,
-        discover_outputs=True
+        update_previous_functions=True
     ) -> None:
         
         this_function = FunctionProcessor (
             idx=len(self.function_list), 
             original_code=cell, 
             name=func, 
-            discover_outputs=discover_outputs,
             values_before=[]
         )
         if func not in self.function_info:
@@ -130,15 +141,42 @@ class CellProcessor():
         
         if make_function:
             this_function.update_code ( 
-                arguments=variables_before, 
-                return_values=variables_here+variables_before,
+                arguments=variables_before if unknown_input else input, 
+                return_values=(variables_here+variables_before) if unknown_output else output,
                 tab_size=tab_size
             )
             
         for function in self.function_list[:idx]:
             function.variables_after += [v for v in this_function.variables_here if v not in function.variables_after]
-            if update_previous_functions and function.discover_outputs:
+            if update_previous_functions and unknown_output:
                 this_function.update_code (function, return_values=function.variables_after, tab_size=tab_size)
+                
+    def parse_signature (self, line):
+        argv = shlex.split(line, posix=(os.name == 'posix'))
+        
+        function_name=argv[0]
+        signature = dict(
+            input=None,
+            unknown_input=True,
+            output=None,
+            unknown_output=True
+        )
+        found_io = False
+        for idx, arg in enumerate(argv[1:], 1):
+            if arg and arg.startswith('-') and arg != '-' and arg != '->':
+                found_io = True
+                break
+        if found_io:
+            pars = self.parser.parse_args(argv[idx:])
+            unknown_input = 'input' not in pars
+            if not unknown_input:
+                signature.update (input=pars.input, unknown_input=False)
+            unknown_output = 'output' not in pars
+            if not unknown_output:
+                signature.update (output=pars.output, unknown_output=False)
+            
+        print (function_name, signature)
+        return function_name, signature
     
     def write (self):
         with open (str(self.file_path), 'w') as file:
@@ -155,7 +193,7 @@ class CellProcessor():
     def get_nbs_path (self):
         return nbdev.config.get_config()['nbs_path']
 
-# %% ../../nbs/cell2func.ipynb 6
+# %% ../../nbs/cell2func.ipynb 8
 @magics_class
 class CellProcessorMagic (Magics):
     """
@@ -170,9 +208,10 @@ class CellProcessorMagic (Magics):
         self.processor.cell2file (folder, cell)
     
     @cell_magic
-    def function (self, func, cell):
+    def function (self, line, cell):
         "Converts cell to function"
-        self.processor.function (func, cell)
+        function_name, signature = self.processor.parse_signature (line)
+        self.processor.function (function_name, cell, **signature)
     
     @line_magic
     def write (self, line):
@@ -185,16 +224,19 @@ class CellProcessorMagic (Magics):
     @line_magic
     def cell_processor (self, line):
         return self.processor
+        
+          
+    @line_magic
+    def match (self, line):
+        p0 = '[a-zA-Z]\S*\s*\\([^-()]*\\)\s*->\s*\\([^-()]*\\)'
+        p = '\\([^-()]*\\)'
+        m = re.search (p0, line)
+        if m is not None:
+            inp, out = re.findall (p, line)
+            print (inp)
+            print (out)
 
-    @magic_arguments()
-    @argument ('-o','--output', help='function output')
-    @argument ('arg', type=str, help='argument')
-    @cell_magic
-    def other (self, line, cell):
-        args = parse_argstring (other, line)
-        print (args)
-
-# %% ../../nbs/cell2func.ipynb 7
+# %% ../../nbs/cell2func.ipynb 11
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -202,7 +244,7 @@ def load_ipython_extension(ipython):
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 8
+# %% ../../nbs/cell2func.ipynb 13
 def keep_variables (function, field, variable_values, self=None):
     """
     Store `variables` in dictionary entry `self.variables_field[function]`
