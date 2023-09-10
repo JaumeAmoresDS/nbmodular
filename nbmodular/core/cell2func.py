@@ -39,7 +39,7 @@ class FunctionProcessor (Bunch):
         arguments=None, 
         return_values=None,
         tab_size=4,
-        display=True
+        display=False
     ) -> None:
         if arguments is not None:
             self.arguments = arguments
@@ -60,6 +60,12 @@ class FunctionProcessor (Bunch):
         get_ipython().run_cell(function_code)
         if display:
             print (function_code)
+    
+    def __str__ (self):
+        name = None if not hasattr(self, 'name') else self.name
+        return f'FunctionProcessor with name {name}, and fields: {self.keys()}'
+    def __repr__ (self):
+        return str(self)
 
 # %% ../../nbs/cell2func.ipynb 6
 class CellProcessor():
@@ -75,12 +81,16 @@ class CellProcessor():
         nb_path = ipynbname.path ()
         index = nb_path.parts.index(self.nbs_folder.name)
         self.file_path = (self.nbs_folder.parent / self.lib_folder.name).joinpath (*nb_path.parts[index+1:])
-        self.calls = []
+        self.call_history = []
         
         self.parser = argparse.ArgumentParser(description='Process some integers.')
         self.parser.add_argument('-i', '--input', type=str, nargs='+', help='input')
         self.parser.add_argument('-o', '--output', type=str, nargs='+', help='output')
         
+    def reset (self):
+        self.function_list = []
+        self.function_info = Bunch()
+    
     def process_function_call (self, line, cell, add_call=True):
         call = (line, cell)
         if add_call:
@@ -89,7 +99,7 @@ class CellProcessor():
         self.function (function_name, cell, call=call, **signature)
 
     def add_call (self, call):
-        self.calls.append (call)
+        self.call_history.append (call)
         
     def cell2file (self, folder, cell):
         folder = Path(folder)
@@ -112,7 +122,8 @@ class CellProcessor():
         collect_variables_values=True,
         make_function=True,
         tab_size=4,
-        update_previous_functions=True
+        update_previous_functions=True,
+        show=False
     ) -> None:
         
         this_function = FunctionProcessor (
@@ -126,7 +137,7 @@ class CellProcessor():
             self.function_info[func] = this_function
             self.function_list.append (this_function)
             
-        idx = this_function.idx
+        idx = self.function_info[func].idx
         
         # get variables specific about this function
         if collect_variables_values:
@@ -135,33 +146,38 @@ class CellProcessor():
             
             get_variables_here_code = cell + f'\nkeep_variables ("{func}", "values_here", locals ())'
             get_ipython().run_cell(get_variables_here_code)
-            values_before, values_here = this_function['values_before'], this_function['values_here']
+            values_before, values_here = self.function_info[func]['values_before'], self.function_info[func]['values_here']
             values_here = {k:values_here[k] for k in set(values_here).difference(values_before)}
-            this_function['values_here'] = values_here
-            print (values_here)
+            self.function_info[func]['values_here'] = values_here
+            # print (values_here)
         
         root = ast.parse (cell)
+        variables_here = []; 
         variables_here = {node.id for node in ast.walk(root) if isinstance(node, ast.Name) and not callable(eval(node.id))}
-        print (variables_here)
+        # print (variables_here)
         if idx > 0:
-            variables_before = reduce (lambda x, y: x['variables_here'] | y['variables_here'], self.function_list[:idx])
+            variables_before = []
+            for x in self.function_list[:idx]: 
+                variables_before += x['variables_here']
+            #variables_before = reduce (lambda x, y: x['variables_here'] + y['variables_here'], self.function_list[:idx])
         else:
             variables_before = []
         variables_here = sorted (variables_here.difference(variables_before))
-        print (variables_here)
-        this_function.update (variables_here=variables_here, variables_before=variables_here+variables_before, variables_after=[])
+        # print (variables_here)
+        self.function_info[func].update (variables_here=variables_here, variables_before=variables_here+variables_before, variables_after=[])
         
         if make_function:
-            this_function.update_code ( 
+            self.function_info[func].update_code ( 
                 arguments=variables_before if unknown_input else input, 
                 return_values=(variables_here+variables_before) if unknown_output else output,
-                tab_size=tab_size
+                tab_size=tab_size,
+                display=show
             )
             
         for function in self.function_list[:idx]:
-            function.variables_after += [v for v in this_function.variables_here if v not in function.variables_after]
+            function.variables_after += [v for v in self.function_info[func].variables_here if v not in function.variables_after]
             if update_previous_functions and unknown_output:
-                this_function.update_code (function, return_values=function.variables_after, tab_size=tab_size)
+                self.function_info[func].update_code (function, return_values=function.variables_after, tab_size=tab_size, display=False)
                 
     def parse_signature (self, line):
         argv = shlex.split(line, posix=(os.name == 'posix'))
@@ -187,7 +203,7 @@ class CellProcessor():
             if not unknown_output:
                 signature.update (output=() if pars.output==['None'] else pars.output, unknown_output=pars.output is None)
             
-        print (function_name, signature)
+        # print (function_name, signature)
         return function_name, signature
     
     def write (self):
@@ -195,9 +211,15 @@ class CellProcessor():
             for function in self.function_list:
                 function.write (file)
                 
-    def print (self):
-        for function in self.function_list:
-            function.print ()
+    def print (self, function_name):
+        if function_name == 'all':
+            for function in self.function_list:
+                function.print ()
+        else:
+            self.function_info[function_name].print ()
+    
+    def function_info (self, function_name):
+        return self.function_info[function_name]
         
     def get_lib_path (self):
         return nbdev.config.get_config()['lib_path']
@@ -230,7 +252,11 @@ class CellProcessorMagic (Magics):
     
     @line_magic
     def print (self, line):
-        return self.processor.print ()
+        return self.processor.print (line)
+    
+    @line_magic
+    def function_info (self, line):
+        return self.processor.function_info (line)
         
     @line_magic
     def cell_processor (self, line):
@@ -244,8 +270,8 @@ class CellProcessorMagic (Magics):
         m = re.search (p0, line)
         if m is not None:
             inp, out = re.findall (p, line)
-            print (inp)
-            print (out)
+            #print (inp)
+            #print (out)
 
 # %% ../../nbs/cell2func.ipynb 11
 def load_ipython_extension(ipython):
