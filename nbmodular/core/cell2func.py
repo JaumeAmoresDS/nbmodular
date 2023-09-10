@@ -75,10 +75,15 @@ class CellProcessor():
     def __init__(self, **kwargs):
         self.function_info = Bunch()
         self.function_list = []
-        self.file_name = ipynbname.name().replace ('.ipynb', '.py')
+        try:
+            self.file_name = ipynbname.name().replace ('.ipynb', '.py')
+            nb_path = ipynbname.path ()
+        except FileNotFoundError:
+            self.file_name = 'cell2func.py'
+            nb_path = Path ('.')
         self.nbs_folder = self.get_nbs_path ()
         self.lib_folder = self.get_lib_path ()
-        nb_path = ipynbname.path ()
+        
         index = nb_path.parts.index(self.nbs_folder.name)
         self.file_path = (self.nbs_folder.parent / self.lib_folder.name).joinpath (*nb_path.parts[index+1:])
         self.call_history = []
