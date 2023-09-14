@@ -99,3 +99,61 @@ original one.
 ``` sh
 pip install nbmodular
 ```
+
+## Usage
+
+Load ipython extension
+
+Use ipython magic `function` by passing it the name of the function you
+want:
+
+``` python
+a = 2
+b = 3
+c = a+b
+print (a+b)
+```
+
+    5
+
+This defines the function `print_values`, as follows:
+
+``` python
+```
+
+    def print_values():
+        a = 2
+        b = 3
+        c = a+b
+        print (a+b)
+        return a,b,c
+
+Now, we can define another function in a cell that uses variables from
+the previous function.
+
+``` python
+d = 10
+```
+
+``` python
+a = a + d
+b = b + d
+c = c + d
+print (a, b, c, d)
+```
+
+    12 13 15 10
+
+``` python
+```
+
+    def add_new_values(idx, original_code, name, values_before, call, values_here, variables_here, variables_before, variables_after, arguments, return_values, code):
+        a = a + d
+        b = b + d
+        c = c + d
+        print (a, b, c, d)
+        return d
+
+By default, we can use variables from the previous cell as we normally
+do, i.e., values are still global. However, we can also opt to run the
+code encapsulated in
