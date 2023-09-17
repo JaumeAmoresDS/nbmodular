@@ -256,12 +256,17 @@ class CellProcessor():
     def get_nbs_path (self):
         return nbdev.config.get_config()['nbs_path']
     
-    def function_pipeline (self):
-        for func in cell_processor.function_list:
+    def pipeline_code (self, pipeline_name=None):
+        pipeline_name = f'{self.file_name}_pipeline' if pipeline_name is None else pipeline_name
+        code = f"def {pipeline_name} ():\n"
+        for func in self.function_list:
             argument_list_str = ", ".join(func.arguments)
             return_list_str = f'{", ".join(func.return_values)} = ' if len(func.return_values)>0 else ''
-            print (f'{return_list_str}{func.name} ({argument_list_str})')
-        
+            code += f'{" " * self.tab_size}' + f'{return_list_str}{func.name} ({argument_list_str})\n'
+        return code
+    
+    def print_pipeline (self):
+        print (self.pipeline_code())
 
 # %% ../../nbs/cell2func.ipynb 8
 @magics_class
@@ -298,6 +303,13 @@ class CellProcessorMagic (Magics):
     def cell_processor (self, line):
         return self.processor
         
+    @line_magic
+    def pipeline_code (self, line):
+        return self.processor.pipeline_code ()
+    
+    @line_magic
+    def print_pipeline (self, line):
+        return self.processor.print_pipeline ()
           
     @line_magic
     def match (self, line):
