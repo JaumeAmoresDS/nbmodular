@@ -255,6 +255,13 @@ class CellProcessor():
                    
     def get_nbs_path (self):
         return nbdev.config.get_config()['nbs_path']
+    
+    def function_pipeline (self):
+        for func in cell_processor.function_list:
+            argument_list_str = ", ".join(func.arguments)
+            return_list_str = f'{", ".join(func.return_values)} = ' if len(func.return_values)>0 else ''
+            print (f'{return_list_str}{func.name} ({argument_list_str})')
+        
 
 # %% ../../nbs/cell2func.ipynb 8
 @magics_class
