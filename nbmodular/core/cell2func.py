@@ -70,7 +70,7 @@ class FunctionProcessor (Bunch):
     
     def __str__ (self):
         name = None if not hasattr(self, 'name') else self.name
-        return f'FunctionProcessor with name {name}, and fields: {self.keys()}\n    Arguments: {self.arguments}\n    Output: {self.return_values}\n    Variables: {self.value_here.keys()}'
+        return f'FunctionProcessor with name {name}, and fields: {self.keys()}\n    Arguments: {self.arguments}\n    Output: {self.return_values}\n    Variables: {self.values_here.keys()}'
     
     def __repr__ (self):
         return str(self)
@@ -82,6 +82,7 @@ class CellProcessor():
     """
     def __init__(self, tab_size=4, **kwargs):
         self.function_info = Bunch()
+        self.current_function = Bunch()
         self.function_list = []
         self.tab_size=tab_size
         try:
@@ -138,7 +139,7 @@ class CellProcessor():
 
         get_ipython().run_cell(cell)
                     
-    def function (
+    def create_function (
         self,
         func, 
         cell,
@@ -151,7 +152,7 @@ class CellProcessor():
         make_function=True,
         update_previous_functions=True,
         show=False
-    ) -> None:
+    ) -> FunctionProcessor:
         
         this_function = FunctionProcessor (
             idx=len(self.function_list), 
@@ -161,11 +162,9 @@ class CellProcessor():
             tab_size=self.tab_size,
             call=call
         )
-        if func not in self.function_info:
-            self.function_info[func] = this_function
-            self.function_list.append (this_function)
+        self.current_function = this_function
             
-        idx = self.function_info[func].idx
+        idx = this_function.idx
         
         # get variables specific about this function
         if collect_variables_values:
@@ -174,13 +173,13 @@ class CellProcessor():
             
             get_new_variables_code = cell + f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("{func}", "values_here", locals ())'
             get_ipython().run_cell(get_new_variables_code)
-            values_before, values_here = self.function_info[func]['values_before'], self.function_info[func]['values_here']
+            values_before, values_here = this_function['values_before'], this_function['values_here']
             values_here = {k:values_here[k] for k in set(values_here).difference(values_before)}
-            self.function_info[func]['values_here'] = values_here
+            this_function['values_here'] = values_here
             # print (values_here)
         
         root = ast.parse (cell)
-        variables_in_function = self.function_info[func]['values_before'] | self.function_info[func]['values_here']
+        variables_in_function = this_function['values_before'] | this_function['values_here']
         # we shouldn't need to check if node.id is callable, there is surely an attribute that indicates that in the AST!
         new_variables = {node.id for node in ast.walk(root) if isinstance(node, ast.Name) and node.id in variables_in_function and not callable(variables_in_function[node.id])}
         # print (new_variables)
@@ -193,10 +192,11 @@ class CellProcessor():
             previous_variables = []
         new_variables = sorted (new_variables.difference(previous_variables))
         # print (new_variables)
-        self.function_info[func].update (new_variables=new_variables, previous_variables=previous_variables, posterior_variables=[])
+        this_function.update (new_variables=new_variables, previous_variables=previous_variables, posterior_variables=[])
         
         if make_function:
-            self.function_info[func].update_code ( 
+            this_function.update_code ( 
+                #arguments=[x for x in previous_variables if x in this_function.values_here] if unknown_input else input, 
                 arguments=previous_variables if unknown_input else input, 
                 return_values=[] if unknown_output else output,
                 display=show
@@ -204,12 +204,36 @@ class CellProcessor():
             
         # add variables from current function to posterior_variables of all the previous functions
         for function in self.function_list[:idx]:
-            function.posterior_variables += [v for v in self.function_info[func].previous_variables+self.function_info[func].new_variables if v not in function.posterior_variables]
+            function.posterior_variables += [v for v in this_function.previous_variables+this_function.new_variables if v not in function.posterior_variables]
             if update_previous_functions and unknown_output:
                 function.update_code (
+                    #return_values=[x for x in function.previous_variables+function.new_variables if x in function.posterior_variables and x in function.values_here], 
                     return_values=[x for x in function.previous_variables+function.new_variables if x in function.posterior_variables], 
                     display=False
                 )
+                
+        this_function.arguments = [x for x in this_function.arguments if x in this_function.values_here]
+        this_function.return_values = [x for x in this_function.return_values if x in this_function.values_here]
+        this_function.update_code (arguments=this_function.arguments, return_values=this_function.return_values, display=True)
+        
+        return this_function
+    
+    def function (
+        self,
+        func,
+        cell,
+        merge=False,
+        **kwargs
+    ) -> None:
+        
+        this_function = self.create_function (func, cell, **kwargs)
+        if func in self.function_info and merge:
+            new_function = self.merge_function (self.function_info[func], this_function)
+            self.function_list.remove (this_function)
+            this_function = new_function
+        else:
+            self.function_info[func] = this_function
+            self.function_list.append (this_function)
                 
     def parse_signature (self, line):
         argv = shlex.split(line, posix=(os.name == 'posix'))
@@ -345,5 +369,5 @@ def keep_variables (function, field, variable_values, self=None):
             self = fr.f_locals[args[0]]
         frame_number += 1
     variable_values = {k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k])}
-    function_info = getattr(self, 'function_info')
-    function_info[function][field]=variable_values
+    current_function = getattr(self, 'current_function')
+    current_function[field]=variable_values
