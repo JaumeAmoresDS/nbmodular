@@ -4,6 +4,7 @@
 __all__ = ['FunctionProcessor', 'CellProcessor', 'CellProcessorMagic', 'load_ipython_extension', 'keep_variables']
 
 # %% ../../nbs/cell2func.ipynb 2
+import pdb
 import os
 import re
 import argparse
@@ -151,7 +152,9 @@ class CellProcessor():
         collect_variables_values=True,
         make_function=True,
         update_previous_functions=True,
-        show=False
+        show=False,
+        register_pipeline=True,
+        pipeline_name=None
     ) -> FunctionProcessor:
         
         this_function = FunctionProcessor (
@@ -182,6 +185,7 @@ class CellProcessor():
         variables_in_function = this_function['values_before'] | this_function['values_here']
         # we shouldn't need to check if node.id is callable, there is surely an attribute that indicates that in the AST!
         new_variables = {node.id for node in ast.walk(root) if isinstance(node, ast.Name) and node.id in variables_in_function and not callable(variables_in_function[node.id])}
+        this_function.variables_here = new_variables
         # print (new_variables)
         if idx > 0:
             previous_variables = []
@@ -196,8 +200,8 @@ class CellProcessor():
         
         if make_function:
             this_function.update_code ( 
-                #arguments=[x for x in previous_variables if x in this_function.values_here] if unknown_input else input, 
-                arguments=previous_variables if unknown_input else input, 
+                arguments=[x for x in previous_variables if x in this_function.variables_here] if unknown_input else input, 
+                #arguments=previous_variables if unknown_input else input, 
                 return_values=[] if unknown_output else output,
                 display=show
             )
@@ -207,14 +211,13 @@ class CellProcessor():
             function.posterior_variables += [v for v in this_function.previous_variables+this_function.new_variables if v not in function.posterior_variables]
             if update_previous_functions and unknown_output:
                 function.update_code (
-                    #return_values=[x for x in function.previous_variables+function.new_variables if x in function.posterior_variables and x in function.values_here], 
-                    return_values=[x for x in function.previous_variables+function.new_variables if x in function.posterior_variables], 
+                    return_values=[x for x in function.previous_variables+function.new_variables if x in function.posterior_variables and x in function.variables_here], 
+                    #return_values=[x for x in function.previous_variables+function.new_variables if x in function.posterior_variables], 
                     display=False
                 )
                 
-        this_function.arguments = [x for x in this_function.arguments if x in this_function.values_here]
-        this_function.return_values = [x for x in this_function.return_values if x in this_function.values_here]
-        this_function.update_code (arguments=this_function.arguments, return_values=this_function.return_values, display=True)
+        if register_pipeline:
+            self.register_pipeline (pipeline_name=pipeline_name)
         
         return this_function
     
@@ -287,10 +290,19 @@ class CellProcessor():
             argument_list_str = ", ".join(func.arguments)
             return_list_str = f'{", ".join(func.return_values)} = ' if len(func.return_values)>0 else ''
             code += f'{" " * self.tab_size}' + f'{return_list_str}{func.name} ({argument_list_str})\n'
-        return code
+        return code, pipeline_name
+    
+    def register_pipeline (self, pipeline_name=None):
+        code, name = self.pipeline_code (pipeline_name=pipeline_name)
+        self.pipeline = FunctionProcessor (code=code,
+                                           arguments=[],
+                                           return_values=[],
+                                           name=name)
+        get_ipython().run_cell(code)
     
     def print_pipeline (self):
-        print (self.pipeline_code())
+        code, name = self.pipeline_code()  
+        print (code)
 
 # %% ../../nbs/cell2func.ipynb 8
 @magics_class
