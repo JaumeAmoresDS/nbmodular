@@ -166,6 +166,7 @@ class CellProcessor():
             call=call
         )
         self.current_function = this_function
+        self.function_info[func] = this_function
             
         idx = this_function.idx
         
@@ -175,7 +176,10 @@ class CellProcessor():
             get_ipython().run_cell(get_previous_variables_code)
             
             get_new_variables_code = cell + f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("{func}", "values_here", locals ())'
+            #pdb.set_trace()
             get_ipython().run_cell(get_new_variables_code)
+            this_function = self.function_info[func]
+            #pdb.set_trace()
             values_before, values_here = this_function['values_before'], this_function['values_here']
             values_here = {k:values_here[k] for k in set(values_here).difference(values_before)}
             this_function['values_here'] = values_here
@@ -216,7 +220,7 @@ class CellProcessor():
                     display=False
                 )
                 
-        if register_pipeline:
+        if register_pipeline and len(self.function_list)>0:
             self.register_pipeline (pipeline_name=pipeline_name)
         
         return this_function
@@ -299,6 +303,7 @@ class CellProcessor():
                                            return_values=[],
                                            name=name)
         get_ipython().run_cell(code)
+            
     
     def print_pipeline (self):
         code, name = self.pipeline_code()  
@@ -381,5 +386,9 @@ def keep_variables (function, field, variable_values, self=None):
             self = fr.f_locals[args[0]]
         frame_number += 1
     variable_values = {k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k])}
-    current_function = getattr(self, 'current_function')
-    current_function[field]=variable_values
+    #pdb.set_trace()
+    #current_function = getattr(self, 'current_function')
+    #current_function[field]=variable_values
+    function_info = getattr(self, 'function_info')
+    function_info[function][field]=variable_values
+    
