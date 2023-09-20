@@ -151,8 +151,6 @@ get_initial_values ()
 
     5
 
-    (2, 3, 5)
-
 The inputs and outputs of the function change dynamically every time we
 add a new function cell. For example, if we add a new function `get_d`:
 
@@ -290,7 +288,7 @@ get_initial_values_info.arguments
 get_initial_values_info.values_here
 ```
 
-    {'a': 2, 'b': 3, 'c': 5}
+    {'a': 2, 'c': 5, 'b': 3}
 
 ``` python
 get_initial_values_info.return_values
@@ -325,26 +323,46 @@ print (get_initial_values_info.code)
 .. and the AST trees:
 
 ``` python
-print (get_initial_values_info.get_ast (code=get_d_info.original_code))
+print (get_initial_values_info.get_ast (code=get_initial_values_info.original_code))
 ```
 
     Module(
       body=[
         Assign(
           targets=[
-            Name(id='d', ctx=Store())],
-          value=Constant(value=10))],
+            Name(id='a', ctx=Store())],
+          value=Constant(value=2)),
+        Assign(
+          targets=[
+            Name(id='b', ctx=Store())],
+          value=Constant(value=3)),
+        Assign(
+          targets=[
+            Name(id='c', ctx=Store())],
+          value=BinOp(
+            left=Name(id='a', ctx=Load()),
+            op=Add(),
+            right=Name(id='b', ctx=Load()))),
+        Expr(
+          value=Call(
+            func=Name(id='print', ctx=Load()),
+            args=[
+              BinOp(
+                left=Name(id='a', ctx=Load()),
+                op=Add(),
+                right=Name(id='b', ctx=Load()))],
+            keywords=[]))],
       type_ignores=[])
     None
 
 ``` python
-print (get_initial_values_info.get_ast (code=get_d_info.code))
+print (get_initial_values_info.get_ast (code=get_initial_values_info.code))
 ```
 
     Module(
       body=[
         FunctionDef(
-          name='get_d',
+          name='get_initial_values',
           args=arguments(
             posonlyargs=[],
             args=[],
@@ -354,10 +372,35 @@ print (get_initial_values_info.get_ast (code=get_d_info.code))
           body=[
             Assign(
               targets=[
-                Name(id='d', ctx=Store())],
-              value=Constant(value=10)),
+                Name(id='a', ctx=Store())],
+              value=Constant(value=2)),
+            Assign(
+              targets=[
+                Name(id='b', ctx=Store())],
+              value=Constant(value=3)),
+            Assign(
+              targets=[
+                Name(id='c', ctx=Store())],
+              value=BinOp(
+                left=Name(id='a', ctx=Load()),
+                op=Add(),
+                right=Name(id='b', ctx=Load()))),
+            Expr(
+              value=Call(
+                func=Name(id='print', ctx=Load()),
+                args=[
+                  BinOp(
+                    left=Name(id='a', ctx=Load()),
+                    op=Add(),
+                    right=Name(id='b', ctx=Load()))],
+                keywords=[])),
             Return(
-              value=Name(id='d', ctx=Load()))],
+              value=Tuple(
+                elts=[
+                  Name(id='a', ctx=Load()),
+                  Name(id='b', ctx=Load()),
+                  Name(id='c', ctx=Load())],
+                ctx=Load()))],
           decorator_list=[])],
       type_ignores=[])
     None

@@ -362,16 +362,13 @@ class CellProcessorMagic (Magics):
             #print (inp)
             #print (out)
 
-# %% ../../nbs/cell2func.ipynb 10
+# %% ../../nbs/cell2func.ipynb 11
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
     """
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
-
-# %% ../../nbs/cell2func.ipynb 11
-load_ipython_extension (get_ipython())
 
 # %% ../../nbs/cell2func.ipynb 13
 def keep_variables (function, field, variable_values, self=None):
