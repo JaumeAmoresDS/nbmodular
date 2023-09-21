@@ -5,6 +5,7 @@ __all__ = ['FunctionProcessor', 'CellProcessor', 'CellProcessorMagic', 'load_ipy
 
 # %% ../../nbs/cell2func.ipynb 2
 import pdb
+import joblib
 import os
 import re
 import argparse
@@ -108,6 +109,10 @@ class CellProcessor():
         self.parser = argparse.ArgumentParser(description='Process some integers.')
         self.parser.add_argument('-i', '--input', type=str, nargs='+', help='input')
         self.parser.add_argument('-o', '--output', type=str, nargs='+', help='output')
+        self.parser.add_argument('-m', '--merge',  action='store_true', help='merge with previous function')
+        self.parser.add_argument('-s', '--show',  action='store_true', help='show function code')
+        self.parser.add_argument('-l', '--load',  action='store_true', help='load variables')
+        self.parser.add_argument('--save',  action='store_true', help='save variables')
         
     def reset (self):
         values_to_remove = [x for function in self.function_list for x in function.values_here.keys()]
@@ -125,8 +130,8 @@ class CellProcessor():
         call = (line, cell)
         if add_call:
             self.add_call (call)
-        function_name, signature = self.parse_signature (line)
-        self.function (function_name, cell, call=call, **signature)
+        function_name, kwargs = self.parse_signature (line)
+        self.function (function_name, cell, call=call, **kwargs)
 
     def add_call (self, call):
         self.call_history.append (call)
@@ -154,6 +159,8 @@ class CellProcessor():
         update_previous_functions=True,
         show=False,
         register_pipeline=True,
+        load=False,
+        save=False,
         pipeline_name=None
     ) -> FunctionProcessor:
         
@@ -171,6 +178,15 @@ class CellProcessor():
         idx = this_function.idx
         
         # get variables specific about this function
+        path_variables = Path (self.file_name) / f'{func}.pk'
+        if load and path_variables.exists():
+            get_ipython().run_cell(f'''
+            import joblib
+            values_here = joblib.load ("{path_variables}")
+            v = locals()
+            v.update (values_here)''')
+            return
+            
         if collect_variables_values:
             get_previous_variables_code = f'from nbmodular.core.cell2func import keep_variables\nkeep_variables ("{func}", "values_before", locals ())'
             get_ipython().run_cell(get_previous_variables_code)
@@ -184,6 +200,10 @@ class CellProcessor():
             values_here = {k:values_here[k] for k in set(values_here).difference(values_before)}
             this_function['values_here'] = values_here
             # print (values_here)
+        
+        if save:
+            path_variables.parent.mkdir (parents=True, exist_ok=True)
+            joblib.dump (values_here, path_variables)
         
         root = ast.parse (cell)
         variables_in_function = this_function['values_before'] | this_function['values_here']
@@ -241,6 +261,14 @@ class CellProcessor():
         else:
             self.function_info[func] = this_function
             self.function_list.append (this_function)
+            
+    def merge_function (self, f, g):
+        previous_variables
+        new_variables
+        posterior_variables
+        variables_here
+        values_here
+        values_before
                 
     def parse_signature (self, line):
         argv = shlex.split(line, posix=(os.name == 'posix'))
@@ -265,9 +293,13 @@ class CellProcessor():
             unknown_output = 'output' not in pars
             if not unknown_output:
                 signature.update (output=() if pars.output==['None'] else pars.output, unknown_output=pars.output is None)
+            kwargs = vars(pars)
+        else:
+            kwargs = {}
+        kwargs.update (signature)
             
         # print (function_name, signature)
-        return function_name, signature
+        return function_name, kwargs
     
     def write (self):
         with open (str(self.file_path), 'w') as file:
