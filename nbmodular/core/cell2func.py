@@ -45,9 +45,13 @@ class FunctionProcessor (Bunch):
         return_values=None,
         display=False
     ) -> None:
-        if arguments is not None:
-            self.arguments = arguments
-        arguments = ', '.join (self.arguments)
+        if self.data:
+            arguments = []
+            arguments = 'test=False'
+        else:
+            if arguments is not None:
+                self.arguments = arguments
+            arguments = ', '.join (self.arguments)
         if return_values is not None:
             self.return_values = return_values
         return_values = ','.join (self.return_values)
@@ -59,7 +63,8 @@ class FunctionProcessor (Bunch):
             return_line = f'{" " * self.tab_size}{return_line}\n'
         else:
             return_line = ''
-        function_code = f'def {self.name}({arguments}):\n' + function_code + return_line
+        function_calls = '' if 'function_calls' not in self else self.function_calls
+        function_code = f'def {self.name}({arguments}):\n' + function_calls + function_code + return_line
         self.code = function_code
         get_ipython().run_cell(function_code)
         if display:
@@ -136,6 +141,15 @@ class FunctionProcessor (Bunch):
             display=show
         )
     
+    def add_function_call (self, function):
+        if 'added_functions' not in self:
+            self.added_functions = []
+        if 'function_calls' not in self:
+            self.function_calls = '' 
+        if function.name not in self.added_functions:
+            self.added_functions.append (function.name)
+            self.function_calls += f'{" "*self.tab_size}' + ','.join (function.return_values) + f' = {function.name}()\n'
+    
     def __str__ (self):
         name = None if not hasattr(self, 'name') else self.name
         return f'FunctionProcessor with name {name}, and fields: {self.keys()}\n    Arguments: {self.arguments}\n    Output: {self.return_values}\n    Locals: {self.current_values.keys()}'
@@ -156,8 +170,16 @@ class CellProcessor():
         self.test_function_info = Bunch()
         self.test_function_list = []
         
-        self.imports = ''
-        self.test_imports = ''
+        self.test_data_function_info = Bunch()
+        self.test_data_function_list = []
+        
+        self.all_variables = set()
+        self.test_data_all_variables = set()
+        self.test_all_variables = set()
+
+        
+        self.imports = 'from sklearn.utils import Bunch\nfrom pathlib import Path\nimport joblib\nimport pandas as pd\nimport numpy as np\n'
+        self.test_imports = 'from sklearn.utils import Bunch\nfrom pathlib import Path\nimport joblib\nimport pandas as pd\nimport numpy as np\n'
         
         self.tab_size=tab_size
         #pdb.set_trace()
@@ -175,11 +197,12 @@ class CellProcessor():
         if found_notebook:
             index = nb_path.parts.index(self.nbs_folder.name)
             self.file_path = (self.nbs_folder.parent / self.lib_folder.name).joinpath (*nb_path.parts[index+1:])
+            self.file_path = self.file_path.parent / self.file_path.name.replace ('.ipynb', '.py')
+            self.test_file_path = self.file_path.parent / f'test_{self.file_path.name}'
         else:
-            self.file_path = nb_path / self.file_name
-            
-        self.file_path = self.file_path.parent / self.file_path.name.replace ('.ipynb', '.py')
-        self.test_file_path = self.file_path.parent / f'test_{self.file_path.name}'
+            file_name = self.file_name.replace ('.ipynb', '.py')
+            self.file_path = nb_path / file_name
+            self.test_file_path = nb_path /  f'test_{file_name}'
             
         self.call_history = []
         
@@ -239,8 +262,8 @@ class CellProcessor():
             name=func, 
             call=call,
             tab_size=self.tab_size,
-            arguments=None,
-            return_values=None,
+            arguments=[],
+            return_values=[],
             unknown_input=unknown_input,
             unknown_output=unknown_output,
             test=test,
@@ -289,9 +312,9 @@ class CellProcessor():
         if load and path_variables.exists():
             get_ipython().run_cell(f'''
             import joblib
-            values_here = joblib.load ("{path_variables}")
+            current_values = joblib.load ("{path_variables}")
             v = locals()
-            v.update (values_here)''')
+            v.update (current_values)''')
             return
 
         if collect_variables_values:           
@@ -301,7 +324,7 @@ class CellProcessor():
             path_variables.parent.mkdir (parents=True, exist_ok=True)
             joblib.dump (values_here, path_variables)
             
-        if make_function:
+        if make_function and not self.current_function.test:
             self.current_function.update_code ( 
                 arguments=self.current_function.previous_variables if unknown_input else input, 
                 return_values=[] if unknown_output else output,
@@ -310,6 +333,14 @@ class CellProcessor():
             
         # add variables from current function to posterior_variables of all the previous functions
         #pdb.set_trace()
+        # test data functions have output dependencies on test functions
+        # test functions have no output dependencies
+        function_list = (self.function_list if not self.current_function.test and not self.current_function.data 
+                         else self.test_data_function_list if self.current_function.test and not self.current_function.data
+                         else [])
+        # if test function, its input comes from test data functions: 
+        # - 1 add output dependencies to test data functions
+        # - 2 add input dependencies from each test data function
         for function in self.function_list[:idx]:
             function.posterior_variables += [v for v in self.current_function.previous_variables if v not in function.posterior_variables]
             if update_previous_functions and unknown_output:
@@ -317,7 +348,28 @@ class CellProcessor():
                     return_values=[x for x in function.created_variables + function.argument_variables if x in function.posterior_variables], 
                     display=False
                 )
-                        
+            if self.current_function.test and function.test and function.data:
+                self.current_function.add_function_call (function)
+        
+        if self.current_function.test:
+            self.current_function.update_code ( 
+                    arguments=[],
+                    return_values=[],
+                    display=show
+                )
+        
+        if self.current_function.test and self.current_function.data:
+            common = set(self.current_function.all_variables).intersection (self.test_data_all_variables)
+            if len(common)>0:
+                raise ValueError (f'detected common variables with other test data functions {common}:')
+        
+        if not self.current_function.test and not self.current_function.data:
+            self.all_variables |= set(self.current_function.all_variables)
+        elif self.current_function.test and self.current_function.data:
+            self.test_data_all_variables |= set(self.current_function.all_variables)
+        elif self.current_function.test and not self.current_function.data:
+            self.test_all_variables |= set(self.current_function.all_variables)
+        
         return self.current_function
     
     def function (
@@ -341,9 +393,13 @@ class CellProcessor():
         if func in self.function_info and merge:
             this_function = self.merge_functions (self.function_info[func], this_function, show=show)
         
-        if this_function.test or this_function.data:
-            self.test_function_info[func] = this_function
-            self.test_function_list.append (this_function)
+        if this_function.test:
+            if this_function.data:
+                self.test_data_function_info[func] = this_function
+                self.test_data_function_list.append (this_function)
+            else:
+                self.test_function_info[func] = this_function
+                self.test_function_list.append (this_function)
         else:
             self.function_info[func] = this_function
             self.function_list.append (this_function)
@@ -439,12 +495,65 @@ class CellProcessor():
     
     def pipeline_code (self, pipeline_name=None):
         pipeline_name = f'{self.file_name}_pipeline' if pipeline_name is None else pipeline_name
-        code = f"def {pipeline_name} ():\n"
+        
+        code = (
+f'''
+def {pipeline_name} (test=False, load=True, save=True, result_file_name="{pipeline_name}"):
+
+    # load result
+    result_file_name += '.pk'
+    path_variables = Path ("{self.file_name}") / result_file_name
+    if load and path_variables.exists():
+        result = joblib.load (path_variables)
+        return result
+
+''')
+        return_values = set()
         for func in self.function_list:
-            argument_list_str = ", ".join(func.arguments)
+            argument_list_str = ", ".join(func.arguments) if not func.data else "test=test"
             return_list_str = f'{", ".join(func.return_values)} = ' if len(func.return_values)>0 else ''
+            return_values |= set(func.return_values)
             code += f'{" " * self.tab_size}' + f'{return_list_str}{func.name} ({argument_list_str})\n'
+        
+        return_values = list (return_values)
+        result_str = "Bunch (" + "".join([f"{k}={k}," for k in return_values[:-1]])
+        if len(return_values)>0:
+            k = return_values[-1] 
+            result_str = result_str + f"{k}={k}" + ")"
+        else:
+            result_str = result_str + ")"
+        
+        code += (
+f'''
+    # save result
+    result = {result_str}
+    if save:    
+        path_variables.parent.mkdir (parents=True, exist_ok=True)
+        joblib.dump (result, path_variables)
+    return result
+''')
+            
         return code, pipeline_name
+    
+    def test_pipeline_code (self, pipeline_name=None):
+        pipeline_name = f'{self.file_name}_pipeline' if pipeline_name is None else pipeline_name
+        result_file_name_with_braces = 'f"test_{result_file_name}"'
+        code = (
+f'''
+def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeline_name}"):
+    result = {pipeline_name} (test=test, load=True, save=True, result_file_name=result_file_name)
+    if prev_result is None:
+        prev_result = {pipeline_name} (test=test, load=True, save=True, result_file_name={result_file_name_with_braces})
+    for k in prev_result:
+        assert k in result
+        if type(prev_result[k]) is pd.DataFrame:    
+            pd.testing.assert_frame_equal (result[k], prev_result[k])
+        elif type(prev_result[k]) is np.array:
+            np.testing.assert_array_equal (result[k], prev_result[k])
+        else:
+            assert result[k]==prev_result[k]
+''')
+        return code, f'test_{pipeline_name}'
     
     def register_pipeline (self, pipeline_name=None):
         code, name = self.pipeline_code (pipeline_name=pipeline_name)
@@ -452,11 +561,22 @@ class CellProcessor():
                                            arguments=[],
                                            return_values=[],
                                            name=name)
+        get_ipython().run_cell(self.imports)
         get_ipython().run_cell(code)
-            
+        
+        code, name = self.test_pipeline_code (pipeline_name=pipeline_name)
+        self.test_pipeline = FunctionProcessor (code=code,
+                                           arguments=[],
+                                           return_values=[],
+                                           name=name)
+        get_ipython().run_cell(self.test_imports)
+        get_ipython().run_cell(code)
     
-    def print_pipeline (self):
-        code, name = self.pipeline_code()  
+    def print_pipeline (self, test=False, **kwargs):
+        if test:
+            code, name = self.test_pipeline_code()  
+        else:
+            code, name = self.pipeline_code()  
         print (code)
 
 # %% ../../nbs/cell2func.ipynb 8
@@ -506,7 +626,8 @@ class CellProcessorMagic (Magics):
     
     @line_magic
     def print_pipeline (self, line):
-        return self.processor.print_pipeline ()
+        kwargs = self.processor.parse_args (line)
+        return self.processor.print_pipeline (**kwargs)
           
     @line_magic
     def match (self, line):
