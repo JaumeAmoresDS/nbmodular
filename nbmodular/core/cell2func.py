@@ -71,14 +71,14 @@ class FunctionProcessor (Bunch):
         print(ast.dump(ast.parse(code), indent=2))
         
     def parse_variables (self, code=None):
-        if code is none: code=self.original_code
+        if code is None: code=self.original_code
         # variable parsing
         root = ast.parse (code)
         # newly created names: candidates for return list and not for argument list
-        self.created_variables = {node.id for node in ast.walk(root) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)}
+        self.created_variables = list({node.id for node in ast.walk(root) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)})
         # names defined before: candidates for arguments list, if they are not callable
-        self.loaded_names = {node.id for node in ast.walk(root) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)}
-        self.previous_variables = [x for x in loaded_names if x not in created_variables]
+        self.loaded_names = list({node.id for node in ast.walk(root) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)})
+        self.previous_variables = [x for x in self.loaded_names if x not in self.created_variables]
         
         # names that appear as arguments in functions -> some defined created the current function, some in the current one
         v=[node for node in ast.walk(root) if isinstance(node, ast.Call)]
@@ -87,20 +87,58 @@ class FunctionProcessor (Bunch):
         
         # loaded names that are not arguments and not created in the current function are most probably read-only, i.e., not candidates for return list
         self.read_only_variables = [x for x in self.previous_variables if x not in self.argument_variables]
+        self.posterior_variables = []
+        #pdb.set_trace()
         
     def run_code_and_collect_locals (self, code=None):
-        if code is none: code=self.original_code
+        if code is None: code=self.original_code
+        
+        get_old_variables_code = f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("{self.name}", "previous_values", locals ())'
+        get_ipython().run_cell(get_old_variables_code)
+        
         get_new_variables_code = code + f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("{self.name}", "current_values", locals ())'
         get_ipython().run_cell(get_new_variables_code)
-        #previous_variables = [x, this_function['current_values'][x] for x in previous_variables if x in this_function['current_values']]
-        #previous_variables = [v[0] for v in previous_variables if not callable(v[1])]
+        
+        self.match_variables_and_locals ()
+        
+    def match_variables_and_locals (self):
+        # previous variables / values
+        self.previous_variables = [k for k in self.previous_variables if k in self.previous_values]
+        self.previous_variables += [k for k in self.argument_variables if k in self.previous_values and k not in self.previous_variables]
+        self.previous_variables += [k for k in self.created_variables if k in self.previous_values and k in self.loaded_names+self.argument_variables and k not in self.previous_variables]
+        self.previous_values = {k:self.previous_values[k] for k in self.previous_values if k in self.previous_variables}
+        
+        # created variables / current values
+        self.current_values = {k:self.current_values[k] for k in self.current_values if k in self.created_variables}
+        self.all_values = {**self.previous_values, **self.current_values}
+        self.argument_variables = [k for k in self.argument_variables if k in self.all_values]
+        self.read_only_variables = [k for k in self.read_only_variables if k in self.all_values]
+        
+        self.all_variables = self.created_variables.copy()
+        self.all_variables += [k for k in self.previous_variables if k not in self.all_variables]
+        self.all_variables += [k for k in self.argument_variables if k not in self.all_variables]
+        
+        self.current_values = {k:self.current_values[k] for k in self.current_values if k in self.all_variables}
+        self.previous_values = {k:self.current_values[k] for k in self.current_values if k in self.all_variables}
+        
+    def merge_functions (self, new_function, show=False):
+        self.original_code += new_function.original_code
+        self.parse_variables ()
+        self.current_values = {**self.current_values, **new_function.current_values}
+        self.previous_values = {**self.previous_values, **new_function.previous_values}
+        self.match_variables_and_locals ()
 
-        #current_values = {k:this_function['current_values'][k] for k in this_function['current_values'] if k in current_variables}
-        this_function['current_values'] = current_values
+        self.arguments = [] if self.unknown_input else self.arguments
+        self.return_values = [] if self.unknown_output else self.return_values
+        self.update_code (
+            arguments=self.arguments, 
+            return_values=self.return_values,
+            display=show
+        )
     
     def __str__ (self):
         name = None if not hasattr(self, 'name') else self.name
-        return f'FunctionProcessor with name {name}, and fields: {self.keys()}\n    Arguments: {self.arguments}\n    Output: {self.return_values}\n    Variables: {self.values_here.keys()}'
+        return f'FunctionProcessor with name {name}, and fields: {self.keys()}\n    Arguments: {self.arguments}\n    Output: {self.return_values}\n    Locals: {self.current_values.keys()}'
     
     def __repr__ (self):
         return str(self)
@@ -173,12 +211,23 @@ class CellProcessor():
 
         get_ipython().run_cell(cell)
     
-    def create_function (self, cell, func, call):
+    def create_function (
+        self, 
+        cell, 
+        func, 
+        call,
+        unknown_input=None,
+        unknown_output=None
+    ):
         this_function = FunctionProcessor (
             original_code=cell, 
             name=func, 
             call=call,
-            tab_size=self.tab_size
+            tab_size=self.tab_size,
+            arguments=None,
+            return_values=None,
+            unknown_input=unknown_input,
+            unknown_output=unknown_output
         )
         this_function.parse_variables ()
         return this_function
@@ -196,17 +245,20 @@ class CellProcessor():
         make_function=True,
         update_previous_functions=True,
         show=False,
-        register_pipeline=True,
         load=False,
-        save=False,
-        pipeline_name=None
+        save=False
     ) -> FunctionProcessor:
         
-        self.current_function = self.create_function (cell, func, call)
+        self.current_function = self.create_function (
+            cell, 
+            func, 
+            call, 
+            unknown_input=unknown_input,
+            unknown_output=unknown_output
+        )
         
         # register
         idx = self.current_function.idx = len(self.function_list)
-        self.function_info[func] = self.current_function
         
         # get variables specific about this function
         path_variables = Path (self.file_name) / f'{func}.pk'
@@ -227,24 +279,21 @@ class CellProcessor():
             
         if make_function:
             self.current_function.update_code ( 
-                arguments=previous_variables if unknown_input else input, 
-                #arguments=previous_variables if unknown_input else input, 
+                arguments=self.current_function.previous_variables if unknown_input else input, 
                 return_values=[] if unknown_output else output,
                 display=show
             )
             
         # add variables from current function to posterior_variables of all the previous functions
+        #pdb.set_trace()
         for function in self.function_list[:idx]:
-            function.posterior_variables += [v for v in self.current_function.new_variables if v not in function.posterior_variables]
+            function.posterior_variables += [v for v in self.current_function.previous_variables if v not in function.posterior_variables]
             if update_previous_functions and unknown_output:
                 function.update_code (
-                    return_values=[x for x in function.new_variables if x in function.posterior_variables], 
+                    return_values=[x for x in function.created_variables + function.argument_variables if x in function.posterior_variables], 
                     display=False
                 )
-                
-        if register_pipeline and len(self.function_list)>0:
-            self.register_pipeline (pipeline_name=pipeline_name)
-        
+                        
         return self.current_function
     
     def function (
@@ -252,25 +301,36 @@ class CellProcessor():
         func,
         cell,
         merge=False,
+        show=False,
+        register_pipeline=True,
+        pipeline_name=None,
+        write=True,
         **kwargs
     ) -> None:
         
-        this_function = self.create_function_register_and_run_code (func, cell, **kwargs)
+        for f in self.function_list:
+            if f.name == func:
+                self.function_list.remove (f)
+                break
+        
+        this_function = self.create_function_register_and_run_code (func, cell, show=show, **kwargs)
         if func in self.function_info and merge:
-            new_function = self.merge_function (self.function_info[func], this_function)
-            self.function_list.remove (this_function)
-            this_function = new_function
+            this_function = self.merge_functions (self.function_info[func], this_function, show=show)
+        
+        self.function_info[func] = this_function
+        self.function_list.append (this_function)
+        
+        if register_pipeline:
+            self.register_pipeline (pipeline_name=pipeline_name)
         else:
-            self.function_info[func] = this_function
-            self.function_list.append (this_function)
+            self.pipeline = None
+        if write:
+            self.write ()
+
             
-    def merge_function (self, f, g):
-        previous_variables
-        new_variables
-        posterior_variables
-        variables_here
-        values_here
-        values_before
+    def merge_functions (self, f, g, show=False):
+        f.merge_functions (g, show=show)
+        return f
                 
     def parse_signature (self, line):
         argv = shlex.split(line, posix=(os.name == 'posix'))
@@ -307,6 +367,8 @@ class CellProcessor():
         with open (str(self.file_path), 'w') as file:
             for function in self.function_list:
                 function.write (file)
+            if self.pipeline is not None:
+                self.pipeline.write (file)
                 
     def print (self, function_name):
         if function_name == 'all':
@@ -405,18 +467,24 @@ def load_ipython_extension(ipython):
     ipython.register_magics(magics)
 
 # %% ../../nbs/cell2func.ipynb 13
+import pdb
 def keep_variables (function, field, variable_values, self=None):
     """
     Store `variables` in dictionary entry `self.variables_field[function]`
     """
-    frame_number = 1
+    frame_number = 0
+    #pdb.set_trace()
     while not isinstance (self, FunctionProcessor):
-        fr = sys._getframe(frame_number)
+        try:
+            fr = sys._getframe(frame_number)
+        except:
+            break
         args = argnames(fr, True)
         if len(args)>0:
             self = fr.f_locals[args[0]]
         frame_number += 1
-    variable_values = {k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k])}
-    #pdb.set_trace()
-    self[field]=variable_values
+    if isinstance (self, FunctionProcessor):
+        variable_values = {k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k])}
+        #pdb.set_trace()
+        self[field]=variable_values
     
