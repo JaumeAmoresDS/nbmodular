@@ -152,7 +152,15 @@ class CellProcessor():
         self.function_info = Bunch()
         self.current_function = Bunch()
         self.function_list = []
+        
+        self.test_function_info = Bunch()
+        self.test_function_list = []
+        
+        self.imports = ''
+        self.test_imports = ''
+        
         self.tab_size=tab_size
+        #pdb.set_trace()
         try:
             self.file_name = ipynbname.name().replace ('.ipynb', '.py')
             nb_path = ipynbname.path ()
@@ -170,6 +178,9 @@ class CellProcessor():
         else:
             self.file_path = nb_path / self.file_name
             
+        self.file_path = self.file_path.parent / self.file_path.name.replace ('.ipynb', '.py')
+        self.test_file_path = self.file_path.parent / f'test_{self.file_path.name}'
+            
         self.call_history = []
         
         self.parser = argparse.ArgumentParser(description='Process some integers.')
@@ -179,6 +190,8 @@ class CellProcessor():
         self.parser.add_argument('-s', '--show',  action='store_true', help='show function code')
         self.parser.add_argument('-l', '--load',  action='store_true', help='load variables')
         self.parser.add_argument('--save',  action='store_true', help='save variables')
+        self.parser.add_argument('-t', '--test',  action='store_true', help='test function / imports')
+        self.parser.add_argument('-d', '--data',  action='store_true', help='data function')
         
     def reset (self):
         values_to_remove = [x for function in self.function_list for x in function.values_here.keys()]
@@ -217,7 +230,9 @@ class CellProcessor():
         func, 
         call,
         unknown_input=None,
-        unknown_output=None
+        unknown_output=None,
+        test=False,
+        data=False
     ):
         this_function = FunctionProcessor (
             original_code=cell, 
@@ -227,7 +242,9 @@ class CellProcessor():
             arguments=None,
             return_values=None,
             unknown_input=unknown_input,
-            unknown_output=unknown_output
+            unknown_output=unknown_output,
+            test=test,
+            data=data
         )
         this_function.parse_variables ()
         return this_function
@@ -246,15 +263,22 @@ class CellProcessor():
         update_previous_functions=True,
         show=False,
         load=False,
-        save=False
+        save=False,
+        test=False,
+        data=False
     ) -> FunctionProcessor:
+        
+        if test:
+            func = 'test_' + func
         
         self.current_function = self.create_function (
             cell, 
             func, 
             call, 
             unknown_input=unknown_input,
-            unknown_output=unknown_output
+            unknown_output=unknown_output,
+            test=test,
+            data=data
         )
         
         # register
@@ -317,8 +341,12 @@ class CellProcessor():
         if func in self.function_info and merge:
             this_function = self.merge_functions (self.function_info[func], this_function, show=show)
         
-        self.function_info[func] = this_function
-        self.function_list.append (this_function)
+        if this_function.test or this_function.data:
+            self.test_function_info[func] = this_function
+            self.test_function_list.append (this_function)
+        else:
+            self.function_info[func] = this_function
+            self.function_list.append (this_function)
         
         if register_pipeline:
             self.register_pipeline (pipeline_name=pipeline_name)
@@ -326,11 +354,18 @@ class CellProcessor():
             self.pipeline = None
         if write:
             self.write ()
+            self.write (test=True)
 
             
     def merge_functions (self, f, g, show=False):
         f.merge_functions (g, show=show)
         return f
+    
+    def parse_args (self, line):
+        argv = shlex.split(line, posix=(os.name == 'posix'))
+        pars = self.parser.parse_args(argv)
+        kwargs = vars(pars)
+        return kwargs
                 
     def parse_signature (self, line):
         argv = shlex.split(line, posix=(os.name == 'posix'))
@@ -363,11 +398,30 @@ class CellProcessor():
         # print (function_name, signature)
         return function_name, kwargs
     
-    def write (self):
-        with open (str(self.file_path), 'w') as file:
-            for function in self.function_list:
+    def write_imports (
+        self,
+        cell,
+        test=False,
+        **kwargs
+    ):
+        get_ipython().run_cell (cell)
+        if not test:
+            self.imports += cell
+        else:
+            self.test_imports += cell
+        self.write (test=test)
+    
+    def write (self, test=False):
+        #pdb.set_trace()
+        function_list = self.function_list if not test else self.test_function_list
+        file_path = self.file_path if not test else self.test_file_path
+        imports = self.imports if not test else self.test_imports
+        with open (str(file_path), 'w') as file:
+            #pdb.set_trace()
+            file.write (imports)
+            for function in function_list:
                 function.write (file)
-            if self.pipeline is not None:
+            if not test and self.pipeline is not None:
                 self.pipeline.write (file)
                 
     def print (self, function_name):
@@ -423,6 +477,12 @@ class CellProcessorMagic (Magics):
     def function (self, line, cell):
         "Converts cell to function"
         self.processor.process_function_call (line, cell)
+        
+    @cell_magic
+    def imports (self, line, cell):
+        "Converts cell to function"
+        kwargs = self.processor.parse_args (line)
+        self.processor.write_imports (cell, **kwargs)
     
     @line_magic
     def write (self, line):
