@@ -137,7 +137,7 @@ show with the magic command `print`:
 ``` python
 ```
 
-    def get_initial_values():
+    def get_initial_values(test=False):
         a = 2
         b = 3
         c = a+b
@@ -146,10 +146,13 @@ show with the magic command `print`:
 This function is defined in the notebook space, so we can invoke it:
 
 ``` python
-get_initial_values ()
 ```
 
-    5
+    def get_initial_values(test=False):
+        a = 2
+        b = 3
+        c = a+b
+        print (a+b)
 
 The inputs and outputs of the function change dynamically every time we
 add a new function cell. For example, if we add a new function `get_d`:
@@ -173,9 +176,77 @@ c = c + d
 ```
 
 ``` python
+f = %function_info add_all
 ```
 
-    def add_all(a, b, c, d):
+``` python
+print(f.code)
+```
+
+    def add_all(d, a, c, b):
+        a = a + d
+        b = b + d
+        c = c + d
+
+``` python
+```
+
+    def add_all(d, a, c, b):
+        a = a + d
+        b = b + d
+        c = c + d
+
+``` python
+```
+
+
+    from sklearn.utils import Bunch
+    from pathlib import Path
+    import joblib
+    import pandas as pd
+    import numpy as np
+
+    def test_index_pipeline (test=True, prev_result=None, result_file_name="index_pipeline"):
+        result = index_pipeline (test=test, load=True, save=True, result_file_name=result_file_name)
+        if prev_result is None:
+            prev_result = index_pipeline (test=test, load=True, save=True, result_file_name=f"test_{result_file_name}")
+        for k in prev_result:
+            assert k in result
+            if type(prev_result[k]) is pd.DataFrame:    
+                pd.testing.assert_frame_equal (result[k], prev_result[k])
+            elif type(prev_result[k]) is np.array:
+                np.testing.assert_array_equal (result[k], prev_result[k])
+            else:
+                assert result[k]==prev_result[k]
+
+``` python
+```
+
+
+    def index_pipeline (test=False, load=True, save=True, result_file_name="index_pipeline"):
+
+        # load result
+        result_file_name += '.pk'
+        path_variables = Path ("index") / result_file_name
+        if load and path_variables.exists():
+            result = joblib.load (path_variables)
+            return result
+
+        a, c, b = get_initial_values (test=test)
+        d = get_d ()
+        add_all (d, a, c, b)
+
+        # save result
+        result = Bunch (a=a,c=c,b=b,d=d)
+        if save:    
+            path_variables.parent.mkdir (parents=True, exist_ok=True)
+            joblib.dump (result, path_variables)
+        return result
+
+``` python
+```
+
+    def add_all(d, a, c, b):
         a = a + d
         b = b + d
         c = c + d
@@ -187,18 +258,18 @@ as needed. We can look at all the functions defined so far by using
 ``` python
 ```
 
-    def get_initial_values():
+    def get_initial_values(test=False):
         a = 2
         b = 3
         c = a+b
         print (a+b)
-        return a,b,c
+        return a,c,b
 
     def get_d():
         d = 10
         return d
 
-    def add_all(a, b, c, d):
+    def add_all(d, a, c, b):
         a = a + d
         b = b + d
         c = c + d
@@ -220,24 +291,24 @@ list all of them with `print all`
 ``` python
 ```
 
-    def get_initial_values():
+    def get_initial_values(test=False):
         a = 2
         b = 3
         c = a+b
         print (a+b)
-        return a,b,c
+        return a,c,b
 
     def get_d():
         d = 10
         return d
 
-    def add_all(a, b, c, d):
+    def add_all(d, a, c, b):
         a = a + d
         b = b + d
         c = c + d
-        return a,b,c,d
+        return a,c,b
 
-    def print_all(a, b, c, d):
+    def print_all(a, d, c, b):
         print (a, b, c, d)
 
 ### print_pipeline
@@ -248,21 +319,85 @@ can print this pipeline with the magic `print_pipeline`
 ``` python
 ```
 
-    def index_pipeline ():
-        a, b, c = get_initial_values ()
+
+    def index_pipeline (test=False, load=True, save=True, result_file_name="index_pipeline"):
+
+        # load result
+        result_file_name += '.pk'
+        path_variables = Path ("index") / result_file_name
+        if load and path_variables.exists():
+            result = joblib.load (path_variables)
+            return result
+
+        a, c, b = get_initial_values (test=test)
         d = get_d ()
-        a, b, c, d = add_all (a, b, c, d)
-        print_all (a, b, c, d)
+        a, c, b = add_all (d, a, c, b)
+        print_all (a, d, c, b)
+
+        # save result
+        result = Bunch (a=a,c=c,b=b,d=d)
+        if save:    
+            path_variables.parent.mkdir (parents=True, exist_ok=True)
+            joblib.dump (result, path_variables)
+        return result
 
 This shows the data flow in terms of inputs and outputs
 
 And run it:
 
 ``` python
+self = %cell_processor
+```
+
+``` python
+self.function_list
+```
+
+    [FunctionProcessor with name get_initial_values, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'all_variables', 'code'])
+         Arguments: []
+         Output: ['a', 'c', 'b']
+         Locals: dict_keys(['a', 'b', 'c']),
+     FunctionProcessor with name get_d, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'all_variables', 'code'])
+         Arguments: []
+         Output: ['d']
+         Locals: dict_keys(['d']),
+     FunctionProcessor with name add_all, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'all_variables', 'code'])
+         Arguments: ['d', 'a', 'c', 'b']
+         Output: ['a', 'c', 'b']
+         Locals: dict_keys(['a', 'b', 'c']),
+     FunctionProcessor with name print_all, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'all_variables', 'code'])
+         Arguments: ['a', 'd', 'c', 'b']
+         Output: []
+         Locals: dict_keys([])]
+
+``` python
+```
+
+    def get_initial_values(test=False):
+        a = 2
+        b = 3
+        c = a+b
+        print (a+b)
+        return a,c,b
+
+    def get_d():
+        d = 10
+        return d
+
+    def add_all(d, a, c, b):
+        a = a + d
+        b = b + d
+        c = c + d
+        return a,c,b
+
+    def print_all(a, d, c, b):
+        print (a, b, c, d)
+
+``` python
 index_pipeline()
 ```
 
-    5
+    {'d': 10, 'b': 13, 'a': 12, 'c': 15}
 
 ### function_info
 
@@ -285,16 +420,16 @@ get_initial_values_info.arguments
     []
 
 ``` python
-get_initial_values_info.values_here
+get_initial_values_info.current_values
 ```
 
-    {'a': 2, 'c': 5, 'b': 3}
+    {'a': 2, 'b': 3, 'c': 5}
 
 ``` python
 get_initial_values_info.return_values
 ```
 
-    ['a', 'b', 'c']
+    ['a', 'c', 'b']
 
 We can also inspect the original code written in the cell…
 
@@ -313,12 +448,12 @@ the code of the defined function:
 print (get_initial_values_info.code)
 ```
 
-    def get_initial_values():
+    def get_initial_values(test=False):
         a = 2
         b = 3
         c = a+b
         print (a+b)
-        return a,b,c
+        return a,c,b
 
 .. and the AST trees:
 
@@ -365,10 +500,12 @@ print (get_initial_values_info.get_ast (code=get_initial_values_info.code))
           name='get_initial_values',
           args=arguments(
             posonlyargs=[],
-            args=[],
+            args=[
+              arg(arg='test')],
             kwonlyargs=[],
             kw_defaults=[],
-            defaults=[]),
+            defaults=[
+              Constant(value=False)]),
           body=[
             Assign(
               targets=[
@@ -398,8 +535,8 @@ print (get_initial_values_info.get_ast (code=get_initial_values_info.code))
               value=Tuple(
                 elts=[
                   Name(id='a', ctx=Load()),
-                  Name(id='b', ctx=Load()),
-                  Name(id='c', ctx=Load())],
+                  Name(id='c', ctx=Load()),
+                  Name(id='b', ctx=Load())],
                 ctx=Load()))],
           decorator_list=[])],
       type_ignores=[])
@@ -415,4 +552,119 @@ the logic for running the above magic commands, which can become handy:
 
 ``` python
 cell_processor = %cell_processor
+```
+
+## Merging function cells
+
+In order to explore intermediate results, it is convenient to split the
+code in a function among different cells. This can be done by passing
+the flag `--merge True`
+
+``` python
+x = [1, 2, 3]
+y = [100, 200, 300]
+z = [u+v for u,v in zip(x,y)]
+```
+
+``` python
+z
+```
+
+    [101, 202, 303]
+
+``` python
+```
+
+    def analyze():
+        x = [1, 2, 3]
+        y = [100, 200, 300]
+        z = [u+v for u,v in zip(x,y)]
+
+``` python
+product = [u*v for u, v in zip(x,y)]
+```
+
+``` python
+```
+
+    def analyze():
+        x = [1, 2, 3]
+        y = [100, 200, 300]
+        z = [u+v for u,v in zip(x,y)]
+        product = [u*v for u, v in zip(x,y)]
+
+# Test functions
+
+By passing the flag `--test` we can indicate that the logic in the cell
+is dedicated to test other functions in the notebook. The test function
+is defined taking the well-known `pytest` library as a test engine in
+mind.
+
+This has the following consequences:  
+- The analysis of dependencies is not associated with variables found in
+other cells. - Test functions do not appear in the overall pipeline. -
+The data variables used by the test function can be defined in separate
+test data cells which in turn are converted to functions. These
+functions are called at the beginning of the test cell.
+
+Let’s see an example
+
+``` python
+a = 5
+b = 3
+c = 6
+d = 7
+```
+
+``` python
+add_all(d, a, b, c)
+```
+
+    (12, 10, 13)
+
+``` python
+# test function add_all
+assert add_all(d, a, b, c)==(12, 10, 13)
+```
+
+``` python
+```
+
+    def test_add_all():
+        a,c,b,d = test_input_add_all()
+        # test function add_all
+        assert add_all(d, a, b, c)==(12, 10, 13)
+
+``` python
+```
+
+    def test_input_add_all(test=False):
+        a = 5
+        b = 3
+        c = 6
+        d = 7
+        return a,c,b,d
+
+Test functions are written in a separate test module, withprefix `test_`
+
+``` python
+!ls ../tests
+```
+
+    index.ipynb  test_example.py
+
+# Imports
+
+In order to include libraries in our python module, we can use the magic
+imports. Those will be written at the beginning of the module:
+
+``` python
+import pandas as pd
+```
+
+Imports can be indicated separately for the test module by passing the
+flag `--test`:
+
+``` python
+import matplotlib.pyplot as plt
 ```

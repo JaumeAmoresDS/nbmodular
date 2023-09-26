@@ -178,8 +178,9 @@ class CellProcessor():
         self.test_all_variables = set()
 
         
-        self.imports = 'from sklearn.utils import Bunch\nfrom pathlib import Path\nimport joblib\nimport pandas as pd\nimport numpy as np\n'
-        self.test_imports = 'from sklearn.utils import Bunch\nfrom pathlib import Path\nimport joblib\nimport pandas as pd\nimport numpy as np\n'
+        self.imports = ''
+        #self.test_imports = 'from sklearn.utils import Bunch\nfrom pathlib import Path\nimport joblib\nimport pandas as pd\nimport numpy as np\n'
+        self.test_imports = ''
         
         self.tab_size=tab_size
         #pdb.set_trace()
@@ -198,7 +199,8 @@ class CellProcessor():
             index = nb_path.parts.index(self.nbs_folder.name)
             self.file_path = (self.nbs_folder.parent / self.lib_folder.name).joinpath (*nb_path.parts[index+1:])
             self.file_path = self.file_path.parent / self.file_path.name.replace ('.ipynb', '.py')
-            self.test_file_path = self.file_path.parent / f'test_{self.file_path.name}'
+            self.test_file_path = (self.nbs_folder.parent / 'tests').joinpath (*nb_path.parts[index+1:])/ f'test_{self.file_path.name}'
+            self.test_file_path.parent.mkdir (parents=True, exist_ok=True)
         else:
             file_name = self.file_name.replace ('.ipynb', '.py')
             self.file_path = nb_path / file_name
@@ -324,9 +326,9 @@ class CellProcessor():
             path_variables.parent.mkdir (parents=True, exist_ok=True)
             joblib.dump (values_here, path_variables)
             
-        if make_function and not self.current_function.test:
+        if make_function:
             self.current_function.update_code ( 
-                arguments=self.current_function.previous_variables if unknown_input else input, 
+                arguments=self.current_function.previous_variables if unknown_input and not self.current_function.test else [] if self.current_function.test else input, 
                 return_values=[] if unknown_output else output,
                 display=show
             )
@@ -341,7 +343,9 @@ class CellProcessor():
         # if test function, its input comes from test data functions: 
         # - 1 add output dependencies to test data functions
         # - 2 add input dependencies from each test data function
-        for function in self.function_list[:idx]:
+        #if self.current_function.test:
+        #    pdb.set_trace()
+        for function in function_list[:idx]:
             function.posterior_variables += [v for v in self.current_function.previous_variables if v not in function.posterior_variables]
             if update_previous_functions and unknown_output:
                 function.update_code (
@@ -351,12 +355,8 @@ class CellProcessor():
             if self.current_function.test and function.test and function.data:
                 self.current_function.add_function_call (function)
         
-        if self.current_function.test:
-            self.current_function.update_code ( 
-                    arguments=[],
-                    return_values=[],
-                    display=show
-                )
+        if self.current_function.test and not self.current_function.data:
+            self.current_function.update_code()
         
         if self.current_function.test and self.current_function.data:
             common = set(self.current_function.all_variables).intersection (self.test_data_all_variables)
@@ -393,15 +393,16 @@ class CellProcessor():
         if func in self.function_info and merge:
             this_function = self.merge_functions (self.function_info[func], this_function, show=show)
         
+        function_name = this_function.name
         if this_function.test:
             if this_function.data:
-                self.test_data_function_info[func] = this_function
+                self.test_data_function_info[function_name] = this_function
                 self.test_data_function_list.append (this_function)
             else:
-                self.test_function_info[func] = this_function
+                self.test_function_info[function_name] = this_function
                 self.test_function_list.append (this_function)
         else:
-            self.function_info[func] = this_function
+            self.function_info[function_name] = this_function
             self.function_list.append (this_function)
         
         if register_pipeline:
@@ -480,12 +481,18 @@ class CellProcessor():
             if not test and self.pipeline is not None:
                 self.pipeline.write (file)
                 
-    def print (self, function_name):
+    def print (self, function_name, test=False, data=False, **kwargs):
         if function_name == 'all':
-            for function in self.function_list:
+            function_list = self.test_data_function_list if test and data else self.test_function_list if test else self.function_list
+            for function in function_list:
                 function.print ()
         else:
-            self.function_info[function_name].print ()
+            if test and data:
+                self.test_data_function_info[function_name].print ()
+            elif test:
+                self.test_function_info[function_name].print ()
+            else:
+                self.function_info[function_name].print ()
             
     def get_lib_path (self):
         return nbdev.config.get_config()['lib_path']
@@ -540,6 +547,12 @@ f'''
         result_file_name_with_braces = 'f"test_{result_file_name}"'
         code = (
 f'''
+from sklearn.utils import Bunch
+from pathlib import Path
+import joblib
+import pandas as pd
+import numpy as np
+
 def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeline_name}"):
     result = {pipeline_name} (test=test, load=True, save=True, result_file_name=result_file_name)
     if prev_result is None:
@@ -610,11 +623,18 @@ class CellProcessorMagic (Magics):
     
     @line_magic
     def print (self, line):
-        return self.processor.print (line)
+        #pdb.set_trace()
+        function_name, kwargs = self.processor.parse_signature (line)
+        return self.processor.print (function_name, **kwargs)
     
     @line_magic
-    def function_info (self, function_name):
-        return self.processor.function_info [function_name]
+    def function_info (self, line):
+        function_name, kwargs = self.processor.parse_signature (line)
+        #pdb.set_trace()
+        if kwargs.get('test', False):
+            return self.processor.test_function_info [function_name]
+        else:
+            return self.processor.function_info [function_name]
         
     @line_magic
     def cell_processor (self, line):
