@@ -52,6 +52,17 @@ class FunctionProcessor (Bunch):
         
     def print (self):
         print (self.code)
+        
+    def __getattr__ (self, k):
+        #pdb.set_trace()
+        try:
+            v = super().__getattr__ (k)
+            return v
+        except:
+            if hasattr(self, 'current_values') and k in self.current_values:
+                return self.current_values[k]
+            else:
+                return None
     
     def update_code (
         self, 
@@ -81,7 +92,8 @@ class FunctionProcessor (Bunch):
         else:
             return_line = ''
         function_calls = '' if 'function_calls' not in self else self.function_calls
-        function_code = f'def {self.name}({arguments}):\n' + function_calls + function_code + return_line
+        signature = self.signature if self.signature is not None else f'def {self.name}({arguments}):'
+        function_code = f'{signature}\n' + function_calls + function_code + return_line
         self.code = function_code
         get_ipython().run_cell(function_code)
         if display:
@@ -186,6 +198,7 @@ class FunctionProcessor (Bunch):
         if output is not None:
             self.return_values += output
         if input is not None or output is not None:
+            self.signature=None
             self.update_code ()
     
     def __str__ (self):
@@ -256,8 +269,8 @@ class CellProcessor():
         self.parser.add_argument('--save',  action='store_true', help='save variables')
         self.parser.add_argument('-t', '--test',  action='store_true', help='test function / imports')
         self.parser.add_argument('-d', '--data',  action='store_true', help='data function')
-        self.parser.add_argument('-n', '--norun',  action='store_true', help='data function')
-        self.parser.add_argument('-p', '--permanent',  action='store_true', help='data function')
+        self.parser.add_argument('-n', '--norun',  action='store_true', help='do not execute the contents of the cell')
+        self.parser.add_argument('-p', '--permanent',  action='store_true', help='do not change the contents of the function')
         
     def reset (self):
         values_to_remove = [x for function in self.function_list for x in function.values_here.keys()]
@@ -299,7 +312,8 @@ class CellProcessor():
         unknown_output=None,
         test=False,
         data=False,
-        permanent=False
+        permanent=False,
+        norun=False
     ):
         root = ast.parse (cell)
         if False:
@@ -309,12 +323,14 @@ class CellProcessor():
             
         #if hasattr(function_visitor, 'name'):
         if len(name)>0:
+            #pdb.set_trace()
             #func = function_visitor.name
             #arguments = function_visitor.arguments
             #return_visitor = ReturnVisitor ()
             #return_values = return_visitor.return_values
             if len(name) > 0:
                 name=name[0]
+                func=name
             arguments = [[x.arg for x in node.args.args] for node in ast.walk(root) if isinstance (node, ast.FunctionDef)]
             if len(arguments)>0:
                 arguments = arguments[0]
@@ -333,14 +349,18 @@ class CellProcessor():
             return_values=[]
         
         if defined and not permanent:
-                return_lines = 0
-                original_code = ''
-                for line in cell.splitlines():
-                    if 'return' in line:
-                        return_lines += 1
-                    elif 'def' not in line:
-                        original_code += line.strip() + '\n'
-                cell = original_code
+            return_lines = 0
+            original_code = ''
+            for line in cell.splitlines():
+                if 'return' in line:
+                    return_lines += 1
+                elif 'def' not in line:
+                    original_code += line.strip() + '\n'
+                else:
+                    signature = line
+            cell = original_code
+        else:
+            signature=None
         
         this_function = FunctionProcessor (
             original_code=cell, 
@@ -354,13 +374,15 @@ class CellProcessor():
             test=test,
             data=data,
             defined=defined,
-            permanent=permanent
+            permanent=permanent,
+            signature=signature,
+            norun=norun
         )
         if defined and permanent:
             this_function.code = cell
         this_function.parse_variables ()
         
-        if defined:
+        if False and defined:
             loaded_names_not_in_arguments = set(this_function.loaded_names).difference (arguments)
             if len(loaded_names_not_in_arguments) > 0:
                 print (f'The following loaded names were not found in the arguments list: {loaded_names_not_in_arguments}')
@@ -399,7 +421,8 @@ class CellProcessor():
             unknown_output=unknown_output,
             test=test,
             data=data,
-            permanent=permanent
+            permanent=permanent,
+            norun=norun
         )
         
         # register
@@ -455,10 +478,23 @@ class CellProcessor():
             self.current_function.update_code()
             
         if self.current_function.defined:
-            self.previous_not_in_arguments = list (set (self.current_function.previous_variables).difference (self.current_function.arguments))
+            potential_arguments = self.current_function.loaded_names
+            #potential_arguments = self.current_function.previous_variables
+            potential_arguments = list (set (potential_arguments).difference (self.current_function.arguments))
             self.posterior_not_in_results = list (set (self.current_function.posterior_variables).difference (self.current_function.return_values))
-            if len (self.previous_not_in_arguments) > 0:
-                print (f'Detected the following previous variables that are not in the argument list: {self.previous_not_in_arguments}')
+            
+            non_callable=[]
+            #pdb.set_trace()
+            for name in potential_arguments:
+                try:
+                    x = eval(name)
+                    if not callable (x):
+                        non_callable.append(name)
+                except: 
+                    non_callable.append(name)
+            if len (non_callable) > 0:
+                print (f'Detected the following previous variables that are not in the argument list: {non_callable}')
+            if len (self.posterior_not_in_results) > 0:
                 print (f'Detected the following posterior variables that are not in the return list: {self.posterior_not_in_results}')
         
         if self.current_function.test and self.current_function.data:
@@ -530,7 +566,7 @@ class CellProcessor():
     def parse_signature (self, line):
         argv = shlex.split(line, posix=(os.name == 'posix'))
         
-        function_name=argv[0]
+        function_name=argv[0] if len(argv)>0 else ''
         signature = dict(
             input=None,
             unknown_input=True,
@@ -538,10 +574,13 @@ class CellProcessor():
             unknown_output=True
         )
         found_io = False
-        for idx, arg in enumerate(argv[1:], 1):
+        for idx, arg in enumerate(argv):
             if arg and arg.startswith('-') and arg != '-' and arg != '->':
                 found_io = True
                 break
+        if found_io and idx==0:
+            function_name = ''
+            #pdb.set_trace()
         if found_io:
             pars = self.parser.parse_args(argv[idx:])
             unknown_input = 'input' not in pars
