@@ -149,3 +149,17 @@ checklink/cookies.txt
 
 # Quarto
 .quarto
+
+nbmodular/debugging.py
+nbmodular/index.py
+nbmodular/test_index.py
+nbs/debugging.ipynb
+nbs/index/
+push.sh
+temporary.py
+test_temporary.py
+tests/index.ipynb/
+tests/test_debugging.py
+tests/tutorials/
+nbmodular/tutorials/test_tutorial.py
+nbmodular/tutorials/__init__.py

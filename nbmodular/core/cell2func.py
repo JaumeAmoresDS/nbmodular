@@ -38,7 +38,7 @@ class ReturnVisitor (ast.NodeVisitor):
         else:
             self.return_values = return_values
 
-# %% ../../nbs/cell2func.ipynb 11
+# %% ../../nbs/cell2func.ipynb 10
 class FunctionProcessor (Bunch):
     """
     Function processor.
@@ -59,7 +59,7 @@ class FunctionProcessor (Bunch):
             v = super().__getattr__ (k)
             return v
         except:
-            if hasattr(self, 'current_values') and k in self.current_values:
+            if 'current_values' in self.keys() and k in self.current_values:
                 return self.current_values[k]
             else:
                 return None
@@ -209,7 +209,7 @@ class FunctionProcessor (Bunch):
     def __repr__ (self):
         return str(self)
 
-# %% ../../nbs/cell2func.ipynb 15
+# %% ../../nbs/cell2func.ipynb 12
 class CellProcessor():
     """
     Processes the cell's code according to the magic command.
@@ -235,7 +235,6 @@ class CellProcessor():
         self.test_imports = ''
         
         self.tab_size=tab_size
-        #pdb.set_trace()
         try:
             self.file_name = ipynbname.name().replace ('.ipynb', '.py')
             nb_path = ipynbname.path ()
@@ -244,14 +243,28 @@ class CellProcessor():
             self.file_name = 'temporary.py'
             nb_path = Path ('.').absolute()
             found_notebook = False
-        self.nbs_folder = self.get_nbs_path ()
-        self.lib_folder = self.get_lib_path ()
+        
+        self.file_name_without_extension = self.file_name.split('.')[0]
+        
+        try:
+            self.nbs_folder = self.get_nbs_path ()
+            self.lib_folder = self.get_lib_path ()
+        except:
+            found_notebook = False
         
         if found_notebook:
-            index = nb_path.parts.index(self.nbs_folder.name)
+            #pdb.set_trace()
+            try:
+                index = nb_path.parts.index(self.nbs_folder.name)
+            except:
+                index = -1
             self.file_path = (self.nbs_folder.parent / self.lib_folder.name).joinpath (*nb_path.parts[index+1:])
             self.file_path = self.file_path.parent / self.file_path.name.replace ('.ipynb', '.py')
-            self.test_file_path = (self.nbs_folder.parent / 'tests').joinpath (*nb_path.parts[index+1:])/ f'test_{self.file_path.name}'
+            self.file_path.parent.mkdir (parents=True, exist_ok=True)
+            if index > -1:
+                self.test_file_path = (self.nbs_folder.parent / 'tests').joinpath (*nb_path.parts[index+1:-1])/ f'test_{self.file_path.name}'
+            else:
+                self.test_file_path = self.file_path.parent / f'test_{self.file_path.name}'
             self.test_file_path.parent.mkdir (parents=True, exist_ok=True)
         else:
             file_name = self.file_name.replace ('.ipynb', '.py')
@@ -271,9 +284,11 @@ class CellProcessor():
         self.parser.add_argument('-d', '--data',  action='store_true', help='data function')
         self.parser.add_argument('-n', '--norun',  action='store_true', help='do not execute the contents of the cell')
         self.parser.add_argument('-p', '--permanent',  action='store_true', help='do not change the contents of the function')
-        
-    def reset (self):
-        values_to_remove = [x for function in self.function_list for x in function.values_here.keys()]
+
+    def reset_function_list (self, function_list, function_info):
+        if len(function_list)==0:
+            return [], Bunch()
+        values_to_remove = [x for function in function_list for x in function.current_values.keys()]
         remove_variables_code = '\n'.join([f'''
             try:
                 exec("del {x}")
@@ -281,8 +296,21 @@ class CellProcessor():
                 print (f'could not remove {x}')
                 ''' for x in values_to_remove])
         get_ipython().run_cell(remove_variables_code)
-        self.function_list = []
-        self.function_info = Bunch()
+        return [], Bunch()
+        
+    def reset (self, remove_history=False):
+        self.function_list, self.function_info = self.reset_function_list (self.function_list, self.function_info)
+        self.test_function_list, self.test_function_info = self.reset_function_list (self.test_function_list, self.test_function_info)
+        self.test_data_function_list, self.test_data_function_info = self.reset_function_list (self.test_data_function_list, self.test_data_function_info)
+        
+        self.all_variables = set()
+        self.test_data_all_variables = set()
+        self.test_all_variables = set()
+
+        self.imports = ''
+        self.test_imports = ''
+        if remove_history:
+            self.call_history = []
     
     def process_function_call (self, line, cell, add_call=True):
         call = (line, cell)
@@ -376,7 +404,9 @@ class CellProcessor():
             defined=defined,
             permanent=permanent,
             signature=signature,
-            norun=norun
+            norun=norun,
+            previous_values={},
+            current_values={}
         )
         if defined and permanent:
             this_function.code = cell
@@ -429,7 +459,7 @@ class CellProcessor():
         idx = self.current_function.idx = len(self.function_list)
         
         # get variables specific about this function
-        path_variables = Path (self.file_name) / f'{func}.pk'
+        path_variables = Path (self.file_name_without_extension) / f'{func}.pk'
         if load and path_variables.exists():
             get_ipython().run_cell(f'''
             import joblib
@@ -459,12 +489,14 @@ class CellProcessor():
         function_list = (self.function_list if not self.current_function.test and not self.current_function.data 
                          else self.test_data_function_list if self.current_function.test and not self.current_function.data
                          else [])
+        if not self.current_function.test and not self.current_function.data:
+            function_list = function_list[:idx]
         # if test function, its input comes from test data functions: 
         # - 1 add output dependencies to test data functions
         # - 2 add input dependencies from each test data function
         #if self.current_function.test:
         #    pdb.set_trace()
-        for function in function_list[:idx]:
+        for function in function_list:
             function.posterior_variables += [v for v in self.current_function.previous_variables if v not in function.posterior_variables]
             if update_previous_functions and unknown_output and not function.defined:
                 function.update_code (
@@ -643,7 +675,7 @@ class CellProcessor():
         return nbdev.config.get_config()['nbs_path']
     
     def pipeline_code (self, pipeline_name=None):
-        pipeline_name = f'{self.file_name}_pipeline' if pipeline_name is None else pipeline_name
+        pipeline_name = f'{self.file_name_without_extension}_pipeline' if pipeline_name is None else pipeline_name
         
         code = (
 f'''
@@ -651,7 +683,7 @@ def {pipeline_name} (test=False, load=True, save=True, result_file_name="{pipeli
 
     # load result
     result_file_name += '.pk'
-    path_variables = Path ("{self.file_name}") / result_file_name
+    path_variables = Path ("{self.file_name_without_extension}") / result_file_name
     if load and path_variables.exists():
         result = joblib.load (path_variables)
         return result
@@ -685,7 +717,7 @@ f'''
         return code, pipeline_name
     
     def test_pipeline_code (self, pipeline_name=None):
-        pipeline_name = f'{self.file_name}_pipeline' if pipeline_name is None else pipeline_name
+        pipeline_name = f'{self.file_name_without_extension}_pipeline' if pipeline_name is None else pipeline_name
         result_file_name_with_braces = 'f"test_{result_file_name}"'
         code = (
 f'''
@@ -734,7 +766,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
             code, name = self.pipeline_code()  
         print (code)
 
-# %% ../../nbs/cell2func.ipynb 17
+# %% ../../nbs/cell2func.ipynb 14
 @magics_class
 class CellProcessorMagic (Magics):
     """
@@ -806,7 +838,7 @@ class CellProcessorMagic (Magics):
             #print (inp)
             #print (out)
 
-# %% ../../nbs/cell2func.ipynb 20
+# %% ../../nbs/cell2func.ipynb 17
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -814,7 +846,7 @@ def load_ipython_extension(ipython):
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 22
+# %% ../../nbs/cell2func.ipynb 19
 import pdb
 def keep_variables (function, field, variable_values, self=None):
     """
