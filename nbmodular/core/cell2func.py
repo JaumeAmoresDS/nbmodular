@@ -181,9 +181,10 @@ class FunctionProcessor (Bunch):
             print (f'The following loaded names were not found in the arguments list: {loaded_names_not_in_arguments}')
         
     def run_code_and_collect_locals (self, code=None, is_test_function=False):
+        #pdb.set_trace()
         if code is None: code=self.original_code
         
-        if is_test_function:
+        if not is_test_function:
             get_old_variables_code = f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("{self.name}", "previous_values", locals ())'
             get_ipython().run_cell(get_old_variables_code)
             get_new_variables_code = code + f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("{self.name}", "current_values", locals ())'
@@ -244,7 +245,7 @@ class FunctionProcessor (Bunch):
         if input is not None:
             self.arguments += input
         if output is not None:
-            self.return_values += output
+            self.return_values  += output
         if input is not None or output is not None:
             self.signature=None
             self.update_code ()
@@ -335,7 +336,7 @@ class CellProcessor():
         self.parser.add_argument('--name', type=str, help='name of function to debug')
         self.parser.add_argument('--idx', type=int, help='position of function to debug')
 
-    def debug (self, call_history=None, idx=None, name=None, test=False, data=False, **kwargs):
+    def debug_function (self, call_history=None, idx=None, name=None, test=False, data=False, **kwargs):
         if call_history is not None:
             self.call_history = call_history
 
@@ -547,7 +548,7 @@ class CellProcessor():
             return
 
         if not norun and collect_variables_values:
-            is_test_function = not (self.current_function.test and not self.current_function.data)
+            is_test_function = self.current_function.test and not self.current_function.data
             self.current_function.run_code_and_collect_locals(is_test_function=is_test_function)
         
         if save:
@@ -556,8 +557,13 @@ class CellProcessor():
             
         if make_function:
             self.current_function.update_code ( 
-                arguments=self.current_function.previous_variables if unknown_input and not self.current_function.test and not self.current_function.defined else [] if self.current_function.test else self.current_function.arguments if self.current_function.defined else input, 
-                return_values=[] if unknown_output and not self.current_function.defined else self.current_function.return_values if self.current_function.defined else output,
+                arguments=(self.current_function.previous_variables if unknown_input and not self.current_function.test and not self.current_function.defined else 
+                           [] if self.current_function.test else
+                           self.current_function.arguments if self.current_function.defined else
+                           input), 
+                return_values=([] if unknown_output and not self.current_function.defined else 
+                               self.current_function.return_values if self.current_function.defined else 
+                               output),
                 display=show
             )
             
@@ -585,17 +591,7 @@ class CellProcessor():
             if self.current_function.test and function.test and function.data:
                 self.current_function.add_function_call (function)
         
-        if self.current_function.test and not self.current_function.data:
-            function_list = self.function_list
-            for function in function_list:
-                function.posterior_variables += [v for v in self.current_function.previous_variables if v not in function.posterior_variables]
-                if update_previous_functions and unknown_output and not function.defined:
-                    function.update_code (
-                        return_values=[x for x in function.created_variables + function.argument_variables if x in function.posterior_variables], 
-                        display=False
-                    )
-                self.current_function.add_function_call (function)
-                
+        if self.current_function.test and not self.current_function.data: 
             self.current_function.run_code_and_collect_locals(is_test_function=False)
         
         if self.current_function.test and not self.current_function.data:
@@ -636,15 +632,21 @@ class CellProcessor():
         register_pipeline=True,
         pipeline_name=None,
         write=True,
+        test=False,
+        data=False,
         **kwargs
     ) -> None:
         
-        for f in self.function_list:
-            if f.name == func:
-                self.function_list.remove (f)
+        function_list = (self.test_function_list if test and not data else 
+                         self.test_data_function_list if test and data else 
+                         self.function_list)
+        func_name = f'test_{func}' if test else func
+        for f in function_list:
+            if f.name == func_name:
+                function_list.remove (f)
                 break
         
-        this_function = self.create_function_register_and_run_code (func, cell, show=show, **kwargs)
+        this_function = self.create_function_register_and_run_code (func, cell, show=show, test=test, data=data, **kwargs)
         if func in self.function_info and merge:
             this_function = self.merge_functions (self.function_info[func], this_function, show=show)
         
@@ -897,7 +899,7 @@ class CellProcessorMagic (Magics):
     @line_magic
     def add_to_signature (self, line):
         function_name, kwargs = self.processor.parse_signature (line)
-        self.function_info[function_name].add_to_signature (**kwargs)
+        self.processor.function_info[function_name].add_to_signature (**kwargs)
     
     @line_magic
     def cell_processor (self, line):
@@ -923,9 +925,9 @@ class CellProcessorMagic (Magics):
             #print (out)
             
     @line_magic
-    def debug (self, line):
+    def debug_function (self, line):
         kwargs = self.processor.parse_args (line)
-        self.processor.debug (**kwargs)
+        self.processor.debug_function (**kwargs)
 
 # %% ../../nbs/cell2func.ipynb 20
 def load_ipython_extension(ipython):
