@@ -335,6 +335,7 @@ class CellProcessor():
         self.parser.add_argument('-p', '--permanent',  action='store_true', help='do not change the contents of the function')
         self.parser.add_argument('--name', type=str, help='name of function to debug')
         self.parser.add_argument('--idx', type=int, help='position of function to debug')
+        self.parser.add_argument('--history',  action='store_true', help='resets everything, including history')
 
     def debug_function (self, call_history=None, idx=None, name=None, test=False, data=False, **kwargs):
         if call_history is not None:
@@ -376,7 +377,7 @@ class CellProcessor():
         get_ipython().run_cell(remove_variables_code)
         return [], Bunch()
         
-    def reset (self, remove_history=False):
+    def reset (self, remove_history=False, **kwargs):
         self.function_list, self.function_info = self.reset_function_list (self.function_list, self.function_info)
         self.test_function_list, self.test_function_info = self.reset_function_list (self.test_function_list, self.test_function_info)
         self.test_data_function_list, self.test_data_function_info = self.reset_function_list (self.test_data_function_list, self.test_data_function_info)
@@ -928,6 +929,13 @@ class CellProcessorMagic (Magics):
     def debug_function (self, line):
         kwargs = self.processor.parse_args (line)
         self.processor.debug_function (**kwargs)
+        
+    @line_magic
+    def reset (self, line):
+        kwargs = self.processor.parse_args (line)
+        self.processor.reset (**kwargs)
+        
+    
 
 # %% ../../nbs/cell2func.ipynb 20
 def load_ipython_extension(ipython):
