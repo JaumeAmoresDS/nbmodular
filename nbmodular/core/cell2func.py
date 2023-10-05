@@ -2,7 +2,7 @@
 
 # %% auto 0
 __all__ = ['FunctionVisitor', 'ReturnVisitor', 'get_non_callable_ipython', 'get_non_callable', 'FunctionProcessor',
-           'CellProcessor', 'CellProcessorMagic', 'load_ipython_extension', 'keep_variables']
+           'CellProcessor', 'CellProcessorMagic', 'load_ipython_extension', 'keep_variables', 'store_variables']
 
 # %% ../../nbs/cell2func.ipynb 2
 import pdb
@@ -180,15 +180,18 @@ class FunctionProcessor (Bunch):
         if len(loaded_names_not_in_arguments) > 0:
             print (f'The following loaded names were not found in the arguments list: {loaded_names_not_in_arguments}')
         
-    def run_code_and_collect_locals (self, code=None, is_test_function=False):
+    def run_code_and_collect_locals (self, code=None, is_test_function=False, store_values=True):
         #pdb.set_trace()
         if code is None: code=self.original_code
         
         if not is_test_function:
-            get_old_variables_code = f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("{self.name}", "previous_values", locals ())'
+            get_old_variables_code = f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("previous_values", locals ())'
             get_ipython().run_cell(get_old_variables_code)
-            get_new_variables_code = code + f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("{self.name}", "current_values", locals ())'
-            get_ipython().run_cell(get_new_variables_code)
+            if store_values:
+                code_to_run = code + f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("current_values", locals ())'
+            else:
+                code_to_run = code
+            get_ipython().run_cell(code_to_run)
         else:
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("previous_variables", locals())')
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("created_variables", locals())')
@@ -257,6 +260,10 @@ class FunctionProcessor (Bunch):
     
     def __repr__ (self):
         return str(self)
+    
+    def store_variables (self, path_variables):
+        store_variables_code = f'\nfrom nbmodular.core.cell2func import store_variables\nstore_variables ("{path_variables}", locals ())'
+        get_ipython().run_cell(store_variables_code)
 
 # %% ../../nbs/cell2func.ipynb 15
 class CellProcessor():
@@ -321,6 +328,9 @@ class CellProcessor():
             self.test_file_path = nb_path /  f'test_{file_name}'
             
         self.call_history = []
+        self.load_tests = True
+        self.save_tests = True
+        self.run_tests = True
         
         self.parser = argparse.ArgumentParser(description='Process some integers.')
         self.parser.add_argument('-i', '--input', type=str, nargs='+', help='input')
@@ -329,14 +339,29 @@ class CellProcessor():
         self.parser.add_argument('-s', '--show',  action='store_true', help='show function code')
         self.parser.add_argument('-l', '--load',  action='store_true', help='load variables')
         self.parser.add_argument('--save',  action='store_true', help='save variables')
+        self.parser.add_argument('-n', '--not-run',  action='store_true', help='do not execute the contents of the cell')
+        self.parser.add_argument('--not-store',  action='store_true', help='do not store local values from cell')
+        self.parser.add_argument('--override',  action='store_true', help='load / save / no-run values override any global flags')
         self.parser.add_argument('-t', '--test',  action='store_true', help='test function / imports')
         self.parser.add_argument('-d', '--data',  action='store_true', help='data function')
-        self.parser.add_argument('-n', '--norun',  action='store_true', help='do not execute the contents of the cell')
         self.parser.add_argument('-p', '--permanent',  action='store_true', help='do not change the contents of the function')
         self.parser.add_argument('--name', type=str, help='name of function to debug')
         self.parser.add_argument('--idx', type=int, help='position of function to debug')
         self.parser.add_argument('--history',  action='store_true', help='resets everything, including history')
 
+    def set_load_tests (self, value):
+        if (value != self.load_tests):
+            print (f'changing global load flag to {value}')
+        self.load_tests = value
+    def set_save_tests (self, value):
+        if (value != self.save_tests):
+            print (f'changing global save flag to {value}')
+        self.save_tests = value
+    def set_run_tests (self, value):
+        if (value != self.run_tests):
+            print (f'changing global run flag to {value}')
+        self.run_tests = value
+        
     def debug_function (self, call_history=None, idx=None, name=None, test=False, data=False, **kwargs):
         if call_history is not None:
             self.call_history = call_history
@@ -396,6 +421,7 @@ class CellProcessor():
         if add_call:
             self.add_call (call)
         function_name, kwargs = self.parse_signature (line)
+        #print (kwargs)
         self.function (function_name, cell, call=call, **kwargs)
 
     def add_call (self, call):
@@ -420,7 +446,7 @@ class CellProcessor():
         test=False,
         data=False,
         permanent=False,
-        norun=False
+        not_run=False
     ):
         root = ast.parse (cell)
         if False:
@@ -483,7 +509,7 @@ class CellProcessor():
             defined=defined,
             permanent=permanent,
             signature=signature,
-            norun=norun,
+            not_run=not_run,
             previous_values={},
             current_values={}
         )
@@ -507,21 +533,29 @@ class CellProcessor():
         unknown_input=True,
         output=None,
         unknown_output=True,
-        collect_variables_values=True,
+        not_store=False,
         make_function=True,
         update_previous_functions=True,
         show=False,
         load=False,
         save=False,
+        not_run=False,
+        override=False,
         test=False,
-        norun=False,
         data=False,
         permanent=False,
         **kwargs
     ) -> FunctionProcessor:
         
+        store_values = not not_store
+        #pdb.set_trace()
         if test:
             func = 'test_' + func
+            
+        if test and not data and not override:
+            load = self.load_tests
+            save = self.save_tests
+            not_run = not self.run_tests
         
         self.current_function = self.create_function (
             cell, 
@@ -532,7 +566,7 @@ class CellProcessor():
             test=test,
             data=data,
             permanent=permanent,
-            norun=norun
+            not_run=not_run
         )
         
         # register
@@ -541,21 +575,13 @@ class CellProcessor():
         # get variables specific about this function
         path_variables = Path (self.file_name_without_extension) / f'{func}.pk'
         if load and path_variables.exists():
-            get_ipython().run_cell(f'''
-            import joblib
-            current_values = joblib.load ("{path_variables}")
-            v = locals()
-            v.update (current_values)''')
-            return
+            self.current_function.store_variables (path_variables)
+            not_run=True
 
-        if not norun and collect_variables_values:
+        if not not_run:
             is_test_function = self.current_function.test and not self.current_function.data
-            self.current_function.run_code_and_collect_locals(is_test_function=is_test_function)
-        
-        if save:
-            path_variables.parent.mkdir (parents=True, exist_ok=True)
-            joblib.dump (values_here, path_variables)
-            
+            self.current_function.run_code_and_collect_locals(is_test_function=is_test_function, store_values=store_values)
+                    
         if make_function:
             self.current_function.update_code ( 
                 arguments=(self.current_function.previous_variables if unknown_input and not self.current_function.test and not self.current_function.defined else 
@@ -592,8 +618,8 @@ class CellProcessor():
             if self.current_function.test and function.test and function.data:
                 self.current_function.add_function_call (function)
         
-        if self.current_function.test and not self.current_function.data: 
-            self.current_function.run_code_and_collect_locals(is_test_function=False)
+        if self.current_function.test and not self.current_function.data and not not_run: 
+            self.current_function.run_code_and_collect_locals(is_test_function=False, store_values=store_values)
         
         if self.current_function.test and not self.current_function.data:
             self.current_function.update_code()
@@ -621,6 +647,10 @@ class CellProcessor():
             self.test_data_all_variables |= set(self.current_function.all_variables)
         elif self.current_function.test and not self.current_function.data:
             self.test_all_variables |= set(self.current_function.all_variables)
+        
+        if save and not not_run:
+            path_variables.parent.mkdir (parents=True, exist_ok=True)
+            joblib.dump (self.current_function.current_values, path_variables)
         
         return self.current_function
     
@@ -935,7 +965,33 @@ class CellProcessorMagic (Magics):
         kwargs = self.processor.parse_args (line)
         self.processor.reset (**kwargs)
         
-    
+    @line_magic
+    def load_tests (self, line):
+        self.processor.set_load_tests (True)
+        
+    @line_magic
+    def load_tests (self, line):
+        self.processor.set_load_tests (True)
+
+    @line_magic
+    def not_load_tests (self, line):
+        self.processor.set_load_tests (False)
+
+    @line_magic
+    def save_tests (self, line):
+        self.processor.set_save_tests (True)
+
+    @line_magic
+    def not_save_tests (self, line):
+        self.processor.set_save_tests (False)
+
+    @line_magic
+    def run_tests (self, line):
+        self.processor.set_run_tests (True)
+
+    @line_magic
+    def not_run_tests (self, line):
+        self.processor.set_run_tests (False)
 
 # %% ../../nbs/cell2func.ipynb 20
 def load_ipython_extension(ipython):
@@ -947,9 +1003,9 @@ def load_ipython_extension(ipython):
 
 # %% ../../nbs/cell2func.ipynb 22
 import pdb
-def keep_variables (function, field, variable_values, self=None):
+def keep_variables (field, variable_values, self=None):
     """
-    Store `variables` in dictionary entry `self.variables_field[function]`
+    Store `variables` in dictionary entry `self[field]`
     """
     frame_number = 0
     #pdb.set_trace()
@@ -966,4 +1022,34 @@ def keep_variables (function, field, variable_values, self=None):
         variable_values = {k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k])}
         #pdb.set_trace()
         self[field]=variable_values
+    
+
+# %% ../../nbs/cell2func.ipynb 24
+import pdb
+def store_variables (path_variables, locals_, self=None):
+    """
+    Store `variables` in dictionary entry `self.variables_field[function]`
+    """
+    #pdb.set_trace()
+    import joblib
+    current_values = joblib.load (path_variables)
+    #v = locals()
+    #v.update (current_values)
+    locals_.update (current_values)
+    
+    
+    frame_number = 0
+    #pdb.set_trace()
+    while not isinstance (self, FunctionProcessor):
+        try:
+            fr = sys._getframe(frame_number)
+        except:
+            break
+        args = argnames(fr, True)
+        if len(args)>0:
+            self = fr.f_locals[args[0]]
+        frame_number += 1
+        
+    if isinstance (self, FunctionProcessor):
+        self['current_values']=current_values
     
