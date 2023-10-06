@@ -25,7 +25,7 @@ from sklearn.utils import Bunch
 from fastcore.all import argnames
 import nbdev
 
-# %% ../../nbs/cell2func.ipynb 4
+# %% ../../nbs/cell2func.ipynb 6
 class FunctionVisitor (ast.NodeVisitor):
     def visit_FunctionDef (self, node):
         self.arguments = [x.arg for x in node.args.args]
@@ -38,7 +38,7 @@ class ReturnVisitor (ast.NodeVisitor):
         else:
             self.return_values = return_values
 
-# %% ../../nbs/cell2func.ipynb 10
+# %% ../../nbs/cell2func.ipynb 12
 import pdb
 def get_non_callable_ipython (variables_to_inspect, locals_, self=None):
     """
@@ -69,7 +69,7 @@ def get_non_callable_ipython (variables_to_inspect, locals_, self=None):
                 self[non_callable_variables].append(name)
         self[variables_to_inspect] = self[non_callable_variables].copy()
 
-# %% ../../nbs/cell2func.ipynb 11
+# %% ../../nbs/cell2func.ipynb 13
 def get_non_callable (variables):    
     non_callable=[]
     for name in variables:
@@ -81,7 +81,7 @@ def get_non_callable (variables):
             non_callable.append(name)
     return non_callable
 
-# %% ../../nbs/cell2func.ipynb 13
+# %% ../../nbs/cell2func.ipynb 15
 class FunctionProcessor (Bunch):
     """
     Function processor.
@@ -113,6 +113,7 @@ class FunctionProcessor (Bunch):
         return_values=None,
         display=False
     ) -> None:
+        #pdb.set_trace()
         if self.permanent:
             get_ipython().run_cell(self.code)
             return
@@ -121,11 +122,46 @@ class FunctionProcessor (Bunch):
             arguments = 'test=False'
         else:
             if arguments is not None:
+                arguments += [k.split('=')[0] for k in self.include_input if k not in arguments]
+                arguments = [k for k in arguments if k not in self.exclude_input]
                 self.arguments = arguments
             arguments = ', '.join (self.arguments)
+        unpack_input_code=''
+        pack_output_code=''
+        bunch_variable = None
+        if self.unpack_bunch is not None:
+            bunch_name = self.unpack_bunch
+            bunch_variable = self.previous_values[bunch_name] if bunch_name in self.previous_values else self.current_values[bunch_name]
+            if not isinstance (bunch_variable, dict):
+                raise ValueError (f'{bunch_name} not found, or not instance of dict')
+            unpack_input_code = ''.join ([f'{" " * self.tab_size}{k} = {bunch_name}["{k}"]\n' for k in bunch_variable])
+            if self.pack_all:
+                pack_output_code = ''.join ([f'{" " * self.tab_size}{bunch_name}["{k}"] = {k}\n' for k in bunch_variable])
+            else:
+                pack_output_code = ''.join ([f'{" " * self.tab_size}{bunch_name}["{k}"] = {k}\n' for k in bunch_variable if k in self.created_variables ])
+
+        if self.return_all and self.only_posterior:
+            raise ValueError ('only one of return-all or only-posterior can be indicated')
+        if not self.return_all or (self.unpack_bunch and not self.only_posterior):
+            return_values = self.created_variables
         if return_values is not None:
+            return_values += [k for k in self.include_output if k not in return_values]
+            return_values = [k for k in return_values if k not in self.exclude_output]
+            if bunch_variable is not None:
+                new_return_values = [k for k in return_values if k not in bunch_variable]
+                new_return_values += [k.split('=')[0] for k in self.include_input if k not in bunch_variable]
+                pack_output_code += ''.join ([f'{" " * self.tab_size}{bunch_name}["{k}"] = {k}\n' for k in new_return_values ])
+                return_values = [bunch_name]
             self.return_values = return_values
-        return_values = ','.join (self.return_values)
+        elif self.unpack_bunch is not None:
+            self.return_values = [bunch_name]
+            
+        if self.returns_dict:
+            return_values = 'dict (\n' + ''.join([f'{x}={x},\n' for x in self.return_values]) + ')'
+        if self.returns_bunch:
+            return_values = 'Bunch (\n' + ''.join([f'{x}={x},\n' for x in self.return_values]) + ')'
+        else:
+            return_values = ','.join (self.return_values)
         function_code = ''
         for line in self.original_code.splitlines():
             function_code += f'{" " * self.tab_size}{line}\n'
@@ -136,7 +172,7 @@ class FunctionProcessor (Bunch):
             return_line = ''
         function_calls = '' if 'function_calls' not in self else self.function_calls
         signature = self.signature if self.signature is not None else f'def {self.name}({arguments}):'
-        function_code = f'{signature}\n' + function_calls + function_code + return_line
+        function_code = f'{signature}\n' + function_calls + unpack_input_code + function_code + pack_output_code + return_line
         self.code = function_code
         get_ipython().run_cell(function_code)
         if display:
@@ -156,6 +192,8 @@ class FunctionProcessor (Bunch):
         # names defined before: candidates for arguments list, if they are not callable
         self.loaded_names = list({node.id for node in ast.walk(root) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)})
         self.previous_variables = [x for x in self.loaded_names if x not in self.created_variables]
+        if self.unpack_bunch is not None and self.unpack_bunch not in self.previous_variables:
+            self.previous_variables.append (self.unpack_bunch)
         
         # names that appear as arguments in functions -> some defined created the current function, some in the current one
         v=[node for node in ast.walk(root) if isinstance(node, ast.Call)]
@@ -218,7 +256,7 @@ class FunctionProcessor (Bunch):
         self.all_variables += [k for k in self.argument_variables if k not in self.all_variables]
         
         self.current_values = {k:self.current_values[k] for k in self.current_values if k in self.all_variables}
-        self.previous_values = {k:self.current_values[k] for k in self.current_values if k in self.all_variables}
+        self.previous_values = {k:self.previous_values[k] for k in self.previous_values if k in self.all_variables}
         
     def merge_functions (self, new_function, show=False):
         self.original_code += new_function.original_code
@@ -265,7 +303,7 @@ class FunctionProcessor (Bunch):
         store_variables_code = f'\nfrom nbmodular.core.cell2func import store_variables\nstore_variables ("{path_variables}", locals ())'
         get_ipython().run_cell(store_variables_code)
 
-# %% ../../nbs/cell2func.ipynb 15
+# %% ../../nbs/cell2func.ipynb 17
 class CellProcessor():
     """
     Processes the cell's code according to the magic command.
@@ -333,8 +371,12 @@ class CellProcessor():
         self.run_tests = True
         
         self.parser = argparse.ArgumentParser(description='Process some integers.')
-        self.parser.add_argument('-i', '--input', type=str, nargs='+', help='input')
-        self.parser.add_argument('-o', '--output', type=str, nargs='+', help='output')
+        self.parser.add_argument('-i', '--input', type=str, nargs='+', help='Strict input. No other input considered, regardless of any dependencies.')
+        self.parser.add_argument('--include-input', type=str, default=[], nargs='+', help='Input to be included in addition of identified dependencies on previous functions.')
+        self.parser.add_argument('--exclude-input', type=str, default=[], nargs='+', help='Input to be excluded.')
+        self.parser.add_argument('-o', '--output', type=str, nargs='+', help='Strict output. No other output considered, regardless of any dependencies.')
+        self.parser.add_argument('--include-output', type=str, default=[], nargs='+', help='Output to be included in addition of identified dependencies from posterior functions')
+        self.parser.add_argument('--exclude-output', type=str, default=[], nargs='+', help='Output to be excluded.')
         self.parser.add_argument('-m', '--merge',  action='store_true', help='merge with previous function')
         self.parser.add_argument('-s', '--show',  action='store_true', help='show function code')
         self.parser.add_argument('-l', '--load',  action='store_true', help='load variables')
@@ -342,6 +384,12 @@ class CellProcessor():
         self.parser.add_argument('-n', '--not-run',  action='store_true', help='do not execute the contents of the cell')
         self.parser.add_argument('--not-store',  action='store_true', help='do not store local values from cell')
         self.parser.add_argument('--override',  action='store_true', help='load / save / no-run values override any global flags')
+        self.parser.add_argument('--returns-dict',  action='store_true', help='function results are gathered in dictionary' )
+        self.parser.add_argument('--returns-bunch',  action='store_true', help='function results are gathered in Bunch' )
+        self.parser.add_argument('--unpack-bunch',  type=str, default=None, help='uses bunch variable as I/O, and unpacks its contents at beginning of function' )
+        self.parser.add_argument('--pack-all',  action='store_true', help='pack all variables in bunch, including those not recognized as variables created or modified in function')
+        self.parser.add_argument('--only-posterior',  action='store_true', help='return only created / modified variables that are used in posterior functions')
+        self.parser.add_argument('--return-all',  action='store_true', help='return all created / modified variables even if they are not used in posterior functions')
         self.parser.add_argument('-t', '--test',  action='store_true', help='test function / imports')
         self.parser.add_argument('-d', '--data',  action='store_true', help='data function')
         self.parser.add_argument('-p', '--permanent',  action='store_true', help='do not change the contents of the function')
@@ -446,8 +494,19 @@ class CellProcessor():
         test=False,
         data=False,
         permanent=False,
-        not_run=False
+        not_run=False,
+        returns_dict=False,
+        returns_bunch=False,
+        unpack_bunch=None,
+        return_all=False,
+        only_posterior=False,
+        include_input=[],
+        exclude_input=[],
+        include_output=[],
+        exclude_output=[],
+        **kwargs
     ):
+        #pdb.set_trace()
         root = ast.parse (cell)
         if False:
             function_visitor = FunctionVisitor ()
@@ -484,16 +543,19 @@ class CellProcessor():
         if defined and not permanent:
             return_lines = 0
             original_code = ''
+            signature, cell = cell.split(':')
+            signature += ':'
             for line in cell.splitlines():
                 if 'return' in line:
                     return_lines += 1
-                elif 'def' not in line:
-                    original_code += line.strip() + '\n'
                 else:
-                    signature = line
+                    original_code += line.strip() + '\n'
             cell = original_code
         else:
             signature=None
+            
+        if returns_bunch:
+            self.imports += 'from sklearn.utils import Bunch\n'
         
         this_function = FunctionProcessor (
             original_code=cell, 
@@ -511,7 +573,14 @@ class CellProcessor():
             signature=signature,
             not_run=not_run,
             previous_values={},
-            current_values={}
+            current_values={},
+            returns_dict=returns_dict,
+            returns_bunch=returns_bunch,
+            unpack_bunch=unpack_bunch,
+            include_input=include_input,
+            exclude_input=exclude_input,
+            include_output=include_output,
+            exclude_output=exclude_output,
         )
         if defined and permanent:
             this_function.code = cell
@@ -566,7 +635,8 @@ class CellProcessor():
             test=test,
             data=data,
             permanent=permanent,
-            not_run=not_run
+            not_run=not_run,
+            **kwargs
         )
         
         # register
@@ -883,7 +953,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
             code, name = self.pipeline_code()  
         print (code)
 
-# %% ../../nbs/cell2func.ipynb 17
+# %% ../../nbs/cell2func.ipynb 19
 @magics_class
 class CellProcessorMagic (Magics):
     """
@@ -993,7 +1063,7 @@ class CellProcessorMagic (Magics):
     def not_run_tests (self, line):
         self.processor.set_run_tests (False)
 
-# %% ../../nbs/cell2func.ipynb 20
+# %% ../../nbs/cell2func.ipynb 22
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -1001,7 +1071,7 @@ def load_ipython_extension(ipython):
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 22
+# %% ../../nbs/cell2func.ipynb 24
 import pdb
 def keep_variables (field, variable_values, self=None):
     """
@@ -1024,7 +1094,7 @@ def keep_variables (field, variable_values, self=None):
         self[field]=variable_values
     
 
-# %% ../../nbs/cell2func.ipynb 24
+# %% ../../nbs/cell2func.ipynb 26
 import pdb
 def store_variables (path_variables, locals_, self=None):
     """
