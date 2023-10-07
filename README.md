@@ -31,68 +31,47 @@ original one.
 
 ## Features
 
-- Convert cells to functions.
-- The logic of a single function can be written across multiple cells.
-- Optional: processed cells can continue to operate as cells or be only
-  used as functions from the moment they are converted.
-- Create an additional pipeline function that provides the data-flow
-  from the first to the last function call in the notebook.
-- Write all the notebook functions to a separate python module.
-- Compare the result of the pipeline with the result of running the
-  original notebook.
-- Converted functions act as nodes in a dependency graph. These nodes
-  can optionally hold the values of local variables for inspection
-  outside of the function. This is similar to having a single global
-  scope, which is the original situation. Since this is
-  memory-consuming, it is optional and may not be the default.
-- Optional: Once we are able to construct a graph, we may be able to
+- [x] Convert cells to functions.
+- [x] The logic of a single function can be written across multiple
+  cells.
+- [x] Functions can be either regular functions or unit test functions.
+- [x] Functions and tests are exported to separate python modules.
+- [ ] TODO: use nbdev to sync the exported python module with the
+  notebook code, so that changes to the module are reflected back in the
+  notebook.
+- [x] Processed cells can continue to operate as cells or be only used
+  as functions.
+- [x] A pipeline function is automatically created and updated. This
+  pipeline provides the data-flow from the first to the last function
+  call in the notebook.
+- [x] Functions act as nodes in a dependency graph. These nodes can
+  optionally hold the values of local variables for inspection outside
+  of the function. This is similar to having a single global scope,
+  which is the original situation. Since this is memory-consuming,
+  storing local variables is optional.
+- [x] Local variables are persisted in disk, so that we may decide to
+  reuse previous results without running the whole notebook.
+- [ ] TODO: Once we are able to construct a graph, we may be able to
   draw it or show it in text, and pass it to ADG processors that can run
   functions sequentially or in parallel.
-- Persist the inputs and outputs of functions, so that we may decide to
-  reuse previous results without running the whole notebook.
-- Optional: if we have the dependency graph and persisted inputs /
+- [ ] TODO: if we have the dependency graph and persisted inputs /
   outputs, we may decide to only run those cells that are predecessors
   of the current one, i.e., the ones that provide the inputs needed by
   the current cell.
-- Optional: if we associate a hash code to input data, we may only run
+- [ ] TODO: if we associate a hash code to input data, we may only run
   the cells when the input data changes. Similarly, if we associate a
   hash code with AST-converted function code, we may only run those
   cells whose code has been updated.
-- Optional: have a mechanism for indicating test examples that go into
-  different test python files. = Optional: the output of a test cell can
-  be used for assertions, where we require that the current output is
-  the same as the original one.
-
-## Roadmap
-
-- [ ] Convert cell code into functions:
-  - [x] Inputs are those variables detected in current cell and also
-    detected in previous cells. This solution requires that created
-    variables have unique names across the notebook. However, even if a
-    new variable with the same name is defined inside the cell, the
-    resulting function is still correct.
-  - Outputs are, at this moment, all the variables detected in current
-    cell that are also detected in posterior cells.
-- Filter out outputs:
-  - Variables detected in current cell, and also detected in previous
-    cells, might not be needed as outputs of the current cell, if the
-    current cell doesn’t modify those variables. To detect potential
-    modifications:
-    - AST:
-      - If variable appears only on the right of assign statements or in
-        if statements.
-      - If it appears only as argument of functions which we know don’t
-        modify the variable, such as `print`.
-    - Comparing variable values before and after cell:
-      - Good for small variables where doing a deep copy is not
-        computationally expensive.
-    - Using type checker:
-      - Making the variable `Final` and using mypy or other type checker
-        to see if it is modified in the code.
-  - Provide hints:
-    - Variables that come from other cells might not be needed as
-      output. The remaining are most probably needed.
-    - Variables that are modified are clearly needed.
+- [ ] TODO: the output of a test cell can be used for assertions, where
+  we require that the current output is the same as the original one.
+- [ ] TODO: Compare the result of the pipeline with the result of
+  running the original notebook.
+- [ ] TODO: Currently, AST processing is used for assessing whether
+  variables are modified in the cell or are just read. This just gives
+  an estimate. We may want to compare the values of existing variables
+  before and after running the code in the cell. We may also use a type
+  checker such as mypy to assess whether a variable is immutable in the
+  cell (e.g., mark the variable as Final and see if mypy complaints)
 
 ## Install
 
@@ -183,7 +162,7 @@ f = %function_info add_all
 print(f.code)
 ```
 
-    def add_all(d, a, c, b):
+    def add_all(d, b, c, a):
         a = a + d
         b = b + d
         c = c + d
@@ -191,7 +170,7 @@ print(f.code)
 ``` python
 ```
 
-    def add_all(d, a, c, b):
+    def add_all(d, b, c, a):
         a = a + d
         b = b + d
         c = c + d
@@ -232,12 +211,12 @@ print(f.code)
             result = joblib.load (path_variables)
             return result
 
-        a, c, b = get_initial_values (test=test)
+        b, c, a = get_initial_values (test=test)
         d = get_d ()
-        add_all (d, a, c, b)
+        add_all (d, b, c, a)
 
         # save result
-        result = Bunch (a=a,c=c,b=b,d=d)
+        result = Bunch (b=b,c=c,a=a,d=d)
         if save:    
             path_variables.parent.mkdir (parents=True, exist_ok=True)
             joblib.dump (result, path_variables)
@@ -246,7 +225,7 @@ print(f.code)
 ``` python
 ```
 
-    def add_all(d, a, c, b):
+    def add_all(d, b, c, a):
         a = a + d
         b = b + d
         c = c + d
@@ -263,13 +242,13 @@ as needed. We can look at all the functions defined so far by using
         b = 3
         c = a+b
         print (a+b)
-        return a,c,b
+        return b,c,a
 
     def get_d():
         d = 10
         return d
 
-    def add_all(d, a, c, b):
+    def add_all(d, b, c, a):
         a = a + d
         b = b + d
         c = c + d
@@ -296,19 +275,19 @@ list all of them with `print all`
         b = 3
         c = a+b
         print (a+b)
-        return a,c,b
+        return b,c,a
 
     def get_d():
         d = 10
         return d
 
-    def add_all(d, a, c, b):
+    def add_all(d, b, c, a):
         a = a + d
         b = b + d
         c = c + d
-        return a,c,b
+        return b,c,a
 
-    def print_all(a, d, c, b):
+    def print_all(b, d, a, c):
         print (a, b, c, d)
 
 ### print_pipeline
@@ -329,13 +308,13 @@ can print this pipeline with the magic `print_pipeline`
             result = joblib.load (path_variables)
             return result
 
-        a, c, b = get_initial_values (test=test)
+        b, c, a = get_initial_values (test=test)
         d = get_d ()
-        a, c, b = add_all (d, a, c, b)
-        print_all (a, d, c, b)
+        b, c, a = add_all (d, b, c, a)
+        print_all (b, d, a, c)
 
         # save result
-        result = Bunch (a=a,c=c,b=b,d=d)
+        result = Bunch (b=b,d=d,c=c,a=a)
         if save:    
             path_variables.parent.mkdir (parents=True, exist_ok=True)
             joblib.dump (result, path_variables)
@@ -353,20 +332,20 @@ self = %cell_processor
 self.function_list
 ```
 
-    [FunctionProcessor with name get_initial_values, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'all_variables', 'code'])
+    [FunctionProcessor with name get_initial_values, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'defined', 'permanent', 'signature', 'norun', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'all_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'code'])
          Arguments: []
-         Output: ['a', 'c', 'b']
+         Output: ['b', 'c', 'a']
          Locals: dict_keys(['a', 'b', 'c']),
-     FunctionProcessor with name get_d, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'all_variables', 'code'])
+     FunctionProcessor with name get_d, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'defined', 'permanent', 'signature', 'norun', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'all_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'code'])
          Arguments: []
          Output: ['d']
          Locals: dict_keys(['d']),
-     FunctionProcessor with name add_all, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'all_variables', 'code'])
-         Arguments: ['d', 'a', 'c', 'b']
-         Output: ['a', 'c', 'b']
+     FunctionProcessor with name add_all, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'defined', 'permanent', 'signature', 'norun', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'all_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'code'])
+         Arguments: ['d', 'b', 'c', 'a']
+         Output: ['b', 'c', 'a']
          Locals: dict_keys(['a', 'b', 'c']),
-     FunctionProcessor with name print_all, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'all_variables', 'code'])
-         Arguments: ['a', 'd', 'c', 'b']
+     FunctionProcessor with name print_all, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'defined', 'permanent', 'signature', 'norun', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'all_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'code'])
+         Arguments: ['b', 'd', 'a', 'c']
          Output: []
          Locals: dict_keys([])]
 
@@ -378,19 +357,19 @@ self.function_list
         b = 3
         c = a+b
         print (a+b)
-        return a,c,b
+        return b,c,a
 
     def get_d():
         d = 10
         return d
 
-    def add_all(d, a, c, b):
+    def add_all(d, b, c, a):
         a = a + d
         b = b + d
         c = c + d
-        return a,c,b
+        return b,c,a
 
-    def print_all(a, d, c, b):
+    def print_all(b, d, a, c):
         print (a, b, c, d)
 
 ``` python
@@ -429,7 +408,7 @@ get_initial_values_info.current_values
 get_initial_values_info.return_values
 ```
 
-    ['a', 'c', 'b']
+    ['b', 'c', 'a']
 
 We can also inspect the original code written in the cell…
 
@@ -453,7 +432,7 @@ print (get_initial_values_info.code)
         b = 3
         c = a+b
         print (a+b)
-        return a,c,b
+        return b,c,a
 
 .. and the AST trees:
 
@@ -534,9 +513,9 @@ print (get_initial_values_info.get_ast (code=get_initial_values_info.code))
             Return(
               value=Tuple(
                 elts=[
-                  Name(id='a', ctx=Load()),
+                  Name(id='b', ctx=Load()),
                   Name(id='c', ctx=Load()),
-                  Name(id='b', ctx=Load())],
+                  Name(id='a', ctx=Load())],
                 ctx=Load()))],
           decorator_list=[])],
       type_ignores=[])
@@ -631,7 +610,7 @@ assert add_all(d, a, b, c)==(12, 10, 13)
 ```
 
     def test_add_all():
-        a,c,b,d = test_input_add_all()
+        b,c,a,d = test_input_add_all()
         # test function add_all
         assert add_all(d, a, b, c)==(12, 10, 13)
 
@@ -643,7 +622,7 @@ assert add_all(d, a, b, c)==(12, 10, 13)
         b = 3
         c = 6
         d = 7
-        return a,c,b,d
+        return b,c,a,d
 
 Test functions are written in a separate test module, withprefix `test_`
 
@@ -668,3 +647,297 @@ flag `--test`:
 ``` python
 import matplotlib.pyplot as plt
 ```
+
+# Defined functions
+
+Functions can be included already being defined with signature and
+return values. The only caveat is that, if we want the function to be
+executed, the variables in the argument list need to be created outside
+of the function. Otherwise we need to pass the flag –norun to avoid
+errors:
+
+``` python
+def myfunc (x, y, a=1, b=3):
+    print ('hello', a, b)
+    c = a+b
+    return c
+```
+
+Although the internal code of the function is not executed, it is still
+parsed using an AST. This allows to provide very tentative *warnings*
+regarding names not found in the argument list
+
+``` python
+def other_func (x, y):
+    print ('hello', a, b)
+    c = a+b
+    return c
+```
+
+    Detected the following previous variables that are not in the argument list: ['b', 'a']
+
+Let’s do the same but running the function:
+
+``` python
+a=1
+b=3
+```
+
+``` python
+def myfunc (x, y, a=1, b=3):
+    print ('hello', a, b)
+    c = a+b
+    return c
+```
+
+    hello 1 3
+
+``` python
+myfunc (10, 20)
+```
+
+    hello 1 3
+
+    4
+
+``` python
+myfunc_info = %function_info myfunc
+```
+
+``` python
+myfunc_info
+```
+
+    FunctionProcessor with name myfunc, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'defined', 'permanent', 'signature', 'norun', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'all_variables', 'idx', 'previous_values', 'current_values', 'all_values', 'code'])
+        Arguments: ['x', 'y', 'a', 'b']
+        Output: ['c']
+        Locals: dict_keys(['c'])
+
+``` python
+myfunc_info.c
+```
+
+    4
+
+# Storing local variables in memory
+
+By default, when we run a cell function its local variables are stored
+in a dictionary called `current_values`:
+
+``` python
+my_new_local = 3
+my_other_new_local = 4
+```
+
+The stored variables can be accessed by calling the magic
+`function_info`:
+
+``` python
+my_new_function_info = %function_info my_new_function
+```
+
+``` python
+my_new_function_info.current_values
+```
+
+    {'my_new_local': 3, 'my_other_new_local': 4}
+
+This default behaviour can be overriden by passing the flag
+`--not-store`
+
+``` python
+my_second_variable = 100
+my_second_other_variable = 200
+```
+
+``` python
+my_second_new_function_info = %function_info my_second_new_function
+```
+
+``` python
+my_second_new_function_info.current_values
+```
+
+    {}
+
+# (Un)packing Bunch I/O
+
+``` python
+from sklearn.utils import Bunch
+```
+
+``` python
+x = Bunch (a=1, b=2)
+```
+
+``` python
+c = 3
+a = 4
+```
+
+``` python
+```
+
+    def bunch_processor(x, day):
+        a = x["a"]
+        b = x["b"]
+        c = 3
+        a = 4
+        x["a"] = a
+        x["c"] = c
+        x["day"] = day
+        return x
+
+# Function’s info object holding local variables
+
+``` python
+df = pd.DataFrame (dict(Year=[1,2,3], Month=[1,2,3], Day=[1,2,3]))
+fy = '2023'
+```
+
+``` python
+def days (df, fy, x=1, /, y=3, *, n=4):
+    df_group = df.groupby(['Year','Month']).agg({'Day': lambda x: len (x)})
+    df_group = df.reset_index()
+    print ('other args: fy', fy, 'x', x, 'y', y)
+    return df_group
+```
+
+    other args: fy 2023 x 1 y 3
+    Stored the following local variables in the days current_values dictionary: ['df_group']
+    Detected the following previous variables that are not in the argument list: ['x', 'df', 'fy']
+
+An info object with name <function_name>\_info is created in memory, and
+can be used to get access to local variables
+
+``` python
+days_info.df_group
+```
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>index</th>
+      <th>Year</th>
+      <th>Month</th>
+      <th>Day</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>0</td>
+      <td>1</td>
+      <td>1</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>1</td>
+      <td>2</td>
+      <td>2</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>2</td>
+      <td>3</td>
+      <td>3</td>
+      <td>3</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+There is more information in this object: previous variables, code, etc.
+
+``` python
+days_info.current_values
+```
+
+    {'df_group':    index  Year  Month  Day
+     0      0     1      1    1
+     1      1     2      2    2
+     2      2     3      3    3}
+
+``` python
+days_info
+```
+
+    FunctionProcessor with name days, and fields: dict_keys(['original_code', 'name', 'call', 'tab_size', 'arguments', 'return_values', 'unknown_input', 'unknown_output', 'test', 'data', 'defined', 'permanent', 'signature', 'not_run', 'previous_values', 'current_values', 'returns_dict', 'returns_bunch', 'unpack_bunch', 'include_input', 'exclude_input', 'include_output', 'exclude_output', 'store_locals_in_disk', 'created_variables', 'loaded_names', 'previous_variables', 'argument_variables', 'read_only_variables', 'posterior_variables', 'all_variables', 'idx'])
+        Arguments: ['df', 'fy', 'x', 'y']
+        Output: ['df_group']
+        Locals: dict_keys(['df_group'])
+
+The function can also be called directly:
+
+``` python
+days (df*100, 100, x=4)
+```
+
+    other args: fy 100 x 4 y 3
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>index</th>
+      <th>Year</th>
+      <th>Month</th>
+      <th>Day</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>0</td>
+      <td>100</td>
+      <td>100</td>
+      <td>100</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>1</td>
+      <td>200</td>
+      <td>200</td>
+      <td>200</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>2</td>
+      <td>300</td>
+      <td>300</td>
+      <td>300</td>
+    </tr>
+  </tbody>
+</table>
+</div>

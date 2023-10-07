@@ -178,6 +178,18 @@ class FunctionProcessor (Bunch):
         function_code = f'{signature}\n' + function_calls + unpack_input_code + function_code + pack_output_code + return_line
         self.code = function_code
         get_ipython().run_cell(function_code)
+        param_assignment_code = (
+f'''
+import inspect
+x=inspect.signature ({self.name})
+params = dict(x.parameters)
+for k, v in params.items():
+    if (v.default) is not inspect._empty:
+        exec (f'k = v.default')
+
+'''
+        )
+        #get_ipython().run_cell(param_assignment_code)
         if display:
             print (function_code)
     
@@ -225,6 +237,7 @@ class FunctionProcessor (Bunch):
         #pdb.set_trace()
         if code is None: code=self.original_code
         
+        joblib.dump (dict(self), 'function_processor.pk')
         if not is_test_function:
             get_old_variables_code = f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("previous_values", locals ())'
             get_ipython().run_cell(get_old_variables_code)
@@ -243,7 +256,6 @@ class FunctionProcessor (Bunch):
                     self.current_values = variable_values
                 else:
                     del self.current_values['created_current_values']
-                print (f'Stored the following local variables in the {self.name} current_values dictionary: {list(self.current_values.keys())}')
             else:
                 get_ipython().run_cell(code_to_run)
         else:
@@ -252,6 +264,18 @@ class FunctionProcessor (Bunch):
             self.previous_values = {k: None for k in self.previous_variables}
             self.current_values = {k: None for k in self.created_variables}
         
+        info_object_code=(
+f'''
+import joblib
+from nbmodular.core.cell2func import FunctionProcessor
+
+variable_values = locals()
+variable_values = {{k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ != 'module'}}
+{self.name}_info = joblib.load ('function_processor.pk')
+{self.name}_info = FunctionProcessor (**{self.name}_info)
+{self.name}_info.current_values = variable_values
+''')
+        get_ipython().run_cell(info_object_code)
         self.match_variables_and_locals ()
         
     def match_variables_and_locals (self):
@@ -262,7 +286,7 @@ class FunctionProcessor (Bunch):
         self.previous_values = {k:self.previous_values[k] for k in self.previous_values if k in self.previous_variables}
         
         # created variables / current values
-        self.current_values = {k:self.current_values[k] for k in self.current_values if k in self.created_variables}
+        self.current_values = {k:self.current_values[k] for k in self.current_values if k in self.created_variables or k in self.return_values}
         self.all_values = {**self.previous_values, **self.current_values}
         self.argument_variables = [k for k in self.argument_variables if k in self.all_values]
         self.read_only_variables = [k for k in self.read_only_variables if k in self.all_values]
@@ -273,6 +297,25 @@ class FunctionProcessor (Bunch):
         
         self.current_values = {k:self.current_values[k] for k in self.current_values if k in self.all_variables}
         self.previous_values = {k:self.previous_values[k] for k in self.previous_values if k in self.all_variables}
+        print (f'Stored the following local variables in the {self.name} current_values dictionary: {list(self.current_values.keys())}')
+        
+        keys = dict(current_values_keys = list(self.current_values.keys()),
+                    previous_values_keys = list(self.previous_values.keys()),
+                    argument_variables=self.argument_variables,
+                    read_only_variables=self.read_only_variables,
+                    previous_variables=self.previous_variables,
+                    created_variables=self.created_variables)
+        joblib.dump (keys, 'function_processor_keys.pk')
+        
+        keys_update_code=(
+f'''
+import joblib
+keys = joblib.load ('function_processor_keys.pk')
+{self.name}_info.current_values = {{k: {self.name}_info.current_values[k] for k in keys['current_values_keys']}}
+{self.name}_info.previous_values = {{k: {self.name}_info.previous_values[k] for k in keys['previous_values_keys']}}
+{self.name}_info.update ({{k: keys[k] for k in ['argument_variables', 'read_only_variables', 'previous_variables', 'created_variables']}})
+''')
+        get_ipython().run_cell(keys_update_code)
         
     def merge_functions (self, new_function, show=False):
         self.original_code += new_function.original_code
@@ -524,7 +567,7 @@ class CellProcessor():
         not_store_locals_in_disk=False,
         **kwargs
     ):
-        pdb.set_trace()
+        #pdb.set_trace()
         root = ast.parse (cell)
         if False:
             function_visitor = FunctionVisitor ()
@@ -553,6 +596,29 @@ class CellProcessor():
             input = arguments
             output = return_values
             defined = True
+            joblib.dump (cell, 'cell.pk')
+            argument_initialization_code=(
+f'''
+import ast
+import joblib
+import os
+
+def get_args_and_defaults (list_args, list_defaults):
+    default_values =  [y.value for y in list_defaults]
+    arguments = [arg.arg for arg in list_args[len(list_defaults):]]
+    return arguments, default_values
+    
+cell = joblib.load ('cell.pk')
+os.remove ('cell.pk')
+root = ast.parse (cell)
+
+args_with_defaults1, default_values1 =  get_args_and_defaults (root.body[0].args.posonlyargs + root.body[0].args.args, root.body[0].args.defaults)
+args_with_defaults2, default_values2 =  get_args_and_defaults (root.body[0].args.kwonlyargs, root.body[0].args.kw_defaults)
+
+for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+default_values2):
+    exec (arg + "=" + str(val))
+''')
+            get_ipython().run_cell(argument_initialization_code)
         else:
             defined = False
             arguments=[]
@@ -989,6 +1055,11 @@ class CellProcessorMagic (Magics):
         self.processor.cell2file (folder, cell)
     
     @cell_magic
+    def cell_text (self, line, cell):
+        "Converts cell to function"
+        return cell
+        
+    @cell_magic
     def function (self, line, cell):
         "Converts cell to function"
         self.processor.process_function_call (line, cell)
@@ -1093,14 +1164,15 @@ def load_ipython_extension(ipython):
     ipython.register_magics(magics)
 
 # %% ../../nbs/cell2func.ipynb 22
-import pdb
 def keep_variables (field, variable_values, self=None):
     """
     Store `variables` in disk
     """
+    import joblib
+    import os
     variable_values = {k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ != 'module'}
     joblib.dump (variable_values, 'variable_values.pk')
-    
+    os.remove ('variable_values.pk')
 
 # %% ../../nbs/cell2func.ipynb 23
 def keep_variables_in_memory (field, variable_values, self=None):
