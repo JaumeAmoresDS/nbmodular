@@ -2,7 +2,8 @@
 
 # %% auto 0
 __all__ = ['FunctionVisitor', 'ReturnVisitor', 'get_non_callable_ipython', 'get_non_callable', 'FunctionProcessor',
-           'CellProcessor', 'CellProcessorMagic', 'load_ipython_extension', 'keep_variables', 'store_variables']
+           'CellProcessor', 'CellProcessorMagic', 'load_ipython_extension', 'keep_variables',
+           'keep_variables_in_memory', 'store_variables']
 
 # %% ../../nbs/cell2func.ipynb 2
 import pdb
@@ -226,12 +227,23 @@ class FunctionProcessor (Bunch):
             get_old_variables_code = f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("previous_values", locals ())'
             get_ipython().run_cell(get_old_variables_code)
             if store_values:
-                code_to_run = code + f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("current_values", locals ())'
+                code_to_run1 = code + f'\nfrom nbmodular.core.cell2func import keep_variables_in_memory\nkeep_variables_in_memory ("current_values", locals ())'
+                code_to_run2 = code + f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("current_values", locals ())'
             else:
                 code_to_run = code
-            get_ipython().run_cell(code_to_run)
-            variable_values = joblib.load ('variable_values.pk')
-            self.current_values = variable_valuesS
+            
+            if store_values:
+                get_ipython().run_cell(code_to_run1)
+                if 'created_current_values' not in self['current_values'] and self.store_locals_in_disk:
+                    print ('storing local variables in disk')
+                    get_ipython().run_cell(code_to_run2)
+                    variable_values = joblib.load ('variable_values.pk')
+                    self.current_values = variable_values
+                else:
+                    del self.current_values['created_current_values']
+                print (f'Stored the following local variables in the {self.name} current_values dictionary: {list(self.current_values.keys())}')
+            else:
+                get_ipython().run_cell(code_to_run)
         else:
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("previous_variables", locals())')
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("created_variables", locals())')
@@ -385,6 +397,7 @@ class CellProcessor():
         self.parser.add_argument('--save',  action='store_true', help='save variables')
         self.parser.add_argument('-n', '--not-run',  action='store_true', help='do not execute the contents of the cell')
         self.parser.add_argument('--not-store',  action='store_true', help='do not store local values from cell')
+        self.parser.add_argument('--not-store-locals-in-disk',  action='store_true', help='do not store local values from cell in disk')
         self.parser.add_argument('--override',  action='store_true', help='load / save / no-run values override any global flags')
         self.parser.add_argument('--returns-dict',  action='store_true', help='function results are gathered in dictionary' )
         self.parser.add_argument('--returns-bunch',  action='store_true', help='function results are gathered in Bunch' )
@@ -506,6 +519,7 @@ class CellProcessor():
         exclude_input=[],
         include_output=[],
         exclude_output=[],
+        not_store_locals_in_disk=False,
         **kwargs
     ):
         #pdb.set_trace()
@@ -585,6 +599,7 @@ class CellProcessor():
             exclude_input=exclude_input,
             include_output=include_output,
             exclude_output=exclude_output,
+            store_locals_in_disk=not not_store_locals_in_disk,
         )
         if defined and permanent:
             this_function.code = cell
@@ -1085,7 +1100,29 @@ def keep_variables (field, variable_values, self=None):
     joblib.dump (variable_values, 'variable_values.pk')
     
 
-# %% ../../nbs/cell2func.ipynb 26
+# %% ../../nbs/cell2func.ipynb 25
+def keep_variables_in_memory (field, variable_values, self=None):
+    """
+    Store `variables` in dictionary entry `self[field]`
+    """
+    frame_number = 0
+    #pdb.set_trace()
+    while not isinstance (self, FunctionProcessor):
+        try:
+            fr = sys._getframe(frame_number)
+        except:
+            break
+        args = argnames(fr, True)
+        if len(args)>0:
+            self = fr.f_locals[args[0]]
+        frame_number += 1
+    if isinstance (self, FunctionProcessor):
+        variable_values = {k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ != 'module'}
+        variable_values['created_current_values'] = True
+        self[field]=variable_values.copy()
+        del variable_values['created_current_values']
+
+# %% ../../nbs/cell2func.ipynb 27
 import pdb
 def store_variables (path_variables, locals_, self=None):
     """
