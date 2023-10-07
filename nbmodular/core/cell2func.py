@@ -165,7 +165,8 @@ class FunctionProcessor (Bunch):
             return_values = ','.join (self.return_values)
         function_code = ''
         for line in self.original_code.splitlines():
-            function_code += f'{" " * self.tab_size}{line}\n'
+            if 'if True:' not in line:
+                function_code += f'{" " * self.tab_size}{line}\n'
         if return_values != '':
             return_line = f'return {return_values}'
             return_line = f'{" " * self.tab_size}{return_line}\n'
