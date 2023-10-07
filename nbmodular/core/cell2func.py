@@ -164,9 +164,10 @@ class FunctionProcessor (Bunch):
         else:
             return_values = ','.join (self.return_values)
         function_code = ''
+        tab_size =  self.tab_size if not self.defined else 0
         for line in self.original_code.splitlines():
             if 'if True:' not in line:
-                function_code += f'{" " * self.tab_size}{line}\n'
+                function_code += f'{" " * tab_size}{line}\n'
         if return_values != '':
             return_line = f'return {return_values}'
             return_line = f'{" " * self.tab_size}{return_line}\n'
@@ -523,7 +524,7 @@ class CellProcessor():
         not_store_locals_in_disk=False,
         **kwargs
     ):
-        #pdb.set_trace()
+        pdb.set_trace()
         root = ast.parse (cell)
         if False:
             function_visitor = FunctionVisitor ()
@@ -1083,7 +1084,7 @@ class CellProcessorMagic (Magics):
     def not_run_tests (self, line):
         self.processor.set_run_tests (False)
 
-# %% ../../nbs/cell2func.ipynb 21
+# %% ../../nbs/cell2func.ipynb 20
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -1091,7 +1092,7 @@ def load_ipython_extension(ipython):
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 23
+# %% ../../nbs/cell2func.ipynb 22
 import pdb
 def keep_variables (field, variable_values, self=None):
     """
@@ -1101,7 +1102,7 @@ def keep_variables (field, variable_values, self=None):
     joblib.dump (variable_values, 'variable_values.pk')
     
 
-# %% ../../nbs/cell2func.ipynb 24
+# %% ../../nbs/cell2func.ipynb 23
 def keep_variables_in_memory (field, variable_values, self=None):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -1123,7 +1124,7 @@ def keep_variables_in_memory (field, variable_values, self=None):
         self[field]=variable_values.copy()
         del variable_values['created_current_values']
 
-# %% ../../nbs/cell2func.ipynb 26
+# %% ../../nbs/cell2func.ipynb 25
 import pdb
 def store_variables (path_variables, locals_, self=None):
     """
