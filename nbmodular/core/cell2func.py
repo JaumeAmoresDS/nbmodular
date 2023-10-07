@@ -230,6 +230,8 @@ class FunctionProcessor (Bunch):
             else:
                 code_to_run = code
             get_ipython().run_cell(code_to_run)
+            variable_values = joblib.load ('variable_values.pk')
+            self.current_values = variable_valuesS
         else:
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("previous_variables", locals())')
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("created_variables", locals())')
@@ -526,7 +528,7 @@ class CellProcessor():
             arguments = [[x.arg for x in node.args.args] for node in ast.walk(root) if isinstance (node, ast.FunctionDef)]
             if len(arguments)>0:
                 arguments = arguments[0]
-            return_values = [([x.id for x in node.value.elts] if hasattr(node.value, 'elts') else [node.value.id]) for node in ast.walk(root) if isinstance (node, ast.Return)] 
+            return_values = [([x.id for x in node.value.elts if isintance (node, ast.Name)] if hasattr(node.value, 'elts') else [node.value.id]) if isinstance (node.value, ast.Name) else '' for node in ast.walk(root) if isinstance (node, ast.Return)] 
             if len(return_values)>0:
                 return_values = return_values[0]
             
@@ -543,14 +545,16 @@ class CellProcessor():
         if defined and not permanent:
             return_lines = 0
             original_code = ''
-            signature, cell = cell.split(':')
+            v = cell.split(':')
+            signature = v[0] 
             signature += ':'
+            cell=':'.join(v[1:])
             for line in cell.splitlines():
                 if 'return' in line:
                     return_lines += 1
                 else:
-                    original_code += line.strip() + '\n'
-            cell = original_code
+                    original_code += (line + '\n')
+            cell = 'if True:\n' + original_code
         else:
             signature=None
             
@@ -1075,23 +1079,10 @@ def load_ipython_extension(ipython):
 import pdb
 def keep_variables (field, variable_values, self=None):
     """
-    Store `variables` in dictionary entry `self[field]`
+    Store `variables` in disk
     """
-    frame_number = 0
-    #pdb.set_trace()
-    while not isinstance (self, FunctionProcessor):
-        try:
-            fr = sys._getframe(frame_number)
-        except:
-            break
-        args = argnames(fr, True)
-        if len(args)>0:
-            self = fr.f_locals[args[0]]
-        frame_number += 1
-    if isinstance (self, FunctionProcessor):
-        variable_values = {k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k])}
-        #pdb.set_trace()
-        self[field]=variable_values
+    variable_values = {k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ != 'module'}
+    joblib.dump (variable_values, 'variable_values.pk')
     
 
 # %% ../../nbs/cell2func.ipynb 26
