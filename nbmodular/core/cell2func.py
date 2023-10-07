@@ -5,7 +5,7 @@ __all__ = ['FunctionVisitor', 'ReturnVisitor', 'get_non_callable_ipython', 'get_
            'CellProcessor', 'CellProcessorMagic', 'load_ipython_extension', 'keep_variables',
            'keep_variables_in_memory', 'store_variables']
 
-# %% ../../nbs/cell2func.ipynb 2
+# %% ../../nbs/cell2func.ipynb 3
 import pdb
 import joblib
 import os
@@ -26,7 +26,7 @@ from sklearn.utils import Bunch
 from fastcore.all import argnames
 import nbdev
 
-# %% ../../nbs/cell2func.ipynb 6
+# %% ../../nbs/cell2func.ipynb 7
 class FunctionVisitor (ast.NodeVisitor):
     def visit_FunctionDef (self, node):
         self.arguments = [x.arg for x in node.args.args]
@@ -39,7 +39,7 @@ class ReturnVisitor (ast.NodeVisitor):
         else:
             self.return_values = return_values
 
-# %% ../../nbs/cell2func.ipynb 12
+# %% ../../nbs/cell2func.ipynb 11
 import pdb
 def get_non_callable_ipython (variables_to_inspect, locals_, self=None):
     """
@@ -70,7 +70,7 @@ def get_non_callable_ipython (variables_to_inspect, locals_, self=None):
                 self[non_callable_variables].append(name)
         self[variables_to_inspect] = self[non_callable_variables].copy()
 
-# %% ../../nbs/cell2func.ipynb 13
+# %% ../../nbs/cell2func.ipynb 12
 def get_non_callable (variables):    
     non_callable=[]
     for name in variables:
@@ -82,7 +82,7 @@ def get_non_callable (variables):
             non_callable.append(name)
     return non_callable
 
-# %% ../../nbs/cell2func.ipynb 15
+# %% ../../nbs/cell2func.ipynb 14
 class FunctionProcessor (Bunch):
     """
     Function processor.
@@ -318,7 +318,7 @@ class FunctionProcessor (Bunch):
         store_variables_code = f'\nfrom nbmodular.core.cell2func import store_variables\nstore_variables ("{path_variables}", locals ())'
         get_ipython().run_cell(store_variables_code)
 
-# %% ../../nbs/cell2func.ipynb 17
+# %% ../../nbs/cell2func.ipynb 16
 class CellProcessor():
     """
     Processes the cell's code according to the magic command.
@@ -973,7 +973,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
             code, name = self.pipeline_code()  
         print (code)
 
-# %% ../../nbs/cell2func.ipynb 19
+# %% ../../nbs/cell2func.ipynb 18
 @magics_class
 class CellProcessorMagic (Magics):
     """
@@ -1083,7 +1083,7 @@ class CellProcessorMagic (Magics):
     def not_run_tests (self, line):
         self.processor.set_run_tests (False)
 
-# %% ../../nbs/cell2func.ipynb 22
+# %% ../../nbs/cell2func.ipynb 21
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -1091,7 +1091,7 @@ def load_ipython_extension(ipython):
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 24
+# %% ../../nbs/cell2func.ipynb 23
 import pdb
 def keep_variables (field, variable_values, self=None):
     """
@@ -1101,7 +1101,7 @@ def keep_variables (field, variable_values, self=None):
     joblib.dump (variable_values, 'variable_values.pk')
     
 
-# %% ../../nbs/cell2func.ipynb 25
+# %% ../../nbs/cell2func.ipynb 24
 def keep_variables_in_memory (field, variable_values, self=None):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -1123,7 +1123,7 @@ def keep_variables_in_memory (field, variable_values, self=None):
         self[field]=variable_values.copy()
         del variable_values['created_current_values']
 
-# %% ../../nbs/cell2func.ipynb 27
+# %% ../../nbs/cell2func.ipynb 26
 import pdb
 def store_variables (path_variables, locals_, self=None):
     """
