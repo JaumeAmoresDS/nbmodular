@@ -3,7 +3,7 @@
 # %% auto 0
 __all__ = ['FunctionVisitor', 'ReturnVisitor', 'get_non_callable_ipython', 'get_non_callable', 'FunctionProcessor',
            'CellProcessor', 'CellProcessorMagic', 'load_ipython_extension', 'keep_variables',
-           'keep_variables_in_memory', 'store_variables']
+           'keep_variables_in_memory', 'acceptable_variable', 'store_variables']
 
 # %% ../../nbs/cell2func.ipynb 3
 import pdb
@@ -239,6 +239,7 @@ for k, v in params.items():
         
         joblib.dump (dict(self), 'function_processor.pk')
         if not is_test_function:
+            pdb.set_trace()
             get_old_variables_code = f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("previous_values", locals ())'
             get_ipython().run_cell(get_old_variables_code)
             if store_values:
@@ -254,6 +255,7 @@ for k, v in params.items():
                     get_ipython().run_cell(code_to_run2)
                     variable_values = joblib.load ('variable_values.pk')
                     self.current_values = variable_values
+                    os.remove ('variable_values.pk')
                 else:
                     del self.current_values['created_current_values']
             else:
@@ -268,9 +270,10 @@ for k, v in params.items():
 f'''
 import joblib
 from nbmodular.core.cell2func import FunctionProcessor
+from nbmodular.core.cell2func import acceptable_variable
 
 variable_values = locals()
-variable_values = {{k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ != 'module'}}
+variable_values = {{k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}}
 {self.name}_info = joblib.load ('function_processor.pk')
 {self.name}_info = FunctionProcessor (**{self.name}_info)
 {self.name}_info.current_values = variable_values
@@ -279,6 +282,7 @@ variable_values = {{k: variable_values[k] for k in variable_values if not k.star
         self.match_variables_and_locals ()
         
     def match_variables_and_locals (self):
+        pdb.set_trace()
         # previous variables / values
         self.previous_variables = [k for k in self.previous_variables if k in self.previous_values]
         self.previous_variables += [k for k in self.argument_variables if k in self.previous_values and k not in self.previous_variables]
@@ -307,6 +311,7 @@ variable_values = {{k: variable_values[k] for k in variable_values if not k.star
                     created_variables=self.created_variables)
         joblib.dump (keys, 'function_processor_keys.pk')
         
+        pdb.set_trace()
         keys_update_code=(
 f'''
 import joblib
@@ -317,20 +322,7 @@ keys = joblib.load ('function_processor_keys.pk')
 ''')
         get_ipython().run_cell(keys_update_code)
         
-    def merge_functions (self, new_function, show=False):
-        self.original_code += new_function.original_code
-        self.parse_variables ()
-        self.current_values = {**self.current_values, **new_function.current_values}
-        self.previous_values = {**self.previous_values, **new_function.previous_values}
-        self.match_variables_and_locals ()
-
-        self.arguments = [] if self.unknown_input else self.arguments
-        self.return_values = [] if self.unknown_output else self.return_values
-        self.update_code (
-            arguments=self.arguments, 
-            return_values=self.return_values,
-            display=show
-        )
+        return this_function
     
     def add_function_call (self, function):
         if 'added_functions' not in self:
@@ -530,7 +522,7 @@ class CellProcessor():
             self.add_call (call)
         function_name, kwargs = self.parse_signature (line)
         #print (kwargs)
-        self.function (function_name, cell, call=call, **kwargs)
+        self.function (function_name, cell, call=call, original_kwargs=kwargs.copy(), **kwargs)
 
     def add_call (self, call):
         self.call_history.append (call)
@@ -543,12 +535,13 @@ class CellProcessor():
             file_handle.write(cell)
 
         get_ipython().run_cell(cell)
-    
+            
     def create_function (
         self, 
         cell, 
         func, 
         call,
+        original_kwargs=None,
         unknown_input=None,
         unknown_output=None,
         test=False,
@@ -568,6 +561,7 @@ class CellProcessor():
         **kwargs
     ):
         #pdb.set_trace()
+        original_name=func
         root = ast.parse (cell)
         if False:
             function_visitor = FunctionVisitor ()
@@ -624,6 +618,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             arguments=[]
             return_values=[]
         
+        
         if defined and not permanent:
             return_lines = 0
             original_code = ''
@@ -645,6 +640,8 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         
         this_function = FunctionProcessor (
             original_code=cell, 
+            original_cell=cell,
+            original_name=original_name,
             name=func, 
             call=call,
             tab_size=self.tab_size,
@@ -668,6 +665,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             include_output=include_output,
             exclude_output=exclude_output,
             store_locals_in_disk=not not_store_locals_in_disk,
+            original_kwargs=original_kwargs,
         )
         if defined and permanent:
             this_function.code = cell
@@ -824,19 +822,24 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         data=False,
         **kwargs
     ) -> None:
-        
+
         function_list = (self.test_function_list if test and not data else 
                          self.test_data_function_list if test and data else 
                          self.function_list)
         func_name = f'test_{func}' if test else func
+        existing = False
         for f in function_list:
             if f.name == func_name:
+                existing=True
                 function_list.remove (f)
                 break
         
         this_function = self.create_function_register_and_run_code (func, cell, show=show, test=test, data=data, **kwargs)
-        if func in self.function_info and merge:
+        if existing and (func in self.function_info) and merge:
+            function_list.remove (this_function)
+            pdb.set_trace()
             this_function = self.merge_functions (self.function_info[func], this_function, show=show)
+            function_list.append (this_function)
         
         function_name = this_function.name
         if this_function.test:
@@ -859,9 +862,43 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             self.write (test=True)
 
             
-    def merge_functions (self, f, g, show=False):
-        f.merge_functions (g, show=show)
-        return f
+    def merge_functions (self, this_function, new_function, show=False):
+        
+        this_function.original_code += new_function.original_code
+        #this_function.parse_variables ()
+        #this_function.current_values = {**this_function.current_values, **new_function.current_values}
+        #this_function.previous_values = {**this_function.previous_values, **new_function.previous_values}
+        #this_function.match_variables_and_locals ()
+        original_kwargs = {**this_function.original_kwargs, **new_function.original_kwargs}
+        
+        this_function = create_function_register_and_run_code (
+            this_function.original_name,
+            this_function.original_code,
+            this_function.call,
+            original_kwargs=original_kwargs, 
+            **original_kwargs
+        )
+        
+        #this_function = self.create_function (
+        #    this_function.original_code,
+        #    this_function.original_name,
+        #    this_function.call,
+        #    original_kwargs=original_kwargs, 
+        #    **original_kwargs
+        #)
+        # TODO: maybe better
+        
+        # this_function.run_code_and_collect_locals (..)
+
+        #this_function.arguments = [] if this_function.unknown_input else this_function.arguments
+        #this_function.return_values = [] if this_function.unknown_output else this_function.return_values
+        #this_function.update_code (
+        #    arguments=this_function.arguments, 
+        #    return_values=this_function.return_values,
+        #    display=show
+        #)
+        
+        return this_function
     
     def parse_args (self, line):
         argv = shlex.split(line, posix=(os.name == 'posix'))
@@ -1170,9 +1207,8 @@ def keep_variables (field, variable_values, self=None):
     """
     import joblib
     import os
-    variable_values = {k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ != 'module'}
+    variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
     joblib.dump (variable_values, 'variable_values.pk')
-    os.remove ('variable_values.pk')
 
 # %% ../../nbs/cell2func.ipynb 23
 def keep_variables_in_memory (field, variable_values, self=None):
@@ -1191,12 +1227,16 @@ def keep_variables_in_memory (field, variable_values, self=None):
             self = fr.f_locals[args[0]]
         frame_number += 1
     if isinstance (self, FunctionProcessor):
-        variable_values = {k: variable_values[k] for k in variable_values if not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ != 'module'}
+        variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
         variable_values['created_current_values'] = True
         self[field]=variable_values.copy()
         del variable_values['created_current_values']
 
-# %% ../../nbs/cell2func.ipynb 25
+# %% ../../nbs/cell2func.ipynb 24
+def acceptable_variable (variable_values, k):
+    return not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ not in ['module', 'FunctionProcessor'] and k!='variable_values'
+
+# %% ../../nbs/cell2func.ipynb 26
 import pdb
 def store_variables (path_variables, locals_, self=None):
     """
