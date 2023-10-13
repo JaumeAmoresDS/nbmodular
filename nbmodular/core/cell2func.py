@@ -175,6 +175,16 @@ class FunctionProcessor (Bunch):
             return_line = ''
         function_calls = '' if 'function_calls' not in self else self.function_calls
         signature = self.signature if self.signature is not None else f'def {self.name}({arguments}):'
+        # store parts
+        self.code_parts=Bunch(
+            signature=signature, 
+            function_calls=function_calls, 
+            unpack_input_code=unpack_input_code, 
+            function_code=function_code, 
+            pack_output_code=pack_output_code,
+            return_line=return_line
+        )
+        # assemble
         function_code = f'{signature}\n' + function_calls + unpack_input_code + function_code + pack_output_code + return_line
         self.code = function_code
         get_ipython().run_cell(function_code)
@@ -351,6 +361,18 @@ keys = joblib.load ('function_processor_keys.pk')
     def store_variables (self, path_variables):
         store_variables_code = f'\nfrom nbmodular.core.cell2func import store_variables\nstore_variables ("{path_variables}", locals ())'
         get_ipython().run_cell(store_variables_code)
+        
+    def get_cell_function_code (self, unique=True, first=False, last=False):
+        code = self.code
+        if unique:
+            function_code = function.code
+        elif first:
+            function_code = f'{self.code_parts.signature}\n' + self.code_parts.function_calls + self.code_parts.unpack_input_code + self.code_parts.function_code
+        elif last:
+            function_code = self.code_parts.function_code + self.code_parts.pack_output_code + self.code_parts.return_line
+        else:
+            function_code = self.code_parts.function_code
+        return function_code
 
 # %% ../../nbs/cell2func.ipynb 16
 class CellProcessor():
@@ -372,6 +394,8 @@ class CellProcessor():
         self.test_data_all_variables = set()
         self.test_all_variables = set()
 
+        self.cell_nodes = []        
+        self.cell_nodes_per_function = Bunch()
         
         self.imports = ''
         #self.test_imports = 'from sklearn.utils import Bunch\nfrom pathlib import Path\nimport joblib\nimport pandas as pd\nimport numpy as np\n'
@@ -524,16 +548,7 @@ class CellProcessor():
 
     def add_call (self, call):
         self.call_history.append (call)
-        
-    def cell2file (self, folder, cell):
-        folder = Path(folder)
-        folder.mkdir(parents=True, exist_ok=True)
-
-        with open(folder / "module.py", "w") as file_handle:
-            file_handle.write(cell)
-
-        get_ipython().run_cell(cell)
-            
+                   
     def create_function (
         self, 
         cell, 
@@ -566,13 +581,7 @@ class CellProcessor():
             function_visitor.visit (root)
         name=[x.name for x in ast.walk(root) if isinstance (x, ast.FunctionDef)]
             
-        #if hasattr(function_visitor, 'name'):
         if len(name)>0:
-            ##pdb.no_set_trace()
-            #func = function_visitor.name
-            #arguments = function_visitor.arguments
-            #return_visitor = ReturnVisitor ()
-            #return_values = return_visitor.return_values
             if len(name) > 0:
                 name=name[0]
                 func=name
@@ -849,7 +858,15 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         else:
             self.function_info[function_name] = this_function
             self.function_list.append (this_function)
-        
+       
+        if this_function.name in self.cell_nodes_per_function:
+            self.cell_nodes_per_function[this_function.name].append(this_function.copy())
+        else:
+            self.cell_nodes_per_function[this_function.name] = [this_function.copy()]
+            
+        self.cell_nodes.append(this_function.copy())
+        self.export_cell_nodes ()
+            
         if register_pipeline:
             self.register_pipeline (pipeline_name=pipeline_name)
         else:
@@ -857,6 +874,14 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         if write:
             self.write ()
             self.write (test=True)
+            
+    def export_cell_nodes (self):
+        for cell_function in self.cell_nodes:
+            #code = cell_function.get_cell_function_code (unique=len(nodes_per_function[cell_function.name])==1,
+            #                                             first=cell_function is nodes_per_function[cell_function.name][0],
+            #                                             last=cell_function is nodes_per_function[cell_function.name][-1])
+            # make_cell (cell=code)
+            pass
 
             
     def merge_functions (self, this_function, new_function, show=False):
