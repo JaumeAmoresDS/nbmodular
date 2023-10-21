@@ -571,6 +571,7 @@ class CellProcessor():
         include_output=[],
         exclude_output=[],
         not_store_locals_in_disk=False,
+        cell_idx=None,
         **kwargs
     ):
         ##pdb.no_set_trace()
@@ -673,6 +674,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             exclude_output=exclude_output,
             store_locals_in_disk=not not_store_locals_in_disk,
             original_kwargs=original_kwargs,
+            cell_idx=cell_idx,
         )
         if defined and permanent:
             this_function.code = cell
@@ -864,7 +866,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         else:
             self.cell_nodes_per_function[this_function.name] = [this_function.copy()]
             
-        self.cell_nodes.append(this_function.copy())
+        self.cell_nodes.append(this_function)
         self.export_cell_nodes ()
             
         if register_pipeline:

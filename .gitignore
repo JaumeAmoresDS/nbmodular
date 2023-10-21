@@ -163,3 +163,6 @@ tests/test_debugging.py
 tests/tutorials/
 nbmodular/tutorials/test_tutorial.py
 nbmodular/tutorials/__init__.py
+
+nbs/*.pk
+nbs/*/*.pk
