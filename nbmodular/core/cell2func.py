@@ -1256,7 +1256,7 @@ def keep_variables_in_memory (field, variable_values, self=None):
 
 # %% ../../nbs/cell2func.ipynb 24
 def acceptable_variable (variable_values, k):
-    return not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ not in ['module', 'FunctionProcessor'] and k!='variable_values'
+    return not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ not in ['module', 'FunctionProcessor', 'CellProcessor'] and k not in ['variable_values', 'In', 'Out']
 
 # %% ../../nbs/cell2func.ipynb 26
 import pdb
