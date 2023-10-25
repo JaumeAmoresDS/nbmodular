@@ -172,5 +172,6 @@ d = { 'settings': { 'branch': 'main',
                                                                                            'nbmodular/core/nbdev_sync.py')},
             'nbmodular.debugging': {},
             'nbmodular.index': {},
+            'nbmodular.nbdev_sync': {},
             'nbmodular.test_index': {},
             'nbmodular.tutorials.nbdev_sync': {}}}
