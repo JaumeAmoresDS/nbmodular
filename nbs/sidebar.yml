@@ -2,11 +2,10 @@ website:
   sidebar:
     contents:
       - index.ipynb
-      - Untitled.ipynb
       - cell2func.ipynb
+      - nbdev_sync.ipynb
       - section: tutorials
         contents:
-          - tutorials/index.qmd
-          - tutorials/Untitled.ipynb
           - tutorials/debugging.ipynb
           - tutorials/test_tutorial.ipynb
+        href: tutorials/index.qmd

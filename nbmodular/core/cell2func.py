@@ -242,6 +242,22 @@ for k, v in params.items():
         loaded_names_not_in_arguments = set(self.loaded_names).difference (self.arguments)
         if len(loaded_names_not_in_arguments) > 0:
             print (f'The following loaded names were not found in the arguments list: {loaded_names_not_in_arguments}')
+            
+    def _store_values (self, field, code="", store_values=True):
+        """Stores local variables in field `field`of self"""
+        code_to_run1 = code + f'from nbmodular.core.cell2func import keep_variables_in_memory\nkeep_variables_in_memory ("{field}", locals ())'
+        code_to_run2 = code + f'from nbmodular.core.cell2func import keep_variables\nkeep_variables ("{field}", locals ())'
+        get_ipython().run_cell (code_to_run1)
+        if 'created_current_values' not in self[field]:
+            print ('storing local variables in disk')
+            get_ipython().run_cell (code_to_run2)
+            self[field] = joblib.load ('variable_values.pk')
+            os.remove ('variable_values.pk')
+        else:
+            del self[field]['created_current_values']
+        
+        if not store_values:
+            self[field] = {k: '__REMOVED__' for k in self[field]}
         
     def run_code_and_collect_locals (self, code=None, is_test_function=False, store_values=True):
         ##pdb.no_set_trace()
@@ -250,26 +266,8 @@ for k, v in params.items():
         joblib.dump (dict(self), 'function_processor.pk')
         if not is_test_function:
             #pdb.no_set_trace()
-            get_old_variables_code = f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("previous_values", locals ())'
-            get_ipython().run_cell(get_old_variables_code)
-            if store_values:
-                code_to_run1 = code + f'\nfrom nbmodular.core.cell2func import keep_variables_in_memory\nkeep_variables_in_memory ("current_values", locals ())'
-                code_to_run2 = code + f'\nfrom nbmodular.core.cell2func import keep_variables\nkeep_variables ("current_values", locals ())'
-            else:
-                code_to_run = code
-            
-            if store_values:
-                get_ipython().run_cell(code_to_run1)
-                if 'created_current_values' not in self['current_values'] and self.store_locals_in_disk:
-                    print ('storing local variables in disk')
-                    get_ipython().run_cell(code_to_run2)
-                    variable_values = joblib.load ('variable_values.pk')
-                    self.current_values = variable_values
-                    os.remove ('variable_values.pk')
-                else:
-                    del self.current_values['created_current_values']
-            else:
-                get_ipython().run_cell(code_to_run)
+            self._store_values ("previous_values", code="", store_values=store_values)
+            self._store_values ("current_values", code=code + "\n", store_values=store_values)
         else:
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("previous_variables", locals())')
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("created_variables", locals())')
@@ -327,7 +325,7 @@ f'''
 import joblib
 keys = joblib.load ('function_processor_keys.pk')
 {self.name}_info.current_values = {{k: {self.name}_info.current_values[k] for k in keys['current_values_keys']}}
-{self.name}_info.previous_values = {{k: {self.name}_info.previous_values[k] for k in keys['previous_values_keys']}}
+{self.name}_info.previous_values = {{k: '__REMOVED__' for k in keys['previous_values_keys']}}
 {self.name}_info.update ({{k: keys[k] for k in ['argument_variables', 'read_only_variables', 'previous_variables', 'created_variables']}})
 ''')
         get_ipython().run_cell(keys_update_code)
@@ -404,6 +402,11 @@ class CellProcessor():
         self.tab_size=tab_size
         try:
             self.file_name = ipynbname.name().replace ('.ipynb', '.py')
+            try:
+                x = int (self.file_name[0])
+                self.file_name = f'n{self.file_name}'
+            except ValueError:
+                pass
             nb_path = ipynbname.path ()
             found_notebook = True
         except FileNotFoundError:
@@ -1254,7 +1257,7 @@ def keep_variables_in_memory (field, variable_values, self=None):
         variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
         variable_values['created_current_values'] = True
         self[field]=variable_values.copy()
-        del variable_values['created_current_values']
+        #del variable_values['created_current_values']
 
 # %% ../../nbs/cell2func.ipynb 24
 def acceptable_variable (variable_values, k):
