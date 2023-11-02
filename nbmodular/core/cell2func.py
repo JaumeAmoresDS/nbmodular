@@ -798,6 +798,10 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
                         x for x in arguments if (x in self.current_function.loaded_names 
                                                  and x in variables_created_by_previous_functions)
                     ]
+                    self.current_function.previous_variables = [
+                        x for x in self.current_function.previous_variables if (x in self.current_function.loaded_names 
+                                                 and x in variables_created_by_previous_functions)
+                    ]
                 else:
                     # arguments can only be variables that are either:
                     # - created by previous functions ("created_variables") 
@@ -807,6 +811,11 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
                         x for x in arguments if (x in self.current_function.loaded_names 
                                                  and (x in variables_created_by_previous_functions or 
                                                       x not in variables_created_by_this_or_posterior_functions))
+                    ]
+                    self.current_function.previous_variables = [
+                        x for x in self.current_function.previous_variables if (x in self.current_function.loaded_names 
+                                                                                and (x in variables_created_by_previous_functions or 
+                                                                                     x not in variables_created_by_this_or_posterior_functions))
                     ]
             
             # return values

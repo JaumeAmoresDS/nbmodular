@@ -166,3 +166,5 @@ nbmodular/tutorials/__init__.py
 
 nbs/*.pk
 nbs/*/*.pk
+*.pk
+tests
