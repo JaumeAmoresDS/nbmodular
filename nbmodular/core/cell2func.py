@@ -264,6 +264,42 @@ for k, v in params.items():
         if not store_values:
             self[field] = {k: '__REMOVED__' for k in self[field]}
         
+    def _create_function_info_object (self):
+        info_object_code=(
+f'''
+import joblib
+from nbmodular.core.cell2func import FunctionProcessor
+from nbmodular.core.cell2func import acceptable_variable
+
+variable_values = locals()
+variable_values = {{k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}}
+{self.name}_info = joblib.load ('function_processor.pk')
+{self.name}_info = FunctionProcessor (**{self.name}_info)
+{self.name}_info.current_values = variable_values
+''')
+        get_ipython().run_cell(info_object_code)
+        
+    def _update_function_info_object (self):
+        keys = dict(current_values_keys = list(self.current_values.keys()),
+            previous_values_keys = list(self.previous_values.keys()),
+            argument_variables=self.argument_variables,
+            read_only_variables=self.read_only_variables,
+            previous_variables=self.previous_variables,
+            created_variables=self.created_variables)
+        joblib.dump (keys, 'function_processor_keys.pk')
+        
+        #pdb.no_set_trace()
+        keys_update_code=(
+f'''
+import joblib
+keys = joblib.load ('function_processor_keys.pk')
+{self.name}_info.current_values = {{k: {self.name}_info.current_values[k] for k in keys['current_values_keys']}}
+{self.name}_info.previous_values = {{k: '__REMOVED__' for k in keys['previous_values_keys']}}
+{self.name}_info.update ({{k: keys[k] for k in ['argument_variables', 'read_only_variables', 'previous_variables', 'created_variables']}})
+''')
+        get_ipython().run_cell(keys_update_code)
+
+        
     def run_code_and_collect_locals (self, code=None, is_test_function=False, store_values=True):
         ##pdb.no_set_trace()
         if code is None: code=self.original_code
@@ -279,19 +315,7 @@ for k, v in params.items():
             self.previous_values = {k: None for k in self.previous_variables}
             self.current_values = {k: None for k in self.created_variables}
         
-        info_object_code=(
-f'''
-import joblib
-from nbmodular.core.cell2func import FunctionProcessor
-from nbmodular.core.cell2func import acceptable_variable
-
-variable_values = locals()
-variable_values = {{k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}}
-{self.name}_info = joblib.load ('function_processor.pk')
-{self.name}_info = FunctionProcessor (**{self.name}_info)
-{self.name}_info.current_values = variable_values
-''')
-        get_ipython().run_cell(info_object_code)
+        self._create_function_info_object ()
         self.match_variables_and_locals ()
         
     def match_variables_and_locals (self):
@@ -316,25 +340,6 @@ variable_values = {{k: variable_values[k] for k in variable_values if acceptable
         self.previous_values = {k:self.previous_values[k] for k in self.previous_values if k in self.all_variables}
         self.logger.debug (f'Stored the following local variables in the {self.name} current_values dictionary: {list(self.current_values.keys())}')
         
-        keys = dict(current_values_keys = list(self.current_values.keys()),
-                    previous_values_keys = list(self.previous_values.keys()),
-                    argument_variables=self.argument_variables,
-                    read_only_variables=self.read_only_variables,
-                    previous_variables=self.previous_variables,
-                    created_variables=self.created_variables)
-        joblib.dump (keys, 'function_processor_keys.pk')
-        
-        #pdb.no_set_trace()
-        keys_update_code=(
-f'''
-import joblib
-keys = joblib.load ('function_processor_keys.pk')
-{self.name}_info.current_values = {{k: {self.name}_info.current_values[k] for k in keys['current_values_keys']}}
-{self.name}_info.previous_values = {{k: '__REMOVED__' for k in keys['previous_values_keys']}}
-{self.name}_info.update ({{k: keys[k] for k in ['argument_variables', 'read_only_variables', 'previous_variables', 'created_variables']}})
-''')
-        get_ipython().run_cell(keys_update_code)
-    
     def add_function_call (self, function):
         if 'added_functions' not in self:
             self.added_functions = []
@@ -746,7 +751,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         if restrict_inputs is None:
             restrict_inputs = self.restrict_inputs
         store_values = not not_store
-        ##pdb.no_set_trace()
+        #pdb.no_set_trace()
         if test:
             func = 'test_' + func
             
@@ -883,6 +888,8 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         elif self.current_function.test and not self.current_function.data:
             self.test_all_variables |= set(self.current_function.all_variables)
         
+        self.current_function._update_function_info_object ()
+        
         if save and not not_run:
             path_variables.parent.mkdir (parents=True, exist_ok=True)
             joblib.dump (self.current_function.current_values, path_variables)
@@ -908,13 +915,14 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
                          self.function_list)
         func_name = f'test_{func}' if test else func
         existing = False
-        idx = None
         for idx, f in enumerate(function_list):
             if f.name == func_name:
                 existing=True
                 #function_list.remove (f)
                 break
-        
+        if not existing:
+            idx = None
+            
         #pdb.no_set_trace()
         this_function = self.create_function_and_run_code(func, cell, show=show, test=test, data=data, idx=idx, **kwargs)
         if existing and (func in self.function_info) and merge:
@@ -1177,6 +1185,17 @@ class CellProcessorMagic (Magics):
     def function (self, line, cell):
         "Converts cell to function"
         self.processor.process_function_call (line, cell)
+        
+    @cell_magic
+    def debug_cell (self, line, cell):
+        """
+        Debugs cell as if it had a `function` magic command.
+        
+        %%debug_cell <my_function>
+        (function_code)
+        """
+        import ipdb
+        ipdb.runcall (self.processor.process_function_call, line, cell)
         
     @cell_magic
     def imports (self, line, cell):
