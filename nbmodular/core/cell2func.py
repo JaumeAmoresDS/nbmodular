@@ -18,6 +18,7 @@ from pathlib import Path
 import sys
 import ast
 import logging
+import warnings
 
 from IPython import get_ipython
 from IPython.core.magic import (Magics, magics_class, line_magic,
@@ -300,14 +301,15 @@ keys = joblib.load ('function_processor_keys.pk')
         get_ipython().run_cell(keys_update_code)
 
         
-    def run_code_and_collect_locals (self, code=None, is_test_function=False, store_values=True):
+    def run_code_and_collect_locals (self, code=None, is_test_function=False, store_values=True, first_call=True):
         ##pdb.no_set_trace()
         if code is None: code=self.original_code
         
         joblib.dump (dict(self), 'function_processor.pk')
         if not is_test_function:
             #pdb.no_set_trace()
-            self._store_values ("previous_values", code="", store_values=store_values)
+            if first_call:
+                self._store_values ("previous_values", code="", store_values=store_values)
             self._store_values ("current_values", code=code + "\n", store_values=store_values)
         else:
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("previous_variables", locals())')
@@ -403,14 +405,26 @@ def update_cell_code (
     return cell, signature
 
 # %% ../../nbs/cell2func.ipynb 15
-def add_function_to_list (function, function_list, idx=None):
+def add_function_to_list (function, function_list, idx=None, position=None):
     if idx is None:
         function_list.append (function)
+        idx = -1
     else:
         function_list[idx] = function
+    if position is not None:
+        function.idx=position
+        function_list.insert (position, function)
+        if idx == -1:
+            remove_idx = -1
+        elif position < idx:
+            remove_idx = idx+1
+        else:
+            remove_idx = idx
+        assert function_list[remove_idx].name==function.name
+        del function_list[remove_idx]
     return function_list
 
-# %% ../../nbs/cell2func.ipynb 17
+# %% ../../nbs/cell2func.ipynb 21
 class CellProcessor():
     """
     Processes the cell's code according to the magic command.
@@ -520,7 +534,9 @@ class CellProcessor():
         self.parser.add_argument('-p', '--permanent',  action='store_true', help='do not change the contents of the function')
         self.parser.add_argument('--name', type=str, help='name of function to debug')
         self.parser.add_argument('--idx', type=int, help='position of function to debug')
+        self.parser.add_argument('--position', type=int, help='position of function to be added')
         self.parser.add_argument('--history',  action='store_true', help='resets everything, including history')
+        self.parser.add_argument('--previous-values',  action='store_true', help='deletes both current and previous values for each function')
 
     def set_load_tests (self, value):
         if (value != self.load_tests):
@@ -562,23 +578,37 @@ class CellProcessor():
         import ipdb
         ipdb.runcall (self.process_function_call, *self.call_history[idx], add_call=False)
         
-    def reset_function_list (self, function_list, function_info):
+    def reset_function_list (self, function_list, function_info, previous_values=False, only_previous_values=False):
         if len(function_list)==0:
             return [], Bunch()
-        values_to_remove = [x for function in function_list for x in function.current_values.keys()]
+        if not only_previous_values:
+            values_to_remove = [x for function in function_list for x in function.current_values.keys()]
+        if previous_values or only_previous_values:
+            if only_previous_values:
+                values_to_remove = [x for function in function_list for x in function.previous_values.keys()]
+            else:
+                values_to_remove += [x for function in function_list for x in function.previous_values.keys()]
         remove_variables_code = '\n'.join([f'''
             try:
                 exec("del {x}")
             except:
-                print (f'could not remove {x}')
+                pass
+                #print (f'could not remove {x}')
                 ''' for x in values_to_remove])
         get_ipython().run_cell(remove_variables_code)
         return [], Bunch()
+    
+    def delete_globals (self, **kwargs):
+        self.reset_function_list (self.function_list, self.function_info, previous_values=True, only_previous_values=True)
+        self.reset_function_list (self.test_function_list, self.test_function_info, previous_values=True, only_previous_values=True)
+        self.reset_function_list (self.test_data_function_list, self.test_data_function_info, previous_values=True, only_previous_values=True)
         
-    def reset (self, remove_history=False, **kwargs):
-        self.function_list, self.function_info = self.reset_function_list (self.function_list, self.function_info)
-        self.test_function_list, self.test_function_info = self.reset_function_list (self.test_function_list, self.test_function_info)
-        self.test_data_function_list, self.test_data_function_info = self.reset_function_list (self.test_data_function_list, self.test_data_function_info)
+    def reset (self, history=False, previous_values=False, **kwargs):
+        if previous_values:
+            self.logger.info ('Deleting previous values')
+        self.function_list, self.function_info = self.reset_function_list (self.function_list, self.function_info, previous_values=previous_values)
+        self.test_function_list, self.test_function_info = self.reset_function_list (self.test_function_list, self.test_function_info, previous_values=previous_values)
+        self.test_data_function_list, self.test_data_function_info = self.reset_function_list (self.test_data_function_list, self.test_data_function_info, previous_values=previous_values)
         
         self.all_variables = set()
         self.test_data_all_variables = set()
@@ -586,9 +616,44 @@ class CellProcessor():
 
         self.imports = ''
         self.test_imports = ''
-        if remove_history:
+        if history:
+            self.logger.info ('Removing call history')
             self.call_history = []
-    
+            
+    def delete_function (self, idx=None, name=None, test=False, data=False, **kwargs):
+        function_list = (self.function_list if not test else
+                             self.test_function_list if test and not data else
+                             self.test_data_function_list)
+        if name is not None:
+            function_info = (self.function_info if not test else
+                             self.test_function_info if test and not data else
+                             self.test_data_function_info)
+            if name in function_info:
+                idx = function_info[name].idx
+                del function_info[name]
+            else:
+                warnings.warn (f'function {name} not found in function_info')                
+            if test: 
+                self.function_info = function_info
+            elif test and not data: 
+                self.test_function_info = function_info
+            else: 
+                self.test_data_function_info = function_info
+        elif idx is None:
+            idx = -1
+        
+        if idx is not None:
+            del function_list[idx]
+        else:
+            warnings.warn ('Could not delete function')
+        
+        if test: 
+            self.function_list = function_list
+        elif test and not data: 
+            self.test_function_list = function_list
+        else: 
+            self.test_data_function_list = function_list
+        
     def process_function_call (self, line, cell, add_call=True):
         call = (line, cell)
         if add_call:
@@ -774,8 +839,15 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         )
         
         # register
+        first_call = idx is None
+        function_list = (self.function_list if not self.current_function.test and not self.current_function.data 
+                         else self.test_data_function_list if self.current_function.test and not self.current_function.data
+                         else [])
         if idx is None:
-            idx = self.current_function.idx = len(self.function_list)
+            idx = self.current_function.idx = len(function_list)
+        else:
+            self.current_function.previous_values = function_list[idx].previous_values
+            self.current_function.idx = function_list[idx].idx
         
         # get variables specific about this function
         path_variables = Path (self.file_name_without_extension) / f'{func}.pk'
@@ -785,96 +857,22 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
 
         if not not_run:
             is_test_function = self.current_function.test and not self.current_function.data
-            self.current_function.run_code_and_collect_locals(is_test_function=is_test_function, store_values=store_values)
+            self.current_function.run_code_and_collect_locals(is_test_function=is_test_function, store_values=store_values, first_call=first_call)
                     
-        if make_function:
-            # TODO: what if the current function is self.current_function.data is True?
-            arguments=(self.current_function.previous_variables if unknown_input and not self.current_function.test and not self.current_function.defined else 
-                           [] if self.current_function.test else
-                           self.current_function.arguments if self.current_function.defined else
-                           input)
-            
-            if not self.current_function.test and not self.current_function.data:
-                variables_created_by_previous_functions = [x for f in self.function_list[:idx] for x in f.created_variables]
-                if self.restrict_inputs:
-                    # arguments can only be variables created by previous functions ("created_variables") 
-                    # that are loaded in the current one. If only stored, they cannot be in arguments.
-                    arguments=[
-                        x for x in arguments if (x in self.current_function.loaded_names 
-                                                 and x in variables_created_by_previous_functions)
-                    ]
-                    self.current_function.previous_variables = [
-                        x for x in self.current_function.previous_variables if (x in self.current_function.loaded_names 
-                                                 and x in variables_created_by_previous_functions)
-                    ]
-                else:
-                    # arguments can only be variables that are either:
-                    # - created by previous functions ("created_variables") 
-                    # - not created by previous functions, but not created by either the current function or subsequent functions either.
-                    variables_created_by_this_or_posterior_functions = [x for f in self.function_list[idx:] for x in f.created_variables]
-                    arguments=[
-                        x for x in arguments if (x in self.current_function.loaded_names 
-                                                 and (x in variables_created_by_previous_functions or 
-                                                      x not in variables_created_by_this_or_posterior_functions))
-                    ]
-                    self.current_function.previous_variables = [
-                        x for x in self.current_function.previous_variables if (x in self.current_function.loaded_names 
-                                                                                and (x in variables_created_by_previous_functions or 
-                                                                                     x not in variables_created_by_this_or_posterior_functions))
-                    ]
-            
-            # return values
-            return_values=([] if unknown_output and not self.current_function.defined else 
-                               self.current_function.return_values if self.current_function.defined else 
-                               output)
-            # update code based on those
-            self.current_function.update_code ( 
-                arguments=arguments, 
-                return_values=return_values,
-                display=show
-            )
-            
-        # add variables from current function to posterior_variables of all the previous functions
-        ##pdb.no_set_trace()
-        # test data functions have output dependencies on test functions
-        # test functions have no output dependencies
-        function_list = (self.function_list if not self.current_function.test and not self.current_function.data 
-                         else self.test_data_function_list if self.current_function.test and not self.current_function.data
-                         else [])
-        if not self.current_function.test and not self.current_function.data:
-            function_list = function_list[:idx]
-        # if test function, its input comes from test data functions: 
-        # - 1 add output dependencies to test data functions
-        # - 2 add input dependencies from each test data function
-        #if self.current_function.test:
-        #    #pdb.no_set_trace()
-        for function in function_list:
-            function.posterior_variables += [v for v in self.current_function.previous_variables if v not in function.posterior_variables]
-            if update_previous_functions and unknown_output and not function.defined:
-                function.update_code (
-                    return_values=[x for x in function.created_variables + function.argument_variables if x in function.posterior_variables], 
-                    display=False
-                )
-            if self.current_function.test and function.test and function.data:
-                self.current_function.add_function_call (function)
-        
-        if self.current_function.test and not self.current_function.data and not not_run: 
-            self.current_function.run_code_and_collect_locals(is_test_function=False, store_values=store_values)
-        
-        if self.current_function.test and not self.current_function.data:
-            self.current_function.update_code()
-            
-        if self.current_function.defined:
-            potential_arguments = self.current_function.loaded_names
-            #potential_arguments = self.current_function.previous_variables
-            potential_arguments = list (set (potential_arguments).difference (self.current_function.arguments))
-            self.posterior_not_in_results = list (set (self.current_function.posterior_variables).difference (self.current_function.return_values))
-            
-            non_callable = get_non_callable (potential_arguments)
-            if len (non_callable) > 0:
-                self.logger.info (f'Detected the following previous variables that are not in the argument list: {non_callable}')
-            if len (self.posterior_not_in_results) > 0:
-                self.logger.info (f'Detected the following posterior variables that are not in the return list: {self.posterior_not_in_results}')
+        self.current_function = self.update_pipeline (
+            self.current_function,
+            idx,
+            function_list,
+            input=input,
+            output=output,
+            unknown_input=unknown_input,
+            unknown_output=unknown_output,
+            make_function=make_function,
+            update_previous_functions=update_previous_functions,
+            not_run=not_run,
+            store_values=store_values,
+            first_call=first_call,
+        )
         
         if self.current_function.test and self.current_function.data:
             common = set(self.current_function.all_variables).intersection (self.test_data_all_variables)
@@ -896,6 +894,114 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         
         return self.current_function
     
+    def update_pipeline (
+        self,
+        current_function,
+        idx,
+        function_list,
+        input=None,
+        output=None,
+        unknown_input=True,
+        unknown_output=True,
+        make_function=True,
+        update_previous_functions=True,
+        not_run=False,
+        store_values=True,
+        first_call=True,
+        show=False,
+    ):
+        if make_function:
+            # TODO: what if the current function is current_function.data is True?
+            arguments=(current_function.previous_variables if unknown_input and not current_function.test and not current_function.defined else 
+                           [] if current_function.test else
+                           current_function.arguments if current_function.defined else
+                           input)
+            
+            if self.restrict_inputs and not current_function.test and not current_function.data:
+                variables_created_by_previous_functions = [x for f in function_list[:idx] for x in f.created_variables]
+                # arguments can only be variables created by previous functions ("created_variables") 
+                # that are loaded in the current one. If only stored, they cannot be in arguments.
+                arguments=[
+                    x for x in arguments if (x in current_function.loaded_names 
+                                             and x in variables_created_by_previous_functions)
+                ]
+                current_function.previous_variables = [
+                    x for x in current_function.previous_variables if (x in current_function.loaded_names 
+                                             and x in variables_created_by_previous_functions)
+                ]
+            
+            # return values
+            return_values=([] if unknown_output and not current_function.defined else 
+                               current_function.return_values if current_function.defined else 
+                               output)
+            # update code based on those
+            current_function.update_code ( 
+                arguments=arguments, 
+                return_values=return_values,
+                display=show
+            )
+            
+        
+        current_function = self.update_return_values (
+            current_function, 
+            update_previous_functions=update_previous_functions, 
+            unknown_output=unknown_output
+        )
+        
+        if current_function.test and not current_function.data and not not_run: 
+            current_function.run_code_and_collect_locals(is_test_function=False, store_values=store_values, first_call=first_call)
+        
+        if current_function.test and not current_function.data:
+            current_function.update_code()
+            
+        if current_function.defined:
+            potential_arguments = current_function.loaded_names
+            #potential_arguments = current_function.previous_variables
+            potential_arguments = list (set (potential_arguments).difference (current_function.arguments))
+            self.posterior_not_in_results = list (set (current_function.posterior_variables).difference (current_function.return_values))
+            
+            non_callable = get_non_callable (potential_arguments)
+            if len (non_callable) > 0:
+                self.logger.info (f'Detected the following previous variables that are not in the argument list: {non_callable}')
+            if len (self.posterior_not_in_results) > 0:
+                self.logger.info (f'Detected the following posterior variables that are not in the return list: {self.posterior_not_in_results}')
+        
+        return current_function
+    
+    def update_return_values (
+        self,
+        current_function,
+        update_previous_functions=True,
+        unknown_output=True,
+    ):
+        # add variables from current function to posterior_variables of all the previous functions
+        ##pdb.no_set_trace()
+        # test data functions have output dependencies on test functions
+        # test functions have no output dependencies
+        if not current_function.test and not current_function.data:
+            function_list_for_posterior_analysis = self.function_list[:current_function.idx]
+        elif current_function.test and current_function.data:
+            function_list_for_posterior_analysis = self.function_test_list[:current_function.idx]
+        else:
+            function_list_for_posterior_analysis = []
+
+        # if test function, its input comes from test data functions: 
+        # - 1 add output dependencies to test data functions
+        # - 2 add input dependencies from each test data function
+        #if current_function.test:
+        #    #pdb.no_set_trace()
+        for function in function_list_for_posterior_analysis:
+            function.posterior_variables += [v for v in current_function.previous_variables if v not in function.posterior_variables]
+            if update_previous_functions and unknown_output and not function.defined:
+                function.update_code (
+                    return_values=[x for x in function.created_variables + function.argument_variables if x in function.posterior_variables], 
+                    display=False
+                )
+            if current_function.test and function.test and function.data:
+                current_function.add_function_call (function)
+        return current_function
+    
+    
     def function (
         self,
         func,
@@ -907,7 +1013,17 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         write=True,
         test=False,
         data=False,
-        **kwargs
+        idx=None,
+        position=None,
+        not_run=False,
+        input=None,
+        output=None,
+        unknown_input=True,
+        unknown_output=True,
+        make_function=True,
+        update_previous_functions=True,
+        store_values=True,
+        **kwargs,
     ) -> None:
 
         function_list = (self.test_function_list if test and not data else 
@@ -924,7 +1040,23 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             idx = None
             
         #pdb.no_set_trace()
-        this_function = self.create_function_and_run_code(func, cell, show=show, test=test, data=data, idx=idx, **kwargs)
+        this_function = self.create_function_and_run_code(
+            func, 
+            cell, 
+            show=show, 
+            test=test, 
+            data=data, 
+            idx=idx, 
+            not_run=not_run, 
+            input=input,
+            output=output,
+            unknown_input=unknown_input,
+            unknown_output=unknown_output,
+            make_function=make_function,
+            update_previous_functions=update_previous_functions,
+            store_values=store_values,
+            **kwargs,
+        )
         if existing and (func in self.function_info) and merge:
             this_function = self.merge_functions (self.function_info[func], this_function, idx=idx, show=show)
             function_list[idx] = this_function
@@ -934,13 +1066,23 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             if this_function.data:
                 self.test_data_function_info[function_name] = this_function
                 self.test_data_function_list[idx] = this_function
-                self.test_data_function_list = add_function_to_list (this_function, self.test_data_function_list, idx=idx)
+                self.test_data_function_list = add_function_to_list (this_function, self.test_data_function_list, idx=idx, position=position)
             else:
                 self.test_function_info[function_name] = this_function
-                self.test_function_list = add_function_to_list (this_function, self.test_function_list, idx=idx)
+                self.test_function_list = add_function_to_list (this_function, self.test_function_list, idx=idx, position=position)
         else:
             self.function_info[function_name] = this_function
-            self.function_list = add_function_to_list (this_function, self.function_list, idx=idx)
+            self.function_list = add_function_to_list (this_function, self.function_list, idx=idx, position=position)
+            
+        if position is not None:
+            self.logger.debug ('calling create_function_and_run_code again, to update arguments and outputs of other functions')
+            
+            for f in function_list:
+                f = self.update_return_values (
+                    f, 
+                    update_previous_functions=update_previous_functions, 
+                    unknown_output=unknown_output
+                )
        
         if this_function.name in self.cell_nodes_per_function:
             self.cell_nodes_per_function[this_function.name].append(this_function.copy())
@@ -1054,12 +1196,36 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             for function in function_list:
                 function.print ()
         else:
-            if test and data:
-                self.test_data_function_info[function_name].print ()
-            elif test:
-                self.test_function_info[function_name].print ()
+            if function_name is None:
+                if test and data:
+                    self.test_data_function_list[-1].print ()
+                elif test:
+                    self.test_function_list[-1].print ()
+                else:
+                    self.function_list[-1].print ()
             else:
-                self.function_info[function_name].print ()
+                if test and data:
+                    self.test_data_function_info[function_name].print ()
+                elif test:
+                    self.test_function_info[function_name].print ()
+                else:
+                    self.function_info[function_name].print ()
+            
+    def get_function_info (self, function_name, test=False, data=False, **kwargs):
+        if function_name is None:
+            if test and data:
+                return self.test_data_function_list[-1]
+            elif test:
+                return self.test_function_list[-1]
+            else:
+                return self.function_list[-1]
+        else:
+            if test and data:
+                return self.test_data_function_info[function_name]
+            elif test:
+                return self.test_function_info[function_name]
+            else:
+                return self.function_info[function_name]
             
     def get_lib_path (self):
         return nbdev.config.get_config()['lib_path']
@@ -1162,7 +1328,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
             code, name = self.pipeline_code()  
         print (code)
 
-# %% ../../nbs/cell2func.ipynb 19
+# %% ../../nbs/cell2func.ipynb 23
 @magics_class
 class CellProcessorMagic (Magics):
     """
@@ -1211,16 +1377,18 @@ class CellProcessorMagic (Magics):
     def print (self, line):
         ##pdb.no_set_trace()
         function_name, kwargs = self.processor.parse_signature (line)
-        return self.processor.print (function_name, **kwargs)
+        return self.processor.print (
+            function_name if function_name!='' else None,
+            **kwargs
+        )
     
     @line_magic
     def function_info (self, line):
         function_name, kwargs = self.processor.parse_signature (line)
-        ##pdb.no_set_trace()
-        if kwargs.get('test', False):
-            return self.processor.test_function_info [function_name]
-        else:
-            return self.processor.function_info [function_name]
+        return self.processor.get_function_info (
+            function_name if function_name!='' else None,
+            **kwargs
+        )
         
     @line_magic
     def add_to_signature (self, line):
@@ -1252,13 +1420,29 @@ class CellProcessorMagic (Magics):
             
     @line_magic
     def debug_function (self, line):
-        kwargs = self.processor.parse_args (line)
-        self.processor.debug_function (**kwargs)
+        function_name, kwargs = self.processor.parse_signature (line)
+        self.processor.debug_function (
+            name=function_name if function_name!='' else None,
+            **kwargs
+        )
+        
+    @line_magic
+    def delete_function (self, line):
+        function_name, kwargs = self.processor.parse_signature (line)
+        self.processor.delete_function (
+            name=function_name if function_name!='' else None,
+            **kwargs
+        )
         
     @line_magic
     def reset (self, line):
         kwargs = self.processor.parse_args (line)
         self.processor.reset (**kwargs)
+        
+    @line_magic
+    def delete_globals (self, line):
+        kwargs = self.processor.parse_args (line)
+        self.processor.delete_globals (**kwargs)
         
     @line_magic
     def load_tests (self, line):
@@ -1288,7 +1472,7 @@ class CellProcessorMagic (Magics):
     def not_run_tests (self, line):
         self.processor.set_run_tests (False)
 
-# %% ../../nbs/cell2func.ipynb 21
+# %% ../../nbs/cell2func.ipynb 25
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -1296,7 +1480,7 @@ def load_ipython_extension(ipython):
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 23
+# %% ../../nbs/cell2func.ipynb 27
 def keep_variables (field, variable_values, self=None):
     """
     Store `variables` in disk
@@ -1306,7 +1490,7 @@ def keep_variables (field, variable_values, self=None):
     variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
     joblib.dump (variable_values, 'variable_values.pk')
 
-# %% ../../nbs/cell2func.ipynb 24
+# %% ../../nbs/cell2func.ipynb 28
 def keep_variables_in_memory (field, variable_values, self=None):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -1328,11 +1512,11 @@ def keep_variables_in_memory (field, variable_values, self=None):
         self[field]=variable_values.copy()
         #del variable_values['created_current_values']
 
-# %% ../../nbs/cell2func.ipynb 25
+# %% ../../nbs/cell2func.ipynb 29
 def acceptable_variable (variable_values, k):
     return not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ not in ['module', 'FunctionProcessor', 'CellProcessor'] and k not in ['variable_values', 'In', 'Out']
 
-# %% ../../nbs/cell2func.ipynb 27
+# %% ../../nbs/cell2func.ipynb 31
 import pdb
 def store_variables (path_variables, locals_, self=None):
     """
