@@ -216,10 +216,10 @@ for k, v in params.items():
         
         # ---------------------------------------
         # names defined before: candidates for arguments list, if they are not callable
-        self.non_unique_loaded_names = [node.id for node in ast.walk(root) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)]
+        non_unique_loaded_names = [node.id for node in ast.walk(root) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)]
         # avoid duplicates:
         self.loaded_names = []
-        for node_id in self.non_unique_loaded_names:
+        for node_id in non_unique_loaded_names:
             if node_id not in self.loaded_names: self.loaded_names.append(node_id)
         
         self.previous_variables = [x for x in self.loaded_names if x not in self.created_variables]
@@ -228,7 +228,11 @@ for k, v in params.items():
         
         # names that appear as arguments in functions -> some defined created the current function, some in the current one
         v=[node for node in ast.walk(root) if isinstance(node, ast.Call)]
-        self.argument_variables = [y.id  for x in v for y in x.args if isinstance(y, ast.Name)]
+        non_unique_argument_variables = [y.id  for x in v for y in x.args if isinstance(y, ast.Name)]
+        self.argument_variables = []
+        for node_id in non_unique_argument_variables:
+            if node_id not in self.argument_variables: self.argument_variables.append(node_id)
+        
         # argument variables might still be modified in the function, so they need to be marked as I/O, i.e., candidates for return list and for argument list
         
         # loaded names that are not arguments and not created in the current function are most probably read-only, i.e., not candidates for return list
@@ -237,18 +241,7 @@ for k, v in params.items():
         self.all_variables = self.created_variables.copy()
         self.all_variables += [k for k in self.previous_variables if k not in self.all_variables]
         self.all_variables += [k for k in self.argument_variables if k not in self.all_variables]
-        
-    def parse_arguments_and_results (self, root):
-        function_visitor = FunctionVisitor ()
-        function_visitor.visit (root)
-        return_visitor = FunctionVisitor ()
-        return_visitor.visit (root)
-        self.arguments = function_visitor.arguments
-        self.return_values = function_visitor.return_values
-        loaded_names_not_in_arguments = set(self.loaded_names).difference (self.arguments)
-        if len(loaded_names_not_in_arguments) > 0:
-            self.logger.debug (f'The following loaded names were not found in the arguments list: {loaded_names_not_in_arguments}')
-            
+                   
     def _store_values (self, field, code="", store_values=True):
         """Stores local variables in field `field`of self"""
         code_to_run1 = code + f'from nbmodular.core.cell2func import keep_variables_in_memory\nkeep_variables_in_memory ("{field}", locals ())'
@@ -264,6 +257,32 @@ for k, v in params.items():
         
         if not store_values:
             self[field] = {k: '__REMOVED__' for k in self[field]}
+            
+    def _create_function_info_object_with_only_parsed_variables (self):
+        keys = dict(
+            argument_variables=self.argument_variables,
+            read_only_variables=self.read_only_variables,
+            previous_variables=self.previous_variables,
+            created_variables=self.created_variables)
+        joblib.dump (keys, 'function_processor_keys.pk')
+        joblib.dump (dict(self), 'function_processor.pk')
+        
+        #pdb.no_set_trace()
+        keys_update_code=(
+f'''
+import joblib
+from nbmodular.core.cell2func import FunctionProcessor
+from nbmodular.core.cell2func import get_non_callable
+
+{self.name}_info = joblib.load ('function_processor.pk')
+{self.name}_info = FunctionProcessor (**{self.name}_info)
+
+keys = joblib.load ('function_processor_keys.pk')
+{self.name}_info.update ({{k: get_non_callable(keys[k]) for k in ['argument_variables', 'read_only_variables', 'previous_variables', 'created_variables']}})
+''')
+        get_ipython().run_cell(keys_update_code)
+        os.remove ('function_processor_keys.pk')
+        os.remove ('function_processor.pk')
         
     def _create_function_info_object (self):
         info_object_code=(
@@ -299,7 +318,7 @@ keys = joblib.load ('function_processor_keys.pk')
 {self.name}_info.update ({{k: keys[k] for k in ['argument_variables', 'read_only_variables', 'previous_variables', 'created_variables']}})
 ''')
         get_ipython().run_cell(keys_update_code)
-
+        os.remove ('function_processor_keys.pk')
         
     def run_code_and_collect_locals (self, code=None, is_test_function=False, store_values=True, first_call=True):
         ##pdb.no_set_trace()
@@ -319,6 +338,7 @@ keys = joblib.load ('function_processor_keys.pk')
         
         self._create_function_info_object ()
         self.match_variables_and_locals ()
+        os.remove ('function_processor.pk')
         
     def match_variables_and_locals (self):
         #pdb.no_set_trace()
@@ -354,8 +374,10 @@ keys = joblib.load ('function_processor_keys.pk')
     def add_to_signature (self, input=None, output=None, **kwargs):
         if input is not None:
             self.arguments += input
+            self.previous_variables += input
         if output is not None:
             self.return_values  += output
+            self.posterior_variables += output
         if input is not None or output is not None:
             self.signature=None
             self.update_code ()
@@ -424,7 +446,7 @@ def add_function_to_list (function, function_list, idx=None, position=None):
         del function_list[remove_idx]
     return function_list
 
-# %% ../../nbs/cell2func.ipynb 21
+# %% ../../nbs/cell2func.ipynb 17
 class CellProcessor():
     """
     Processes the cell's code according to the magic command.
@@ -438,6 +460,9 @@ class CellProcessor():
     ):
         self.logger = logging.getLogger('CellProcessor')
         self.logger.setLevel(log_level)
+        ch = logging.StreamHandler()
+        ch.setLevel(log_level)
+        self.logger.addHandler(ch)
         
         self.restrict_inputs = restrict_inputs
         self.function_info = Bunch()
@@ -886,7 +911,10 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         elif self.current_function.test and not self.current_function.data:
             self.test_all_variables |= set(self.current_function.all_variables)
         
-        self.current_function._update_function_info_object ()
+        if not not_run:
+            self.current_function._update_function_info_object ()
+        else:
+            self.current_function._create_function_info_object_with_only_parsed_variables ()
         
         if save and not not_run:
             path_variables.parent.mkdir (parents=True, exist_ok=True)
@@ -981,7 +1009,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         if not current_function.test and not current_function.data:
             function_list_for_posterior_analysis = self.function_list[:current_function.idx]
         elif current_function.test and current_function.data:
-            function_list_for_posterior_analysis = self.function_test_list[:current_function.idx]
+            function_list_for_posterior_analysis = self.test_function_list[:current_function.idx]
         else:
             function_list_for_posterior_analysis = []
 
@@ -1065,7 +1093,6 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         if this_function.test:
             if this_function.data:
                 self.test_data_function_info[function_name] = this_function
-                self.test_data_function_list[idx] = this_function
                 self.test_data_function_list = add_function_to_list (this_function, self.test_data_function_list, idx=idx, position=position)
             else:
                 self.test_function_info[function_name] = this_function
@@ -1114,13 +1141,20 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         this_function.original_code += new_function.original_code
         original_kwargs = {**this_function.original_kwargs, **new_function.original_kwargs}
         
+        if 'idx' in original_kwargs:
+            original_kwargs_no_idx = original_kwargs.copy()
+            del original_kwargs_no_idx['idx']
+        else:
+            original_kwargs_no_idx = original_kwargs
+            
+        #pdb.set_trace()
         this_function = self.create_function_and_run_code(
             this_function.original_name,
             this_function.original_code,
             this_function.call,
             original_kwargs=original_kwargs,
             idx=idx,
-            **original_kwargs,
+            **original_kwargs_no_idx,
         )
         
         return this_function
@@ -1328,7 +1362,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
             code, name = self.pipeline_code()  
         print (code)
 
-# %% ../../nbs/cell2func.ipynb 23
+# %% ../../nbs/cell2func.ipynb 19
 @magics_class
 class CellProcessorMagic (Magics):
     """
@@ -1472,7 +1506,7 @@ class CellProcessorMagic (Magics):
     def not_run_tests (self, line):
         self.processor.set_run_tests (False)
 
-# %% ../../nbs/cell2func.ipynb 25
+# %% ../../nbs/cell2func.ipynb 21
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -1480,7 +1514,7 @@ def load_ipython_extension(ipython):
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 27
+# %% ../../nbs/cell2func.ipynb 23
 def keep_variables (field, variable_values, self=None):
     """
     Store `variables` in disk
@@ -1490,7 +1524,7 @@ def keep_variables (field, variable_values, self=None):
     variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
     joblib.dump (variable_values, 'variable_values.pk')
 
-# %% ../../nbs/cell2func.ipynb 28
+# %% ../../nbs/cell2func.ipynb 24
 def keep_variables_in_memory (field, variable_values, self=None):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -1512,11 +1546,11 @@ def keep_variables_in_memory (field, variable_values, self=None):
         self[field]=variable_values.copy()
         #del variable_values['created_current_values']
 
-# %% ../../nbs/cell2func.ipynb 29
+# %% ../../nbs/cell2func.ipynb 25
 def acceptable_variable (variable_values, k):
     return not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ not in ['module', 'FunctionProcessor', 'CellProcessor'] and k not in ['variable_values', 'In', 'Out']
 
-# %% ../../nbs/cell2func.ipynb 31
+# %% ../../nbs/cell2func.ipynb 27
 import pdb
 def store_variables (path_variables, locals_, self=None):
     """
