@@ -384,8 +384,8 @@ keys = joblib.load ('function_processor_keys.pk')
     
     def __str__ (self):
         name = None if not hasattr(self, 'name') else self.name
-        current_values = self.current_values.keys() if hasattr(self, 'current_values') and self.current_values is not None else None
-        return f'FunctionProcessor with name {name}, and fields: {self.keys()}\n    Arguments: {self.arguments}\n    Output: {self.return_values}\n    Locals: {current_values}'
+        created_variables = self.created_variables if hasattr(self, 'created_variables') else None
+        return f'Function {name}:\n    Input: {self.arguments}\n    Output: {self.return_values}\n    Created variables: {self.created_variables}'
     
     def __repr__ (self):
         return str(self)
@@ -465,15 +465,20 @@ class CellProcessor():
         self.logger.addHandler(ch)
         
         self.restrict_inputs = restrict_inputs
-        self.function_info = Bunch()
         self.current_function = Bunch()
-        self.function_list = []
+        
+        # function_info dicts and function lists for each type of function
+        self.test_data_function_info = Bunch()
+        self.test_data_function_list = []
         
         self.test_function_info = Bunch()
         self.test_function_list = []
         
-        self.test_data_function_info = Bunch()
-        self.test_data_function_list = []
+        self.data_function_info = Bunch()
+        self.data_function_list = []
+        
+        self.function_list = []
+        self.function_info = Bunch()
         
         self.all_variables = set()
         self.test_data_all_variables = set()
@@ -581,9 +586,8 @@ class CellProcessor():
             self.call_history = call_history
 
         if name is not None:
-            function_info = (self.function_info if not test else
-                             self.test_function_info if test and not data else
-                             self.test_data_function_info)
+            function_info = self.get_function_info (test, data)
+                
             if name not in function_info:
                 idx = 0
                 for func, code in self.call_history:
@@ -624,16 +628,19 @@ class CellProcessor():
         return [], Bunch()
     
     def delete_globals (self, **kwargs):
-        self.reset_function_list (self.function_list, self.function_info, previous_values=True, only_previous_values=True)
-        self.reset_function_list (self.test_function_list, self.test_function_info, previous_values=True, only_previous_values=True)
         self.reset_function_list (self.test_data_function_list, self.test_data_function_info, previous_values=True, only_previous_values=True)
+        self.reset_function_list (self.test_function_list, self.test_function_info, previous_values=True, only_previous_values=True)
+        self.reset_function_list (self.data_function_list, self.data_function_info, previous_values=True, only_previous_values=True)
+        self.reset_function_list (self.function_list, self.function_info, previous_values=True, only_previous_values=True)
         
     def reset (self, history=False, previous_values=False, **kwargs):
         if previous_values:
             self.logger.info ('Deleting previous values')
-        self.function_list, self.function_info = self.reset_function_list (self.function_list, self.function_info, previous_values=previous_values)
-        self.test_function_list, self.test_function_info = self.reset_function_list (self.test_function_list, self.test_function_info, previous_values=previous_values)
+        
         self.test_data_function_list, self.test_data_function_info = self.reset_function_list (self.test_data_function_list, self.test_data_function_info, previous_values=previous_values)
+        self.test_function_list, self.test_function_info = self.reset_function_list (self.test_function_list, self.test_function_info, previous_values=previous_values)
+        self.data_function_list, self.data_function_info = self.reset_function_list (self.data_function_list, self.data_function_info, previous_values=previous_values)
+        self.function_list, self.function_info = self.reset_function_list (self.function_list, self.function_info, previous_values=previous_values)
         
         self.all_variables = set()
         self.test_data_all_variables = set()
@@ -645,25 +652,49 @@ class CellProcessor():
             self.logger.info ('Removing call history')
             self.call_history = []
             
+    def get_function_list (self, test=False, data=False):
+        return (self.test_data_function_list if test and data else
+                         self.test_function_list if test else
+                         self.data_function_list if data else
+                         self.function_list)
+    
+    def get_function_info (self, test=False, data=False):
+        return (self.test_data_function_info if test and data else
+                         self.test_function_info if test else
+                         self.data_function_info if data else
+                         self.function_info)
+            
+    def set_function_list (self, function_list, test=False, data=False):
+        if test and data: 
+            self.test_data_function_list = function_list
+        elif test: 
+            self.test_function_list = function_list
+        elif data:
+            self.data_function_list = function_list
+        else:
+            self.function_list = function_list
+            
+    def set_function_info (self, function_info, test=False, data=False):
+        if test and data: 
+            self.test_data_function_info = function_info
+        elif test: 
+            self.test_function_info = function_info
+        elif data:
+            self.data_function_info = function_info
+        else:
+            self.function_info = function_info
+        
     def delete_function (self, idx=None, name=None, test=False, data=False, **kwargs):
-        function_list = (self.function_list if not test else
-                             self.test_function_list if test and not data else
-                             self.test_data_function_list)
+        function_list = self.get_function_list (test, data)
+        function_info = self.get_function_info (test, data)
         if name is not None:
-            function_info = (self.function_info if not test else
-                             self.test_function_info if test and not data else
-                             self.test_data_function_info)
             if name in function_info:
                 idx = function_info[name].idx
                 del function_info[name]
             else:
                 warnings.warn (f'function {name} not found in function_info')                
-            if test: 
-                self.function_info = function_info
-            elif test and not data: 
-                self.test_function_info = function_info
-            else: 
-                self.test_data_function_info = function_info
+            self.set_function_info (function_info, test, data)
+            
         elif idx is None:
             idx = -1
         
@@ -672,12 +703,8 @@ class CellProcessor():
         else:
             warnings.warn ('Could not delete function')
         
-        if test: 
-            self.function_list = function_list
-        elif test and not data: 
-            self.test_function_list = function_list
-        else: 
-            self.test_data_function_list = function_list
+        self.set_function_list (function_list, test, data)
+        self.set_function_info (function_info, test, data)
         
     def process_function_call (self, line, cell, add_call=True):
         call = (line, cell)
@@ -865,9 +892,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         
         # register
         first_call = idx is None
-        function_list = (self.function_list if not self.current_function.test and not self.current_function.data 
-                         else self.test_data_function_list if self.current_function.test and not self.current_function.data
-                         else [])
+        function_list = self.get_function_list (self.current_function.test, self.current_function.data)
         if idx is None:
             idx = self.current_function.idx = len(function_list)
         else:
@@ -1006,12 +1031,8 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         ##pdb.no_set_trace()
         # test data functions have output dependencies on test functions
         # test functions have no output dependencies
-        if not current_function.test and not current_function.data:
-            function_list_for_posterior_analysis = self.function_list[:current_function.idx]
-        elif current_function.test and current_function.data:
-            function_list_for_posterior_analysis = self.test_function_list[:current_function.idx]
-        else:
-            function_list_for_posterior_analysis = []
+        function_list_for_posterior_analysis = self.get_function_list (current_function.test, current_function.data)
+        function_list_for_posterior_analysis = function_list_for_posterior_analysis[:current_function.idx]
 
         # if test function, its input comes from test data functions: 
         # - 1 add output dependencies to test data functions
@@ -1054,9 +1075,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         **kwargs,
     ) -> None:
 
-        function_list = (self.test_function_list if test and not data else 
-                         self.test_data_function_list if test and data else 
-                         self.function_list)
+        function_list = self.get_function_list (test, data)
         func_name = f'test_{func}' if test else func
         existing = False
         for idx, f in enumerate(function_list):
@@ -1090,16 +1109,12 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             function_list[idx] = this_function
         
         function_name = this_function.name
-        if this_function.test:
-            if this_function.data:
-                self.test_data_function_info[function_name] = this_function
-                self.test_data_function_list = add_function_to_list (this_function, self.test_data_function_list, idx=idx, position=position)
-            else:
-                self.test_function_info[function_name] = this_function
-                self.test_function_list = add_function_to_list (this_function, self.test_function_list, idx=idx, position=position)
-        else:
-            self.function_info[function_name] = this_function
-            self.function_list = add_function_to_list (this_function, self.function_list, idx=idx, position=position)
+        function_list = self.get_function_list (this_function.test, this_function.data)
+        function_info = self.get_function_info (this_function.test, this_function.data)
+        function_info[function_name] = this_function
+        function_list = add_function_to_list (this_function, function_list, idx=idx, position=position)
+        self.set_function_list (function_list, this_function.test, this_function.data)
+        self.set_function_info (function_info, this_function.test, this_function.data)
             
         if position is not None:
             self.logger.debug ('calling create_function_and_run_code again, to update arguments and outputs of other functions')
@@ -1211,9 +1226,9 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             self.test_imports += cell
         self.write (test=test)
     
-    def write (self, test=False):
-        ##pdb.no_set_trace()
-        function_list = self.function_list if not test else self.test_function_list
+    def write (self, test=False, data=False):
+        function_list = self.get_function_list (test, True) + self.get_function_list (test, False)        
+        
         file_path = self.file_path if not test else self.test_file_path
         imports = self.imports if not test else self.test_imports
         with open (str(file_path), 'w') as file:
@@ -1225,41 +1240,23 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
                 self.pipeline.write (file)
                 
     def print (self, function_name, test=False, data=False, **kwargs):
+        function_list = self.get_function_list (test, data)
+        function_info = self.get_function_info (test, data)
         if function_name == 'all':
-            function_list = self.test_data_function_list if test and data else self.test_function_list if test else self.function_list
             for function in function_list:
                 function.print ()
+        elif function_name is None:
+           function_list[-1].print ()
         else:
-            if function_name is None:
-                if test and data:
-                    self.test_data_function_list[-1].print ()
-                elif test:
-                    self.test_function_list[-1].print ()
-                else:
-                    self.function_list[-1].print ()
-            else:
-                if test and data:
-                    self.test_data_function_info[function_name].print ()
-                elif test:
-                    self.test_function_info[function_name].print ()
-                else:
-                    self.function_info[function_name].print ()
+            function_info[function_name].print ()    
             
-    def get_function_info (self, function_name, test=False, data=False, **kwargs):
+    def retrieve_function_info (self, function_name, test=False, data=False, **kwargs):
+        function_list = self.get_function_list (test, data)
+        function_info = self.get_function_info (test, data)
         if function_name is None:
-            if test and data:
-                return self.test_data_function_list[-1]
-            elif test:
-                return self.test_function_list[-1]
-            else:
-                return self.function_list[-1]
+            return self.function_list[-1]
         else:
-            if test and data:
-                return self.test_data_function_info[function_name]
-            elif test:
-                return self.test_function_info[function_name]
-            else:
-                return self.function_info[function_name]
+            return function_info[function_name]
             
     def get_lib_path (self):
         return nbdev.config.get_config()['lib_path']
@@ -1269,6 +1266,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
     
     def pipeline_code (self, pipeline_name=None):
         pipeline_name = f'{self.file_name_without_extension}_pipeline' if pipeline_name is None else pipeline_name
+        function_list = self.get_function_list (test=False, data=True) + self.get_function_list (test=False, data=False)
         
         code = (
 f'''# -----------------------------------------------------
@@ -1286,7 +1284,7 @@ def {pipeline_name} (test=False, load=True, save=True, result_file_name="{pipeli
 
 ''')
         return_values = set()
-        for func in self.function_list:
+        for func in function_list:
             argument_list_str = ", ".join(func.arguments) if not func.data else "test=test"
             return_list_str = f'{", ".join(func.return_values)} = ' if len(func.return_values)>0 else ''
             return_values |= set(func.return_values)
@@ -1419,7 +1417,7 @@ class CellProcessorMagic (Magics):
     @line_magic
     def function_info (self, line):
         function_name, kwargs = self.processor.parse_signature (line)
-        return self.processor.get_function_info (
+        return self.processor.retrieve_function_info (
             function_name if function_name!='' else None,
             **kwargs
         )
