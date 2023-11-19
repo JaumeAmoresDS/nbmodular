@@ -1027,18 +1027,22 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         update_previous_functions=True,
         unknown_output=True,
     ):
-        # add variables from current function to posterior_variables of all the previous functions
-        ##pdb.no_set_trace()
-        # test data functions have output dependencies on test functions
-        # test functions have no output dependencies
-        function_list_for_posterior_analysis = self.get_function_list (current_function.test, current_function.data)
-        function_list_for_posterior_analysis = function_list_for_posterior_analysis[:current_function.idx]
-
-        # if test function, its input comes from test data functions: 
-        # - 1 add output dependencies to test data functions
-        # - 2 add input dependencies from each test data function
-        #if current_function.test:
-        #    #pdb.no_set_trace()
+        """Add variables from current function to posterior_variables of all the previous functions."""
+        
+        if current_function.test and current_function.data:
+            # test data functions do not receive input from any other function
+            function_list_for_posterior_analysis = []
+        elif current_function.test:
+            # test functions receive input from test data functions
+            function_list_for_posterior_analysis = self.test_data_function_list
+        elif current_function.data:
+            # data functions do not receive input from other functions
+            function_list_for_posterior_analysis = []
+        else:
+            # normal functions receive input from previous normal functions,
+            # and from data functions
+            function_list_for_posterior_analysis = self.function_list[:current_function.idx] + self.data_function_list
+            
         for function in function_list_for_posterior_analysis:
             function.posterior_variables += [v for v in current_function.previous_variables if v not in function.posterior_variables]
             if update_previous_functions and unknown_output and not function.defined:
@@ -1049,7 +1053,6 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             if current_function.test and function.test and function.data:
                 current_function.add_function_call (function)
         return current_function
-    
     
     def function (
         self,
