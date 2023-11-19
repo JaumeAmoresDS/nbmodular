@@ -484,6 +484,9 @@ class CellProcessor():
         self.test_all_variables = set()
         self.data_all_variables = set ()
         self.all_variables = set()
+        
+        self.test_data_return_values = set()
+        self.data_return_values = set()
 
         self.cell_nodes = []        
         self.cell_nodes_per_function = Bunch()
@@ -643,9 +646,10 @@ class CellProcessor():
         self.data_function_list, self.data_function_info = self.reset_function_list (self.data_function_list, self.data_function_info, previous_values=previous_values)
         self.function_list, self.function_info = self.reset_function_list (self.function_list, self.function_info, previous_values=previous_values)
         
-        self.all_variables = set()
         self.test_data_all_variables = set()
         self.test_all_variables = set()
+        self.data_all_variables = set()
+        self.all_variables = set()
 
         self.imports = ''
         self.test_imports = ''
@@ -926,11 +930,11 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         )
         
         if self.current_function.test and self.current_function.data:
-            common = set(self.current_function.all_variables).intersection (self.test_data_all_variables)
+            common = set(self.current_function.all_variables).intersection (self.test_data_return_values)
             if len(common)>0:
                 raise ValueError (f'detected common variables with other test data functions {common}:')
         elif self.current_function.data:
-            common = set(self.current_function.all_variables).intersection (self.data_all_variables)
+            common = set(self.current_function.all_variables).intersection (self.data_return_values)
             if len(common)>0:
                 raise ValueError (f'detected common variables with other data functions {common}:')
         
@@ -1059,6 +1063,12 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
                 )
             if current_function.test and function.test and function.data:
                 current_function.add_function_call (function)
+                
+            if function.test and function.data:
+                self.test_data_return_values |= set(function.return_values)
+            elif function.data:
+                self.data_return_values |= set(function.return_values)
+                
         return current_function
     
     def function (
