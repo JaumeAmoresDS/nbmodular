@@ -109,7 +109,7 @@ class FunctionProcessor (Bunch):
         if self.permanent:
             get_ipython().run_cell(self.code)
             return
-        if self.data:
+        if self.data and not self.test:
             arguments = []
             arguments = 'test=False'
         else:
@@ -480,9 +480,10 @@ class CellProcessor():
         self.function_list = []
         self.function_info = Bunch()
         
-        self.all_variables = set()
         self.test_data_all_variables = set()
         self.test_all_variables = set()
+        self.data_all_variables = set ()
+        self.all_variables = set()
 
         self.cell_nodes = []        
         self.cell_nodes_per_function = Bunch()
@@ -928,13 +929,19 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             common = set(self.current_function.all_variables).intersection (self.test_data_all_variables)
             if len(common)>0:
                 raise ValueError (f'detected common variables with other test data functions {common}:')
+        elif self.current_function.data:
+            common = set(self.current_function.all_variables).intersection (self.data_all_variables)
+            if len(common)>0:
+                raise ValueError (f'detected common variables with other data functions {common}:')
         
-        if not self.current_function.test and not self.current_function.data:
-            self.all_variables |= set(self.current_function.all_variables)
-        elif self.current_function.test and self.current_function.data:
+        if self.current_function.test and self.current_function.data:
             self.test_data_all_variables |= set(self.current_function.all_variables)
-        elif self.current_function.test and not self.current_function.data:
+        elif self.current_function.test:
             self.test_all_variables |= set(self.current_function.all_variables)
+        elif self.current_function.data:
+            self.data_all_variables |= set(self.current_function.all_variables)
+        else:
+            self.all_variables |= set(self.current_function.all_variables)            
         
         if not not_run:
             self.current_function._update_function_info_object ()
@@ -1288,7 +1295,7 @@ def {pipeline_name} (test=False, load=True, save=True, result_file_name="{pipeli
 ''')
         return_values = set()
         for func in function_list:
-            argument_list_str = ", ".join(func.arguments) if not func.data else "test=test"
+            argument_list_str = ", ".join(func.arguments) if not (func.data and not func.test) else "test=test"
             return_list_str = f'{", ".join(func.return_values)} = ' if len(func.return_values)>0 else ''
             return_values |= set(func.return_values)
             code += f'{" " * self.tab_size}' + f'{return_list_str}{func.name} ({argument_list_str})\n'
