@@ -415,6 +415,9 @@ def update_cell_code (
         v = cell.split(':')
         signature = v[0] 
         signature += ':'
+        v[1] = v[1][1:]
+        if len(v) > 0 and v[1][0] in ['\n','\r']:
+            v[1] = v[1][1:]
         cell=':'.join(v[1:])
     else:
         signature = None
@@ -566,6 +569,7 @@ class CellProcessor():
         self.parser.add_argument('-t', '--test',  action='store_true', help='test function / imports')
         self.parser.add_argument('-d', '--data',  action='store_true', help='data function')
         self.parser.add_argument('-p', '--permanent',  action='store_true', help='do not change the contents of the function')
+        self.parser.add_argument('--fixed-io',  action='store_true', help='do not change the inputs and outputs when %%function is applied on a defined function, e.g., %%function\ndef my_function...')
         self.parser.add_argument('--name', type=str, help='name of function to debug')
         self.parser.add_argument('--idx', type=int, help='position of function to debug')
         self.parser.add_argument('--position', type=int, help='position of function to be added')
@@ -732,6 +736,7 @@ class CellProcessor():
         test=False,
         data=False,
         permanent=False,
+        fixed_io=False,
         not_run=False,
         returns_dict=False,
         returns_bunch=False,
@@ -795,10 +800,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             arguments=[]
             return_values=[]
         
-        if defined and not permanent:
-            cell, signature = update_cell_code (cell, True)
-        else:
-            cell, signature = update_cell_code (cell, False)
+        cell, signature = update_cell_code (cell, defined and not permanent)
             
         if returns_bunch:
             self.imports += 'from sklearn.utils import Bunch\n'
@@ -818,6 +820,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             data=data,
             defined=defined,
             permanent=permanent,
+            fixed_io=fixed_io,
             signature=signature,
             not_run=not_run,
             previous_values={},
@@ -865,6 +868,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         test=False,
         data=False,
         permanent=False,
+        fixed_io=False,
         restrict_inputs=None,
         idx=None,
         **kwargs,
@@ -891,6 +895,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             test=test,
             data=data,
             permanent=permanent,
+            fixed_io=fixed_io,
             not_run=not_run,
             **kwargs
         )
@@ -976,11 +981,14 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
     ):
         if make_function:
             # TODO: what if the current function is current_function.data is True?
-            arguments=(current_function.previous_variables if unknown_input and not current_function.test and not current_function.defined else 
+            arguments=(current_function.previous_variables if unknown_input and not current_function.test and not (current_function.defined and current_function.fixed_io) else 
                            [] if current_function.test else
                            current_function.arguments if current_function.defined else
                            input)
-            
+            if current_function.defined and not current_function.fixed_io:
+                # keep the arguments specified in function signature
+                arguments = current_function.arguments + [x for x in arguments if x not in current_function.arguments]
+                
             if self.restrict_inputs and not current_function.test and not current_function.data:
                 variables_created_by_previous_functions = [x for f in function_list[:idx] for x in f.created_variables]
                 # arguments can only be variables created by previous functions ("created_variables") 
@@ -1019,8 +1027,8 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             current_function.update_code()
             
         if current_function.defined:
-            potential_arguments = current_function.loaded_names
-            #potential_arguments = current_function.previous_variables
+            #potential_arguments = current_function.loaded_names
+            potential_arguments = current_function.previous_variables
             potential_arguments = list (set (potential_arguments).difference (current_function.arguments))
             self.posterior_not_in_results = list (set (current_function.posterior_variables).difference (current_function.return_values))
             
@@ -1056,9 +1064,12 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             
         for function in function_list_for_posterior_analysis:
             function.posterior_variables += [v for v in current_function.previous_variables if v not in function.posterior_variables]
-            if update_previous_functions and unknown_output and not function.defined:
+            if update_previous_functions and unknown_output and not (function.defined and function.fixed_io):
+                return_values = [x for x in function.created_variables + function.argument_variables if x in function.posterior_variables] 
+                if function.defined:
+                    return_values = function.return_values + [x for x in return_values if x not in function.return_values]
                 function.update_code (
-                    return_values=[x for x in function.created_variables + function.argument_variables if x in function.posterior_variables], 
+                    return_values=return_values, 
                     display=False
                 )
             if current_function.test and function.test and function.data:
