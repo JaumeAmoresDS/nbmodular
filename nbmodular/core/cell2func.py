@@ -763,10 +763,20 @@ class CellProcessor():
             arguments = [[x.arg for x in node.args.args] for node in ast.walk(root) if isinstance (node, ast.FunctionDef)]
             if len(arguments)>0:
                 arguments = arguments[0]
-            return_values = [([x.id for x in node.value.elts if isintance (node, ast.Name)] if hasattr(node.value, 'elts') else [node.value.id]) if isinstance (node.value, ast.Name) else '' for node in ast.walk(root) if isinstance (node, ast.Return)] 
-            if len(return_values)>0:
-                return_values = return_values[0]
-            
+            #return_values = [([x.id for x in node.value.elts if isinstance (node, ast.Name)] if hasattr(node.value, 'elts') else [node.value.id]) if isinstance (node.value, ast.Name) else '' for node in ast.walk(root) if isinstance (node, ast.Return)] 
+            returned_names = lambda node: [x.id for x in node.elts if isinstance (node, ast.Name)] if hasattr (node, 'elts') else [node.id]
+            return_values = []
+            for node in ast.walk(root):
+                if not isinstance (node, ast.Return):
+                    continue
+                if isinstance (node.value, ast.Name):
+                    return_values += returned_names (node.value)
+                elif isinstance (node.value, ast.Tuple):
+                    for x in node.value.elts:
+                        return_values += returned_names (x)
+                else:
+                    self.logger.warning (f'node {node} is of type ast.Return but could not find return value, node.value={node.value}')
+                    
             unknown_input = False
             unknown_output = False
             input = arguments
@@ -870,7 +880,6 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         permanent=False,
         fixed_io=False,
         restrict_inputs=None,
-        idx=None,
         **kwargs,
     ) -> FunctionProcessor:
         
@@ -899,6 +908,17 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             not_run=not_run,
             **kwargs
         )
+        
+        function_list = self.get_function_list (test, data)
+        func_name = f'test_{self.current_function.name}' if test else self.current_function.name
+        existing = False
+        for idx, f in enumerate(function_list):
+            if f.name == func_name:
+                existing=True
+                break
+        if not existing:
+            idx = None
+        self.current_function._existed_before = existing
         
         # register
         first_call = idx is None
@@ -1105,17 +1125,6 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         store_values=True,
         **kwargs,
     ) -> None:
-
-        function_list = self.get_function_list (test, data)
-        func_name = f'test_{func}' if test else func
-        existing = False
-        for idx, f in enumerate(function_list):
-            if f.name == func_name:
-                existing=True
-                #function_list.remove (f)
-                break
-        if not existing:
-            idx = None
             
         #pdb.no_set_trace()
         this_function = self.create_function_and_run_code(
@@ -1135,6 +1144,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             store_values=store_values,
             **kwargs,
         )
+        existing = this_function._existed_before
         if existing and (func in self.function_info) and merge:
             this_function = self.merge_functions (self.function_info[func], this_function, idx=idx, show=show)
             function_list[idx] = this_function
