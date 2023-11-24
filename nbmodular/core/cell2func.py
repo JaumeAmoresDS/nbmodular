@@ -77,6 +77,12 @@ def get_non_callable (variables):
 def get_ast (code):
     print (ast.dump (ast.parse (code), indent=2))
 
+def remove_duplicates_from_list (list_with_potential_duplicates):
+    list_without_duplicates = []
+    for x in list_with_potential_duplicates:
+        if x not in list_without_duplicates: list_without_duplicates.append(x)
+    return list_without_duplicates
+
 # %% ../../nbs/cell2func.ipynb 14
 class FunctionProcessor (Bunch):
     """
@@ -108,10 +114,16 @@ class FunctionProcessor (Bunch):
         self, 
         arguments=None, 
         return_values=None,
-        display=False
+        display=False,
+        not_run=False,
     ) -> None:
-        #pdb.no_set_trace()
-        if self.permanent:
+        """
+        Updates the original code found in the cell.
+         
+        For this purpose, it makes use of `arguments`, `return_values`, `self.created_variables`,
+        `self.previous_values` and `self.current_values`
+        """
+        if self.permanent and not not_run:
             get_ipython().run_cell(self.code)
             return
         if self.data and not self.test:
@@ -207,25 +219,31 @@ for k, v in params.items():
         get_ast (code)
         
     def parse_variables (self, code=None):
+        """
+        Finds different types of variables used in the code, based on AST.
+
+        Types of variables found:
+            - `created_variables`
+            - `loaded_names`
+            - `previous_variables`
+            - `argument_variables`
+            - `read_only_variables`
+            - `all_variables`
+        """
+
         if code is None: code=self.original_code
         # variable parsing
         root = ast.parse (code)
         
         # ---------------------------------------
         # newly created names: candidates for return list and not for argument list
-        self.non_unique_created_variables = [node.id for node in ast.walk(root) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)]
-        # avoid duplicates:
-        self.created_variables = []
-        for node_id in self.non_unique_created_variables:
-            if node_id not in self.created_variables: self.created_variables.append(node_id)
+        non_unique_created_variables = [node.id for node in ast.walk(root) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)]
+        self.created_variables = remove_duplicates_from_list (non_unique_created_variables)
         
         # ---------------------------------------
         # names defined before: candidates for arguments list, if they are not callable
         non_unique_loaded_names = [node.id for node in ast.walk(root) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)]
-        # avoid duplicates:
-        self.loaded_names = []
-        for node_id in non_unique_loaded_names:
-            if node_id not in self.loaded_names: self.loaded_names.append(node_id)
+        self.loaded_names = remove_duplicates_from_list (non_unique_loaded_names)
         
         self.previous_variables = [x for x in self.loaded_names if x not in self.created_variables]
         if self.unpack_bunch is not None and self.unpack_bunch not in self.previous_variables:
@@ -234,9 +252,7 @@ for k, v in params.items():
         # names that appear as arguments in functions -> some defined created the current function, some in the current one
         v=[node for node in ast.walk(root) if isinstance(node, ast.Call)]
         non_unique_argument_variables = [y.id  for x in v for y in x.args if isinstance(y, ast.Name)]
-        self.argument_variables = []
-        for node_id in non_unique_argument_variables:
-            if node_id not in self.argument_variables: self.argument_variables.append(node_id)
+        self.argument_variables = remove_duplicates_from_list (non_unique_argument_variables)
         
         # argument variables might still be modified in the function, so they need to be marked as I/O, i.e., candidates for return list and for argument list
         
@@ -325,8 +341,27 @@ keys = joblib.load ('function_processor_keys.pk')
         get_ipython().run_cell(keys_update_code)
         os.remove ('function_processor_keys.pk')
         
-    def run_code_and_collect_locals (self, code=None, is_test_function=False, store_values=True, first_call=True):
-        ##pdb.no_set_trace()
+    def run_code_and_collect_locals (
+            self, 
+            code=None, 
+            is_test_function=False, 
+            store_values=True, 
+            first_call=True,
+            function_in_previous_cells=None,
+        ):
+        """
+        Runs the code in the function, and collects local variables.
+
+        It populates the following dictionaries of local variables: 
+        `previous_values` and `current_values`
+        
+        It modifies the following classification of variables:
+            - `previous_variables`
+            - `argument_variables`
+            - `read_only_variables`
+            - `all_variables`
+
+        """
         if code is None: code=self.original_code
         
         joblib.dump (dict(self), 'function_processor.pk')
@@ -334,6 +369,9 @@ keys = joblib.load ('function_processor_keys.pk')
             #pdb.no_set_trace()
             if first_call:
                 self._store_values ("previous_values", code="", store_values=store_values)
+            if function_in_previous_cells is not None:
+                # if previous_values is in current_values of previous cells of this function, it cannot be a previous value
+                self.previous_values = {k:self.previous_values[k] for k in self.previous_values if k not in function_in_previous_cells.current_values}
             self._store_values ("current_values", code=code + "\n", store_values=store_values)
         else:
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("previous_variables", locals())')
@@ -342,16 +380,30 @@ keys = joblib.load ('function_processor_keys.pk')
             self.current_values = {k: None for k in self.created_variables}
         
         self._create_function_info_object ()
-        self.match_variables_and_locals ()
+        self.match_variables_and_locals (function_in_previous_cells=function_in_previous_cells)
         os.remove ('function_processor.pk')
         
-    def match_variables_and_locals (self):
+    def match_variables_and_locals (self, function_in_previous_cells=None):
+        """
+        Refines classification of variables in code based on local variables found before and after running.
+
+        Refined types:
+            - `previous_variables`
+            - `argument_variables`
+            - `read_only_variables`
+            - `all_variables`
+        
+        It also refines the following dictionaries of local variables: `previous_values` and `current_values`
+        """
+
         #pdb.no_set_trace()
         # previous variables / values
-        self.previous_variables = [k for k in self.previous_variables if k in self.previous_values]
-        self.previous_variables += [k for k in self.argument_variables if k in self.previous_values and k not in self.previous_variables]
-        self.previous_variables += [k for k in self.created_variables if k in self.previous_values and k in self.loaded_names+self.argument_variables and k not in self.previous_variables]
-        self.previous_values = {k:self.previous_values[k] for k in self.previous_values if k in self.previous_variables}
+        previous_values = self.previous_values if function_in_previous_cells is None else self.previous_values | function_in_previous_cells.previous_values
+        previous_variables = self.previous_variables if function_in_previous_cells is None else self.previous_variables + function_in_previous_cells.previous_variables
+        self.previous_variables = [k for k in self.previous_variables if k in previous_values]
+        self.previous_variables += [k for k in self.argument_variables if k in previous_values and k not in self.previous_variables]
+        self.previous_variables += [k for k in self.created_variables if k in previous_values and k in self.loaded_names+self.argument_variables and k not in self.previous_variables]
+        self.previous_values = {k:self.previous_values[k] for k in self.previous_values if k in previous_variables}
         
         # created variables / current values
         self.current_values = {k:self.current_values[k] for k in self.current_values if k in self.created_variables or k in self.return_values}
@@ -970,7 +1022,13 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
 
         if not not_run:
             is_test_function = self.current_function.test and not self.current_function.data
-            self.current_function.run_code_and_collect_locals(is_test_function=is_test_function, store_values=store_values, first_call=first_call)
+            function_in_previous_cells = function_list[idx] if merge and idx is not None else None
+            self.current_function.run_code_and_collect_locals(
+                is_test_function=is_test_function, 
+                store_values=store_values, 
+                first_call=first_call,
+                function_in_previous_cells=function_in_previous_cells,
+            )
                     
         self.current_function = self.update_pipeline (
             self.current_function,
@@ -1226,28 +1284,31 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             #                                             last=cell_function is nodes_per_function[cell_function.name][-1])
             # make_cell (cell=code)
             pass
-
             
     def merge_functions (self, this_function, new_function, idx=None, show=False):
-        
+        """
+        Merges different cells to conform the same function definition.
+
+        It merges the code, the types of variables `created_variables`, `loaded_names`, 
+        `previous_variables`, `argument_variables`, `read_only_variables`, `all_variables`
+		and the dictionaries of local variables `previous_values` and `current_values`
+        """
+
         this_function.original_code += new_function.original_code
-        original_kwargs = {**this_function.original_kwargs, **new_function.original_kwargs}
-        
-        if 'idx' in original_kwargs:
-            original_kwargs_no_idx = original_kwargs.copy()
-            del original_kwargs_no_idx['idx']
-        else:
-            original_kwargs_no_idx = original_kwargs
-            
-        #pdb.set_trace()
-        this_function = self.create_function_and_run_code(
-            this_function.original_name,
-            this_function.original_code,
-            this_function.call,
-            original_kwargs=original_kwargs,
-            idx=idx,
-            merge=True,
-            **original_kwargs_no_idx,
+        join_variables = lambda x: remove_duplicates_from_list (getattr (this_function, x) + getattr (new_function, x))
+        this_function.created_variables = join_variables ('created_variables')
+        this_function.loaded_names = join_variables ('loaded_names')
+        this_function.previous_variables = join_variables ('previous_variables')
+        this_function.argument_variables = join_variables ('argument_variables')
+        this_function.read_only_variables = join_variables ('read_only_variables')
+        this_function.all_variables = join_variables ('all_variables')
+        this_function.current_values |= new_function.current_values
+        this_function.previous_values |= new_function.previous_values
+
+        this_function.update_code (
+            arguments=remove_duplicates_from_list (this_function.arguments + new_function.arguments), 
+            return_values=remove_duplicates_from_list (this_function.arguments + new_function.arguments),
+            display=show,
         )
         
         return this_function
@@ -1624,7 +1685,9 @@ def keep_variables_in_memory (field, variable_values, self=None):
 
 # %% ../../nbs/cell2func.ipynb 34
 def acceptable_variable (variable_values, k):
-    return not k.startswith ('_') and not callable(variable_values[k]) and type(variable_values[k]).__name__ not in ['module', 'FunctionProcessor', 'CellProcessor'] and k not in ['variable_values', 'In', 'Out']
+    return (not k.startswith ('_') and not callable(variable_values[k]) 
+            and type(variable_values[k]).__name__ not in ['module', 'FunctionProcessor', 'CellProcessor'] 
+            and k not in ['variable_values', 'In', 'Out'])
 
 # %% ../../nbs/cell2func.ipynb 36
 import pdb
