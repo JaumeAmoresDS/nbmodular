@@ -641,8 +641,10 @@ class CellProcessor():
         self.load_tests = True
         self.save_tests = True
         self.run_tests = True
+        self.save = False
+        self.load = False
         
-        self.parser = argparse.ArgumentParser(description='Process some integers.')
+        self.parser = argparse.ArgumentParser(description='Arguments to `function` magic cell.')
         self.parser.add_argument('-i', '--input', type=str, nargs='+', help='Strict input. No other input considered, regardless of any dependencies.')
         self.parser.add_argument('--include-input', type=str, default=[], nargs='+', help='Input to be included in addition of identified dependencies on previous functions.')
         self.parser.add_argument('--exclude-input', type=str, default=[], nargs='+', help='Input to be excluded.')
@@ -653,6 +655,14 @@ class CellProcessor():
         self.parser.add_argument('-s', '--show',  action='store_true', help='show function code')
         self.parser.add_argument('-l', '--load',  action='store_true', help='load variables')
         self.parser.add_argument('--save',  action='store_true', help='save variables')
+        self.parser.add_argument('--io-type', type=str, default='pickle', help='I/O functions to use. `x` means use `save_x` for saving and `load_x` for loading.')
+        self.parser.add_argument('--io-result',  action='store_true', help='save/load result of function')
+        self.parser.add_argument('--io-locals',  action='store_true', help='save/load local variables of function')
+        self.parser.add_argument('--io-root-path',  type=str, default='results', help='root of path where function data is stored.')
+        self.parser.add_argument('--io-folder',  type=str, default=None, help='Folder where the data is stored. It can be several folders `folder1/folder2/...`. '
+                                                                               'If not indicated, the folder has the same name as the python module ')
+        self.parser.add_argument('--save-args',  type=str, default='', help='Arguments passed to save function, like so: "param1=value1, param2=value2"')
+        self.parser.add_argument('--load-args',  type=str, default='', help='Arguments passed to load function, like so: "param1=value1, param2=value2"')
         self.parser.add_argument('-n', '--not-run',  action='store_true', help='do not execute the contents of the cell')
         self.parser.add_argument('--not-store',  action='store_true', help='do not store local values from cell')
         self.parser.add_argument('--not-store-locals-in-disk',  action='store_true', help='do not store local values from cell in disk')
@@ -685,6 +695,17 @@ class CellProcessor():
         if (value != self.run_tests):
             self.logger.info (f'changing global run flag to {value}')
         self.run_tests = value
+    
+    def set_file_path (self, file_path):
+        file_path = Path(file_path)
+        self.file_name = file_path.name
+        self.file_path = file_path
+
+    def set (self, attr, value):
+        if callable(getattr (self, f'set_{attr}', None)):
+            getattr (self, f'set_{attr}', None) (value)
+        else:
+            setattr (self, attr, value)
         
     def debug_function (self, call_history=None, idx=None, name=None, test=False, data=False, **kwargs):
         if call_history is not None:
@@ -758,11 +779,14 @@ class CellProcessor():
             self.logger.info ('Removing call history')
             self.call_history = []
             
-    def get_function_list (self, test=False, data=False):
-        return (self.test_data_function_list if test and data else
+    def get_function_list (self, test=False, data=False, all=False):
+        function_list = (self.test_data_function_list if test and data else
                          self.test_function_list if test else
                          self.data_function_list if data else
                          self.function_list)
+        if not all:
+            function_list = [f for f in function_list if isinstance(f, FunctionProcessor)]
+        return function_list
     
     def get_function_info (self, test=False, data=False):
         return (self.test_data_function_info if test and data else
@@ -955,8 +979,8 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         make_function=True,
         update_previous_functions=True,
         show=False,
-        load=False,
-        save=False,
+        load=None,
+        save=None,
         not_run=False,
         override=False,
         test=False,
@@ -967,7 +991,9 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         merge=False,
         **kwargs,
     ) -> FunctionProcessor:
-        
+        load = self.load if load is None else load
+        save = self.save if save is None else save
+
         if restrict_inputs is None:
             restrict_inputs = self.restrict_inputs
         store_values = not not_store
@@ -1015,10 +1041,10 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             self.current_function.idx = function_list[idx].idx
         
         # get variables specific about this function
-        path_variables = Path (self.file_name_without_extension) / f'{func}.pk'
-        if load and path_variables.exists():
-            self.current_function.store_variables (path_variables)
-            not_run=True
+        if load:
+            found = self.load_data (**kwargs)
+            if found:
+                not_run = True
 
         if not not_run:
             is_test_function = self.current_function.test and not self.current_function.data
@@ -1069,8 +1095,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             self.current_function._create_function_info_object_with_only_parsed_variables ()
         
         if save and not not_run:
-            path_variables.parent.mkdir (parents=True, exist_ok=True)
-            joblib.dump (self.current_function.current_values, path_variables)
+            self.save_data (**kwargs)
         
         return self.current_function
     
@@ -1366,7 +1391,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
         self.write (test=test)
     
     def write (self, test=False, data=False):
-        function_list = self.get_function_list (test, True) + self.get_function_list (test, False)        
+        function_list = self.get_function_list (test, True) + self.get_function_list (test, False, all=True)
         
         file_path = self.file_path if not test else self.test_file_path
         imports = self.imports if not test else self.test_imports
@@ -1499,6 +1524,24 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
             code, name = self.pipeline_code()  
         print (code)
 
+    def include (self, cell, test=False, data=False, **kwargs):
+        function_list = self.get_function_list (test, data, all=True)
+        function_list.append (cell)
+        get_ipython().run_cell(cell)
+
+    def load_data (self, **kwargs):
+        path_variables = Path (self.file_name_without_extension) / f'{self.current_function.name}.pk'
+        if path_variables.exists():
+            self.current_function.store_variables (path_variables)
+            return True
+        else:
+            return False
+
+    def save_data (self, **kwargs):
+        path_variables = Path (self.file_name_without_extension) / f'{self.current_function.name}.pk'
+        path_variables.parent.mkdir (parents=True, exist_ok=True)
+        joblib.dump (self.current_function.current_values, path_variables)
+
 # %% ../../nbs/cell2func.ipynb 28
 @magics_class
 class CellProcessorMagic (Magics):
@@ -1536,10 +1579,18 @@ class CellProcessorMagic (Magics):
         
     @cell_magic
     def imports (self, line, cell):
-        "Converts cell to function"
         kwargs = self.processor.parse_args (line)
         self.processor.write_imports (cell, **kwargs)
+
+    @cell_magic
+    def include (self, line, cell):
+        function_name, kwargs = self.processor.parse_signature (line)
+        self.processor.include (cell, **kwargs)
     
+    @line_magic
+    def file_path (self, line):
+        return self.processor.set_file_path (line)    
+
     @line_magic
     def write (self, line):
         return self.processor.write ()
@@ -1643,6 +1694,14 @@ class CellProcessorMagic (Magics):
     def not_run_tests (self, line):
         self.processor.set_run_tests (False)
 
+    @line_magic
+    def set (self, line):
+        values = line.split(' ')
+        if len(values) != 2:
+            raise ValueError ('The set line magic should have exactly two arguments separated by space: %set attr value')
+        attr, value = values
+        self.processor.set (attr, eval(value))
+
 # %% ../../nbs/cell2func.ipynb 30
 def load_ipython_extension(ipython):
     """
@@ -1690,7 +1749,6 @@ def acceptable_variable (variable_values, k):
             and k not in ['variable_values', 'In', 'Out'])
 
 # %% ../../nbs/cell2func.ipynb 36
-import pdb
 def store_variables (path_variables, locals_, self=None):
     """
     Store `variables` in dictionary entry `self.variables_field[function]`
@@ -1698,10 +1756,7 @@ def store_variables (path_variables, locals_, self=None):
     ##pdb.no_set_trace()
     import joblib
     current_values = joblib.load (path_variables)
-    #v = locals()
-    #v.update (current_values)
-    locals_.update (current_values)
-    
+    locals_.update (current_values)    
     
     frame_number = 0
     ##pdb.no_set_trace()
