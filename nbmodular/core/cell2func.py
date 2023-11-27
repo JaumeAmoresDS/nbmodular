@@ -471,8 +471,13 @@ keys = joblib.load ('function_processor_keys.pk')
     def __repr__ (self):
         return str(self)
     
-    def store_variables (self, path_variables):
-        store_variables_code = f'\nfrom nbmodular.core.cell2func import store_variables\nstore_variables ("{path_variables}", locals ())'
+    def store_variables (
+        self, 
+        path_variables,
+        io_type,
+        load_args,
+    ):
+        store_variables_code = f'\nfrom nbmodular.core.cell2func import store_variables\nstore_variables ("{path_variables}", locals (), {io_type}, {load_args})'
         get_ipython().run_cell(store_variables_code)
         
     def get_cell_function_code (self, unique=True, first=False, last=False):
@@ -667,6 +672,14 @@ class CellProcessor():
         self.run_tests = True
         self.save = False
         self.load = False
+
+        self.io_type='pickle'
+        self.io_locals=False
+        self.io_result=True
+        self.io_root_path='results'
+        self.io_folder=self.file_name_without_extension
+        self.load_args={}
+        self.save_args={}
         
         self.parser = argparse.ArgumentParser(description='Arguments to `function` magic cell.')
         self.parser.add_argument('-i', '--input', type=str, nargs='+', help='Strict input. No other input considered, regardless of any dependencies.')
@@ -685,6 +698,7 @@ class CellProcessor():
         self.parser.add_argument('--io-root-path',  type=str, default='results', help='root of path where function data is stored.')
         self.parser.add_argument('--io-folder',  type=str, default=None, help='Folder where the data is stored. It can be several folders `folder1/folder2/...`. '
                                                                                'If not indicated, the folder has the same name as the python module ')
+        self.parser.add_argument('--io-file',  type=str, default=None, help='Name of file where results are saved. If not indicated, the name of the function is used, adding "result" at the end.')
         self.parser.add_argument('--save-args',  type=str, default='', help='Arguments passed to save function, like so: "param1=value1, param2=value2"')
         self.parser.add_argument('--load-args',  type=str, default='', help='Arguments passed to load function, like so: "param1=value1, param2=value2"')
         self.parser.add_argument('-n', '--not-run',  action='store_true', help='do not execute the contents of the cell')
@@ -877,7 +891,7 @@ f'''
 from nbmodular.core.cell2func import get_args_and_defaults_from_function_in_cell
 
 _, args_with_defaults, default_values = get_args_and_defaults_from_function_in_cell ()
-for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+default_values2):
+for arg, val in zip (args_with_defaults, default_values):
     exec (arg + "=" + str(val))
 ''')
         get_ipython().run_cell(argument_initialization_code)
@@ -1559,10 +1573,80 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
         function_list.append (cell)
         get_ipython().run_cell(cell)
 
-    def load_data (self, **kwargs):
-        path_variables = Path (self.file_name_without_extension) / f'{self.current_function.name}.pk'
+    def _add_code_for_loading_result (
+        self,
+        io_type,
+        io_root_path,
+        io_folder,
+        io_file,
+        load_args,
+    ):
+        if self.current_function.test:
+            self.test_imports.append ('from pathlib import Path')
+            self.test_imports.append ('from nbmodular.core import function_io')
+        self.current_function.kwarguments += dict (
+            io_type=io_type,
+            io_root_path=io_root_path,
+            io_folder=io_folder,
+            io_file=io_file,
+            load_args={k:str(load_args[k]) for k in load_args},
+        )
+        self.current_function.original_code = (self.current_function.original_code + 
+'''
+path_variables = Path (io_root_path) / f"{io_file}.{io_type}"
+if path_variables.exists():
+    result = function_io (path_variables, io_type, **load_args)
+    return result
+
+''')
+        
+    load_argument_initialization_code = (
+f'''
+exec (io_type={io_type})
+exec (io_root_path={io_root_path})
+exec (io_folder={io_folder})
+exec (io_file={io_file})
+exec (load_args={load_args})
+for k in load_args:
+    exec (load_args[k]={load_args[k]})
+'''
+    )
+    get_ipython().run_cell(load_argument_initialization_code)
+
+    def load_data (
+        self, 
+        io_type=None,
+        io_locals=None,
+        io_result=None,
+        io_root_path=None,
+        io_folder=None,
+        io_file=None,
+        load_args=None,
+        **kwargs,
+    ):
+        io_type = self.io_type if io_type is None else io_type
+        io_locals = self.io_locals if io_locals is None else io_locals
+        io_result = self.io_result if io_result is None else io_result
+        io_root_path = self.io_root_path if io_root_path is None else io_root_path
+        io_folder = self.io_folder if io_folder is None else io_folder
+        io_file = f'{self.current_function.name}_result' if io_file is None else io_file
+        load_args = self.load_args if load_args is None else load_args
+        path_variables = Path (io_root_path) / f'{io_file}.{io_type}'
+        if not io_locals and hasattr(self, 'return_values'):
+            self._add_code_for_loading_result (
+                io_type,
+                io_root_path,
+                io_folder,
+                io_file,
+                load_args,
+            )
+            
         if path_variables.exists():
-            self.current_function.store_variables (path_variables)
+            self.current_function.store_variables (
+                path_variables,
+                io_type,
+                load_args,
+            )
             return True
         else:
             return False
@@ -1779,13 +1863,23 @@ def acceptable_variable (variable_values, k):
             and k not in ['variable_values', 'In', 'Out'])
 
 # %% ../../nbs/cell2func.ipynb 36
-def store_variables (path_variables, locals_, self=None):
+def store_variables (
+    path_variables,
+    locals_,  
+    io_type=None,
+    load_args=None,
+    self=None,
+):
     """
     Store `variables` in dictionary entry `self.variables_field[function]`
     """
     ##pdb.no_set_trace()
-    import joblib
-    current_values = joblib.load (path_variables)
+    from nbmodular.core import function_io
+    current_values = function_io.load (
+        path_variables,
+        io_type=io_type,
+        **load_args
+    )
     locals_.update (current_values)    
     
     frame_number = 0
