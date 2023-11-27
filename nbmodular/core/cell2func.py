@@ -109,10 +109,19 @@ class FunctionProcessor (Bunch):
                 return self.current_values[k]
             else:
                 return None
+
+    def get_args_kwargs_and_defaults (self, cell):
+        # TODO: move this import to the top of the file and
+        # finish the implementation of this function if required
+        import inspect
+        get_ipython().run_cell (cell)
+        function = self._store_values (return_variables=[self.name])
+        return inspect.signature (function)
     
     def update_code (
         self, 
         arguments=None, 
+        kwarguments=None,
         return_values=None,
         display=False,
         not_run=False,
@@ -120,7 +129,7 @@ class FunctionProcessor (Bunch):
         """
         Updates the original code found in the cell.
          
-        For this purpose, it makes use of `arguments`, `return_values`, `self.created_variables`,
+        For this purpose, it makes use of `arguments`, `kwarguments`, `return_values`, `self.created_variables`,
         `self.previous_values` and `self.current_values`
         """
         if self.permanent and not not_run:
@@ -129,12 +138,17 @@ class FunctionProcessor (Bunch):
         if self.data and not self.test:
             arguments = []
             arguments = 'test=False'
+            kwarguments=dict(test=False)
         else:
             if arguments is not None:
-                arguments += [k.split('=')[0] for k in self.include_input if k not in arguments]
+                arguments += [k for k in self.include_input if k not in arguments and k not in kwarguments and '=' not in k]
                 arguments = [k for k in arguments if k not in self.exclude_input]
                 self.arguments = arguments
-            arguments = ', '.join (self.arguments)
+            if kwarguments is not None:
+                kwarguments |= {k.split('=')[0]:k.split('=')[1] for k in self.include_input if k not in kwarguments and k not in arguments and '=' in k}
+                kwarguments = {k:kwarguments[k] for k in kwarguments if k not in self.exclude_input}
+                self.kwarguments = kwarguments
+            arguments = ', '.join (self.arguments) + ', '.join ([f'{k}={self.kwarguments[k]}' for k in self.kwarguments])
         unpack_input_code=''
         pack_output_code=''
         bunch_variable = None
@@ -184,7 +198,7 @@ class FunctionProcessor (Bunch):
         else:
             return_line = ''
         function_calls = '' if 'function_calls' not in self else self.function_calls
-        signature = self.signature if self.signature is not None else f'def {self.name}({arguments}):'
+        signature = f'def {self.name}({arguments}):'
         # store parts
         self.code_parts=Bunch(
             signature=signature, 
@@ -263,10 +277,10 @@ for k, v in params.items():
         self.all_variables += [k for k in self.previous_variables if k not in self.all_variables]
         self.all_variables += [k for k in self.argument_variables if k not in self.all_variables]
                    
-    def _store_values (self, field, code="", store_values=True):
+    def _store_values (self, field='shared_variables', code="", store_values=True, return_variables=False):
         """Stores local variables in field `field`of self"""
-        code_to_run1 = code + f'from nbmodular.core.cell2func import keep_variables_in_memory\nkeep_variables_in_memory ("{field}", locals ())'
-        code_to_run2 = code + f'from nbmodular.core.cell2func import keep_variables\nkeep_variables ("{field}", locals ())'
+        code_to_run1 = code + f'from nbmodular.core.cell2func import retrieve_nb_locals_through_memory\nretrieve_nb_locals_through_memory ("{field}", locals ())'
+        code_to_run2 = code + f'from nbmodular.core.cell2func import retrieve_nb_locals_through_disk\nretrieve_nb_locals_through_disk ("{field}", locals ())'
         get_ipython().run_cell (code_to_run1)
         if 'created_current_values' not in self[field]:
             self.logger.debug ('storing local variables in disk')
@@ -278,6 +292,15 @@ for k, v in params.items():
         
         if not store_values:
             self[field] = {k: '__REMOVED__' for k in self[field]}
+        
+        if return_variables is not None:
+            variables = self[field]
+            del self[field]
+            if return_variables=='all':
+                return variables
+            else:
+                return {variables:variables[k] for k in return_variables}
+
             
     def _create_function_info_object_with_only_parsed_variables (self):
         keys = dict(
@@ -430,8 +453,9 @@ keys = joblib.load ('function_processor_keys.pk')
             
     def add_to_signature (self, input=None, output=None, **kwargs):
         if input is not None:
-            self.arguments += input
             self.previous_variables += input
+            self.arguments += [k for k in input if k not in self.arguments and k not in self.kwarguments and '=' not in k]
+            self.kwarguments |= {k.split('=')[0]:k.split('=')[1] for k in input if k not in self.kwarguments and k not in self.arguments and '=' in k}
         if output is not None:
             self.return_values  += output
             self.posterior_variables += output
@@ -442,7 +466,7 @@ keys = joblib.load ('function_processor_keys.pk')
     def __str__ (self):
         name = None if not hasattr(self, 'name') else self.name
         created_variables = self.created_variables if hasattr(self, 'created_variables') else None
-        return f'Function {name}:\n    Input: {self.arguments}\n    Output: {self.return_values}\n    Created variables: {self.created_variables}'
+        return f'Function {name}:\n    Arguments: {self.arguments}\n    Keyword arguments: {self.kwarguments}\n    Output: {self.return_values}\n    Created variables: {self.created_variables}'
     
     def __repr__ (self):
         return str(self)
@@ -470,21 +494,17 @@ def update_cell_code (
 ):
     if defined:
         v = cell.split(':')
-        signature = v[0] 
-        signature += ':'
         v[1] = v[1][1:]
         if len(v) > 0 and v[1][0] in ['\n','\r']:
             v[1] = v[1][1:]
         cell=':'.join(v[1:])
-    else:
-        signature = None
     
     original_code = ''
     for line in cell.splitlines():
         if 'return' not in line and '#|' not in line:
             original_code += (line + '\n')
     cell = 'if True:\n' + original_code if defined else original_code
-    return cell, signature
+    return cell
 
 # %% ../../nbs/cell2func.ipynb 19
 def add_function_to_list (function, function_list, idx=None, position=None):
@@ -531,20 +551,24 @@ def get_args_and_defaults (list_args, list_defaults):
         else:
             raise ValueError (f'Unexpected type for node {x}')
     
-    arguments = [arg.arg for arg in list_args[-len(list_defaults):]]
+    args_without_defaults = [arg.arg for arg in list_args[:-len(list_defaults)]]
+    args_with_defaults = [arg.arg for arg in list_args[-len(list_defaults):]]
     
-    return arguments, default_values
+    return args_without_defaults, args_with_defaults, default_values
 
 # %% ../../nbs/cell2func.ipynb 24
+def get_args_and_defaults_from_ast (root):    
+    args_without_defaults, args_with_defaults1, default_values1 = get_args_and_defaults (root.body[0].args.posonlyargs + root.body[0].args.args, root.body[0].args.defaults)
+    args_with_defaults2, default_values2 = get_args_and_defaults (root.body[0].args.kwonlyargs, root.body[0].args.kw_defaults)
+    
+    return args_without_defaults, args_with_defaults1+args_with_defaults2, default_values1+default_values2
+
+
 def get_args_and_defaults_from_function_in_cell ():
     cell = joblib.load ('cell.pk')
     os.remove ('cell.pk')
     root = ast.parse (cell)
-    
-    args_with_defaults1, default_values1 = get_args_and_defaults (root.body[0].args.posonlyargs + root.body[0].args.args, root.body[0].args.defaults)
-    args_with_defaults2, default_values2 = get_args_and_defaults (root.body[0].args.kwonlyargs, root.body[0].args.kw_defaults)
-    
-    return args_with_defaults1+args_with_defaults2, default_values1+default_values2
+    return get_args_and_defaults_from_ast (root)
 
 # %% ../../nbs/cell2func.ipynb 26
 class CellProcessor():
@@ -845,6 +869,18 @@ class CellProcessor():
 
     def add_call (self, call):
         self.call_history.append (call)
+
+    def _evaluate_kwargs_defaults (self, cell):
+        joblib.dump (cell, 'cell.pk')
+        argument_initialization_code=(
+f'''
+from nbmodular.core.cell2func import get_args_and_defaults_from_function_in_cell
+
+_, args_with_defaults, default_values = get_args_and_defaults_from_function_in_cell ()
+for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+default_values2):
+    exec (arg + "=" + str(val))
+''')
+        get_ipython().run_cell(argument_initialization_code)
                    
     def create_function (
         self, 
@@ -881,9 +917,11 @@ class CellProcessor():
             if len(name) > 0:
                 name=name[0]
                 func=name
-            arguments = [[x.arg for x in node.args.args] for node in ast.walk(root) if isinstance (node, ast.FunctionDef)]
-            if len(arguments)>0:
-                arguments = arguments[0]
+            #arguments = [[x.arg for x in node.args.args] for node in ast.walk(root) if isinstance (node, ast.FunctionDef)]
+            #if len(arguments)>0:
+            #    arguments = arguments[0]
+            arguments, arguments_with_defaults, default_values = get_args_and_defaults_from_ast (root)
+            kwarguments = {k:v for k, v in zip(arguments_with_defaults, default_values)}
             #return_values = [([x.id for x in node.value.elts if isinstance (node, ast.Name)] if hasattr(node.value, 'elts') else [node.value.id]) if isinstance (node.value, ast.Name) else '' for node in ast.walk(root) if isinstance (node, ast.Return)] 
             returned_names = lambda node: [x.id for x in node.elts if isinstance (node, ast.Name)] if hasattr (node, 'elts') else [node.id]
             return_values = []
@@ -903,22 +941,13 @@ class CellProcessor():
             input = arguments
             output = return_values
             defined = True
-            joblib.dump (cell, 'cell.pk')
-            argument_initialization_code=(
-f'''
-from nbmodular.core.cell2func import get_args_and_defaults_from_function_in_cell
-
-args_with_defaults, default_values = get_args_and_defaults_from_function_in_cell ()
-for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+default_values2):
-    exec (arg + "=" + str(val))
-''')
-            get_ipython().run_cell(argument_initialization_code)
         else:
             defined = False
             arguments=[]
+            kwarguments={}
             return_values=[]
         
-        cell, signature = update_cell_code (cell, defined and not permanent)
+        cell = update_cell_code (cell, defined and not permanent)
             
         if returns_bunch:
             self.imports += 'from sklearn.utils import Bunch\n'
@@ -931,6 +960,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             call=call,
             tab_size=self.tab_size,
             arguments=arguments,
+            kwarguments=kwarguments,
             return_values=return_values,
             unknown_input=unknown_input,
             unknown_output=unknown_output,
@@ -939,7 +969,6 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             defined=defined,
             permanent=permanent,
             fixed_io=fixed_io,
-            signature=signature,
             not_run=not_run,
             previous_values={},
             current_values={},
@@ -1119,7 +1148,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             # TODO: what if the current function is current_function.data is True?
             arguments=(current_function.previous_variables if unknown_input and not current_function.test and not (current_function.defined and current_function.fixed_io) else 
                            [] if current_function.test else
-                           current_function.arguments if current_function.defined else
+                           current_function.arguments if current_function.defined else # true if current_function.defined and current_function.fixed
                            input)
             if current_function.defined and not current_function.fixed_io:
                 # keep the arguments specified in function signature
@@ -1145,6 +1174,7 @@ for arg, val in zip (args_with_defaults1+args_with_defaults2, default_values1+de
             # update code based on those
             current_function.update_code ( 
                 arguments=arguments, 
+                kwarguments=self.kwarguments,
                 return_values=return_values,
                 display=show
             )
@@ -1711,7 +1741,7 @@ def load_ipython_extension(ipython):
     ipython.register_magics(magics)
 
 # %% ../../nbs/cell2func.ipynb 32
-def keep_variables (field, variable_values, self=None):
+def retrieve_nb_locals_through_disk (field, variable_values, self=None):
     """
     Store `variables` in disk
     """
@@ -1721,7 +1751,7 @@ def keep_variables (field, variable_values, self=None):
     joblib.dump (variable_values, 'variable_values.pk')
 
 # %% ../../nbs/cell2func.ipynb 33
-def keep_variables_in_memory (field, variable_values, self=None):
+def retrieve_nb_locals_through_memory (field, variable_values, self=None):
     """
     Store `variables` in dictionary entry `self[field]`
     """
