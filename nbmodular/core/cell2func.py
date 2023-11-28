@@ -985,7 +985,8 @@ from nbmodular.core.cell2func import get_args_and_defaults_from_function_in_cell
 
 _, args_with_defaults, default_values = get_args_and_defaults_from_function_in_cell ()
 for arg, val in zip (args_with_defaults, default_values):
-    exec (arg + "=" + str(val))
+    if arg not in locals():
+        exec (arg + "=" + str(val))
 ''')
         get_ipython().run_cell(argument_initialization_code)
                    
