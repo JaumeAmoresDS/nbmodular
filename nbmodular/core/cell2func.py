@@ -30,6 +30,8 @@ from sklearn.utils import Bunch
 from fastcore.all import argnames
 import nbdev
 
+from nbmodular.core import function_io
+
 # %% ../../nbs/cell2func.ipynb 8
 import pdb
 def get_non_callable_ipython (variables_to_inspect, locals_, self=None):
@@ -88,6 +90,15 @@ class FunctionProcessor (Bunch):
     """
     Function processor.
     """
+    def __init__ (
+        self,
+        **kwargs,
+    ):
+        self._io_code_added=False
+        super().__init__ (
+            **kwargs,
+        )
+
     def to_file (self, file_path, mode='w'):
         with open (file_path, mode=mode) as file:
             file.write (self.code)
@@ -475,9 +486,10 @@ keys = joblib.load ('function_processor_keys.pk')
         self, 
         path_variables,
         io_type,
+        io_locals,
         load_args,
     ):
-        store_variables_code = f'\nfrom nbmodular.core.cell2func import store_variables\nstore_variables ("{path_variables}", locals (), {io_type}, {load_args})'
+        store_variables_code = f'\nfrom nbmodular.core.cell2func import store_variables\nstore_variables ("{path_variables}", locals (), {io_type}, {io_locals}, {load_args}, {self.return_values})'
         get_ipython().run_cell(store_variables_code)
         
     def get_cell_function_code (self, unique=True, first=False, last=False):
@@ -491,6 +503,83 @@ keys = joblib.load ('function_processor_keys.pk')
         else:
             function_code = self.code_parts.function_code
         return function_code
+    
+    def _add_io_code (
+        self,
+        io_type,
+        io_root_path,
+        io_folder,
+        io_file,
+        load_args,
+        save_args,
+    ):
+        if self._io_code_added: 
+            return
+        self._io_code_added = True
+        if self.test:
+            self.test_imports.append ('from pathlib import Path')
+            self.test_imports.append ('from nbmodular.core import function_io')
+        self.kwarguments += dict (
+            load=False,
+            save=False,
+            io_type=io_type,
+            io_root_path=io_root_path,
+            io_folder=io_folder,
+            io_file=io_file,
+            load_args={k:str(load_args[k]) for k in load_args},
+            save_args={k:str(save_args[k]) for k in save_args},
+        )
+        
+    io_argument_initialization_code = (
+f'''
+exec (load=False)
+exec (save=False)
+exec (io_type={io_type})
+exec (io_root_path={io_root_path})
+exec (io_folder={io_folder})
+exec (io_file={io_file})
+exec (load_args={load_args})
+for k in load_args:
+    exec (load_args[k]={load_args[k]})
+exec (save_args={save_args})
+for k in save_args:
+    exec (save_args[k]={save_args[k]})
+'''
+    )
+    get_ipython().run_cell(io_argument_initialization_code)
+    
+    def _add_code_for_saving_result (self):
+        
+        return_values = f'[{self.return_values}]' if len(self.return_values)>1 else f'{self.return_values[0]}'
+        new_code = (
+f'''
+if save:
+    function_io.save ({return_values}, path_variables, io_type, **save_args)
+''').splitlines()
+        
+        if not self._io_code_added:
+            path_variables_line = 'path_variables = Path (io_root_path) / f"{io_file}.{io_type}"\n'
+            new_code = [path_variables_line] + new_code
+
+        # add indentation
+        for i, line in enumerate(new_code):
+            new_code[i] = f'{" "*self.tab_size}{line}'
+        self.original_code = self.original_code + "if True:\n" + '\n'.join (new_code)
+
+    def _add_code_for_loading_result (self):
+        path_variables_line = 'path_variables = Path (io_root_path) / f"{io_file}.{io_type}"'
+        new_code = (
+f'''
+{path_variables_line}
+if load and path_variables.exists():
+    result = function_io.load (path_variables, io_type, **load_args)
+    return result
+
+''').splitlines()
+        # add indentation
+        for i, line in enumerate(new_code):
+            new_code[i] = f'{" "*self.tab_size}{line}'
+        self.original_code = "if True:\n" + '\n'.join (new_code) + self.original_code
 
 # %% ../../nbs/cell2func.ipynb 17
 def update_cell_code (
@@ -508,7 +597,11 @@ def update_cell_code (
     for line in cell.splitlines():
         if 'return' not in line and '#|' not in line:
             original_code += (line + '\n')
+    
+    # Hack for avoiding indentation in defined functions.
+    # If True is removed later when calling FunctionProcessor's update_code
     cell = 'if True:\n' + original_code if defined else original_code
+    
     return cell
 
 # %% ../../nbs/cell2func.ipynb 19
@@ -1192,7 +1285,6 @@ for arg, val in zip (args_with_defaults, default_values):
                 return_values=return_values,
                 display=show
             )
-            
         
         current_function = self.update_return_values (
             current_function, 
@@ -1573,47 +1665,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
         function_list.append (cell)
         get_ipython().run_cell(cell)
 
-    def _add_code_for_loading_result (
-        self,
-        io_type,
-        io_root_path,
-        io_folder,
-        io_file,
-        load_args,
-    ):
-        if self.current_function.test:
-            self.test_imports.append ('from pathlib import Path')
-            self.test_imports.append ('from nbmodular.core import function_io')
-        self.current_function.kwarguments += dict (
-            io_type=io_type,
-            io_root_path=io_root_path,
-            io_folder=io_folder,
-            io_file=io_file,
-            load_args={k:str(load_args[k]) for k in load_args},
-        )
-        self.current_function.original_code = (self.current_function.original_code + 
-'''
-path_variables = Path (io_root_path) / f"{io_file}.{io_type}"
-if path_variables.exists():
-    result = function_io (path_variables, io_type, **load_args)
-    return result
-
-''')
-        
-    load_argument_initialization_code = (
-f'''
-exec (io_type={io_type})
-exec (io_root_path={io_root_path})
-exec (io_folder={io_folder})
-exec (io_file={io_file})
-exec (load_args={load_args})
-for k in load_args:
-    exec (load_args[k]={load_args[k]})
-'''
-    )
-    get_ipython().run_cell(load_argument_initialization_code)
-
-    def load_data (
+    def run_io  (
         self, 
         io_type=None,
         io_locals=None,
@@ -1622,6 +1674,8 @@ for k in load_args:
         io_folder=None,
         io_file=None,
         load_args=None,
+        save_args=None,
+        io_action='load',
         **kwargs,
     ):
         io_type = self.io_type if io_type is None else io_type
@@ -1631,30 +1685,49 @@ for k in load_args:
         io_folder = self.io_folder if io_folder is None else io_folder
         io_file = f'{self.current_function.name}_result' if io_file is None else io_file
         load_args = self.load_args if load_args is None else load_args
+        save_args = self.save_args if save_args is None else save_args
         path_variables = Path (io_root_path) / f'{io_file}.{io_type}'
-        if not io_locals and hasattr(self, 'return_values'):
-            self._add_code_for_loading_result (
+        
+        io_results = not io_locals and hasattr(self, 'return_values')
+        if io_results:
+            self.current_function._add_io_code (
                 io_type,
                 io_root_path,
                 io_folder,
                 io_file,
                 load_args,
+                save_args,
             )
+            self.current_function._add_code_for_loading_result ()
+            self.current_function._add_code_for_saving_result ()
+
+        if io_action=='load':
+            if path_variables.exists():
+                self.current_function.store_variables (
+                    path_variables,
+                    io_type,
+                    not io_results,
+                    load_args,
+                )
+                return True
+            else:
+                return False
             
-        if path_variables.exists():
-            self.current_function.store_variables (
-                path_variables,
-                io_type,
-                load_args,
-            )
-            return True
         else:
-            return False
+            if io_results:
+                data_to_save = [self.current_function.current_values[k] for k in self.current_function.return_values] 
+                if len(data_to_save)==1: 
+                    data_to_save = data_to_save[0]
+            else:
+                data_to_save = self.current_values
+
+            function_io.save (data_to_save, path_variables, io_type, **save_args)
+
+    def load_data (self, **kwargs):
+        return self.run_io (io_action='load', **kwargs)
 
     def save_data (self, **kwargs):
-        path_variables = Path (self.file_name_without_extension) / f'{self.current_function.name}.pk'
-        path_variables.parent.mkdir (parents=True, exist_ok=True)
-        joblib.dump (self.current_function.current_values, path_variables)
+        self.run_io (io_action='save', **kwargs)
 
 # %% ../../nbs/cell2func.ipynb 28
 @magics_class
@@ -1867,7 +1940,9 @@ def store_variables (
     path_variables,
     locals_,  
     io_type=None,
+    io_locals=False,
     load_args=None,
+    return_values=[],
     self=None,
 ):
     """
@@ -1880,7 +1955,9 @@ def store_variables (
         io_type=io_type,
         **load_args
     )
-    locals_.update (current_values)    
+    if not io_locals:
+        current_values = {k: v for k, v in zip (return_values, current_values)}
+    locals_.update (current_values)
     
     frame_number = 0
     ##pdb.no_set_trace()
