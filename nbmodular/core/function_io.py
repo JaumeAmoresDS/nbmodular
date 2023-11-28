@@ -89,8 +89,8 @@ def save_parquet (df, path, **kwargs):
 # %% ../../nbs/function_io.ipynb 22
 def load (
     path_variables,
-    io_type=io_type,
-    **kwargs
+    io_type='pickle',
+    **kwargs,
 ):
     load_function = eval (f'load_{io_type}')
     return load_function (path_variables, **kwargs)
@@ -99,8 +99,8 @@ def load (
 def save (
     data,
     path_variables,
-    io_type=io_type,
-    **kwargs
+    io_type='pickle',
+    **kwargs,
 ):
     Path(path_variables).parent.mkdir (parents=True, exist_ok=True)
     save_function = eval (f'save_{io_type}')

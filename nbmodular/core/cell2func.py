@@ -289,7 +289,7 @@ for k, v in params.items():
         self.all_variables += [k for k in self.previous_variables if k not in self.all_variables]
         self.all_variables += [k for k in self.argument_variables if k not in self.all_variables]
                    
-    def _store_values (self, field='shared_variables', code="", store_values=True, return_variables=False):
+    def _store_values (self, field='shared_variables', code="", store_values=True, return_variables=None):
         """Stores local variables in field `field`of self"""
         code_to_run1 = code + f'from nbmodular.core.cell2func import retrieve_nb_locals_through_memory\nretrieve_nb_locals_through_memory ("{field}", locals ())'
         code_to_run2 = code + f'from nbmodular.core.cell2func import retrieve_nb_locals_through_disk\nretrieve_nb_locals_through_disk ("{field}", locals ())'
@@ -531,7 +531,7 @@ keys = joblib.load ('function_processor_keys.pk')
             save_args={k:str(save_args[k]) for k in save_args},
         )
         
-    io_argument_initialization_code = (
+        io_argument_initialization_code = (
 f'''
 exec (load=False)
 exec (save=False)
@@ -547,7 +547,7 @@ for k in save_args:
     exec (save_args[k]={save_args[k]})
 '''
     )
-    get_ipython().run_cell(io_argument_initialization_code)
+        get_ipython().run_cell(io_argument_initialization_code)
     
     def _add_code_for_saving_result (self):
         
@@ -1283,7 +1283,7 @@ for arg, val in zip (args_with_defaults, default_values):
             # update code based on those
             current_function.update_code ( 
                 arguments=arguments, 
-                kwarguments=self.kwarguments,
+                kwarguments=current_function.kwarguments,
                 return_values=return_values,
                 display=show
             )
