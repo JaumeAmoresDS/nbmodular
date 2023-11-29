@@ -21,6 +21,7 @@ import sys
 import ast
 import logging
 import warnings
+import copy
 
 from IPython import get_ipython
 from IPython.core.magic import (Magics, magics_class, line_magic,
@@ -292,7 +293,7 @@ for k, v in params.items():
     def _store_values (self, field='shared_variables', code="", store_values=True, return_variables=None):
         """Stores local variables in field `field`of self"""
         code_to_run1 = code + f'from nbmodular.core.cell2func import retrieve_nb_locals_through_memory\nretrieve_nb_locals_through_memory ("{field}", locals ())'
-        code_to_run2 = code + f'from nbmodular.core.cell2func import retrieve_nb_locals_through_disk\nretrieve_nb_locals_through_disk ("{field}", locals ())'
+        code_to_run2 = code + f'from nbmodular.core.cell2func import retrieve_nb_locals_through_disk\nretrieve_nb_locals_through_disk (locals ())'
         get_ipython().run_cell (code_to_run1)
         if 'created_current_values' not in self[field]:
             self.logger.debug ('storing local variables in disk')
@@ -404,6 +405,8 @@ keys = joblib.load ('function_processor_keys.pk')
             #pdb.no_set_trace()
             if first_call:
                 self._store_values ("previous_values", code="", store_values=store_values)
+                if self.copy_locals:
+                    self.previous_values = copy.deepcopy (self.previous_values)
             if function_in_previous_cells is not None:
                 # if previous_values is in current_values of previous cells of this function, it cannot be a previous value
                 self.previous_values = {k:self.previous_values[k] for k in self.previous_values if k not in function_in_previous_cells.current_values}
@@ -581,6 +584,55 @@ if load and path_variables.exists():
         for i, line in enumerate(new_code):
             new_code[i] = f'{" "*self.tab_size}{line}'
         self.original_code = "if True:\n" + '\n'.join (new_code) + self.original_code
+
+    def _copy_values_and_run_code_in_nb (self, field='shared_variables', code=""):
+        """Makes desired variables available in notebook context.
+         
+          Uses field `field`of self for communicating these variables. 
+        """
+
+        code_with_tabs = []
+        for line in code.splitlines():
+            code_with_tabs += [f'{" "*self.tab_size}{line}']
+        code_with_tabs = '\n'.join (code_with_tabs)
+
+        code_to_run1 = (
+f'''
+from nbmodular.core.cell2func import retrieve_function_values_through_memory
+
+variables_to_insert = retrieve_function_values_through_memory ("{field}")
+if "retrieve_function_values_through_memory" in variables_to_insert:
+{code_with_tabs}
+    del variables_to_insert
+''')
+        
+        code_to_run2 = (
+f'''
+from nbmodular.core.cell2func import retrieve_function_values_through_disk
+
+variables_to_insert = retrieve_function_values_through_disk ()
+{code}
+os.remove ('variable_values.pk')
+''')
+        
+        get_ipython().run_cell (code_to_run1)
+        if 'retrieve_function_values_through_memory' not in self:
+            get_ipython().run_cell (code_to_run2)
+
+    def restore_locals (self):
+        delete_current_values_code=(
+f'''
+for k in variables_to_insert:
+    exec ("del k")
+''')
+        self._copy_value_copy_values_and_run_code_in_nb (field='current_values', code=delete_current_values_code)
+        
+        restore_previous_values_code=(
+f'''
+for k, v in variables_to_insert.items():
+    exec ("k=str(v)")
+''')
+        self._copy_values_and_run_code_in_nb (field='previous_values', code=restore_previous_values_code)
 
 # %% ../../nbs/cell2func.ipynb 17
 def update_cell_code (
@@ -798,6 +850,7 @@ class CellProcessor():
         self.parser.add_argument('-n', '--not-run',  action='store_true', help='do not execute the contents of the cell')
         self.parser.add_argument('--not-store',  action='store_true', help='do not store local values from cell')
         self.parser.add_argument('--not-store-locals-in-disk',  action='store_true', help='do not store local values from cell in disk')
+        self.parser.add_argument('--copy-locals',  action='store_true', help='Make a deep copy of dictionary of local variables, to be able to restore their values after running cell.')
         self.parser.add_argument('--override',  action='store_true', help='load / save / no-run values override any global flags')
         self.parser.add_argument('--returns-dict',  action='store_true', help='function results are gathered in dictionary' )
         self.parser.add_argument('--returns-bunch',  action='store_true', help='function results are gathered in Bunch' )
@@ -967,6 +1020,20 @@ class CellProcessor():
         
         self.set_function_list (function_list, test, data)
         self.set_function_info (function_info, test, data)
+
+    def restore_locals (self, idx=None, name=None, test=False, data=False, **kwargs):
+        function_list = self.get_function_list (test, data)
+        function_info = self.get_function_info (test, data)
+        if name is not None:
+            if name in function_info:
+                function = function_info[name]
+            else:
+                warnings.warn (f'function {name} not found in function_info')            
+        else:
+            if idx is None:
+                idx = -1
+            function = function_list[idx]
+        function.restore_locals ()
         
     def process_function_call (self, line, cell, add_call=True):
         call = (line, cell)
@@ -1014,6 +1081,7 @@ for arg, val in zip (args_with_defaults, default_values):
         include_output=[],
         exclude_output=[],
         not_store_locals_in_disk=False,
+        copy_locals=False,
         cell_idx=None,
         **kwargs,
     ):
@@ -1089,6 +1157,7 @@ for arg, val in zip (args_with_defaults, default_values):
             include_output=include_output,
             exclude_output=exclude_output,
             store_locals_in_disk=not not_store_locals_in_disk,
+            copy_locals=copy_locals,
             original_kwargs=original_kwargs,
             cell_idx=cell_idx,
             logger=self.logger,
@@ -1884,6 +1953,14 @@ class CellProcessorMagic (Magics):
         self.processor.set_run_tests (False)
 
     @line_magic
+    def restore_locals (self, line):
+        function_name, kwargs = self.processor.parse_signature (line)
+        self.processor.restore_locals (
+            name=function_name if function_name!='' else None,
+            **kwargs
+        )
+
+    @line_magic
     def set (self, line):
         values = line.split(' ')
         if len(values) != 2:
@@ -1900,22 +1977,22 @@ def load_ipython_extension(ipython):
     ipython.register_magics(magics)
 
 # %% ../../nbs/cell2func.ipynb 32
-def retrieve_nb_locals_through_disk (field, variable_values, self=None):
+def retrieve_nb_locals_through_disk (variable_values, filename='variable_values.pk'):
     """
     Store `variables` in disk
     """
     import joblib
-    import os
     variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
-    joblib.dump (variable_values, 'variable_values.pk')
+    joblib.dump (variable_values, filename)
 
 # %% ../../nbs/cell2func.ipynb 33
-def retrieve_nb_locals_through_memory (field, variable_values, self=None):
+def retrieve_nb_locals_through_memory (field, variable_values):
     """
     Store `variables` in dictionary entry `self[field]`
     """
     frame_number = 0
     ##pdb.no_set_trace()
+    self = None
     while not isinstance (self, FunctionProcessor):
         try:
             fr = sys._getframe(frame_number)
@@ -1930,6 +2007,40 @@ def retrieve_nb_locals_through_memory (field, variable_values, self=None):
         variable_values['created_current_values'] = True
         self[field]=variable_values.copy()
         #del variable_values['created_current_values']
+
+# %% ../../nbs/cell2func.ipynb 32
+def retrieve_function_values_through_disk (filename='variable_values.pk'):
+    """
+    Store `variables` in disk
+    """
+    import joblib
+    joblib.load (variable_values, filename)
+    variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
+    return variable_values
+
+# %% ../../nbs/cell2func.ipynb 33
+def retrieve_function_values_through_memory (field):
+    """
+    Store `variables` in dictionary entry `self[field]`
+    """
+    frame_number = 0
+    ##pdb.no_set_trace()
+    self = None
+    while not isinstance (self, FunctionProcessor):
+        try:
+            fr = sys._getframe(frame_number)
+        except:
+            break
+        args = argnames(fr, True)
+        if len(args)>0:
+            self = fr.f_locals[args[0]]
+        frame_number += 1
+    if isinstance (self, FunctionProcessor):
+        variable_values = self[field]
+        self['retrieve_function_values_through_memory'] = True
+        variable_values['retrieve_function_values_through_memory'] = True
+        return variable_values
+    return None
 
 # %% ../../nbs/cell2func.ipynb 34
 def acceptable_variable (variable_values, k):
