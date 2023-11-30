@@ -28,11 +28,7 @@ from sklearn.utils import Bunch
 from fastcore.all import argnames
 import nbdev
 
-# %% ../../nbs/function_io.ipynb 3
-import pandas as pd
-import joblib
-
-# %% ../../nbs/function_io.ipynb 10
+# %% ../../nbs/function_io.ipynb 4
 def load_df (path, **kwargs):
     if (path.parent / f'{path.name}.parquet').exists():
         df = pd.read_parquet (path.parent / f'{path.name}.parquet', **kwargs)
@@ -44,7 +40,7 @@ def load_df (path, **kwargs):
         raise RuntimeError (f'File {path} not found')
     return df
 
-# %% ../../nbs/function_io.ipynb 11
+# %% ../../nbs/function_io.ipynb 5
 def save_df (df, path, **kwargs):
     path.parent.mkdir (parents=True, exist_ok=True)
     name_without_extension = path.name[:-len('.df')]
@@ -62,31 +58,31 @@ def save_df (df, path, **kwargs):
     with open (path, 'wt') as f: 
         f.write (extension)
 
-# %% ../../nbs/function_io.ipynb 13
+# %% ../../nbs/function_io.ipynb 7
 def load_pickle (path, **kwargs):
     return joblib.load (path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 14
+# %% ../../nbs/function_io.ipynb 8
 def save_pickle (data, path, **kwargs):
     joblib.dump (data, path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 16
+# %% ../../nbs/function_io.ipynb 10
 def load_csv (path, **kwargs):
     return pd.read_csv (path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 17
+# %% ../../nbs/function_io.ipynb 11
 def save_csv (df, path, **kwargs):
     df.to_csv (path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 19
+# %% ../../nbs/function_io.ipynb 13
 def load_parquet (df, **kwargs):
     return pd.read_parquet (path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 20
+# %% ../../nbs/function_io.ipynb 14
 def save_parquet (df, path, **kwargs):
     df.to_parquet (path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 22
+# %% ../../nbs/function_io.ipynb 16
 def load (
     path_variables,
     io_type='pickle',
@@ -95,7 +91,7 @@ def load (
     load_function = eval (f'load_{io_type}')
     return load_function (path_variables, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 24
+# %% ../../nbs/function_io.ipynb 18
 def save (
     data,
     path_variables,

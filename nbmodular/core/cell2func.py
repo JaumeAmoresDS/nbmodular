@@ -4,7 +4,7 @@
 __all__ = ['get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_duplicates_from_list', 'FunctionProcessor',
            'update_cell_code', 'add_function_to_list', 'get_args_and_defaults', 'get_args_and_defaults_from_ast',
            'get_args_and_defaults_from_function_in_cell', 'CellProcessor', 'CellProcessorMagic',
-           'load_ipython_extension', 'retrieve_nb_locals_through_disk', 'retrieve_nb_locals_through_memory',
+           'load_ipython_extension', 'retrieve_function_values_through_disk', 'retrieve_function_values_through_memory',
            'acceptable_variable', 'store_variables']
 
 # %% ../../nbs/cell2func.ipynb 3
@@ -1983,38 +1983,6 @@ def load_ipython_extension(ipython):
     """
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
-
-# %% ../../nbs/cell2func.ipynb 32
-def retrieve_nb_locals_through_disk (variable_values, filename='variable_values.pk'):
-    """
-    Store `variables` in disk
-    """
-    import joblib
-    variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
-    joblib.dump (variable_values, filename)
-
-# %% ../../nbs/cell2func.ipynb 33
-def retrieve_nb_locals_through_memory (field, variable_values):
-    """
-    Store `variables` in dictionary entry `self[field]`
-    """
-    frame_number = 0
-    ##pdb.no_set_trace()
-    self = None
-    while not isinstance (self, FunctionProcessor):
-        try:
-            fr = sys._getframe(frame_number)
-        except:
-            break
-        args = argnames(fr, True)
-        if len(args)>0:
-            self = fr.f_locals[args[0]]
-        frame_number += 1
-    if isinstance (self, FunctionProcessor):
-        variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
-        variable_values['created_current_values'] = True
-        self[field]=variable_values.copy()
-        #del variable_values['created_current_values']
 
 # %% ../../nbs/cell2func.ipynb 32
 def retrieve_function_values_through_disk (filename='variable_values.pk'):
