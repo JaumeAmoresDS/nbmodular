@@ -161,7 +161,9 @@ class FunctionProcessor (Bunch):
                 kwarguments |= {k.split('=')[0]:k.split('=')[1] for k in self.include_input if k not in kwarguments and k not in arguments and '=' in k}
                 kwarguments = {k:kwarguments[k] for k in kwarguments if k not in self.exclude_input}
                 self.kwarguments = kwarguments
-            arguments = ', '.join (self.arguments) + ', '.join ([f'{k}={self.kwarguments[k]}' for k in self.kwarguments])
+            arguments = ', '.join (self.arguments) 
+            if len(self.kwarguments)>0:
+                arguments += ', ' + ', '.join ([f'{k}={self.kwarguments[k]}' for k in self.kwarguments])
         unpack_input_code=''
         pack_output_code=''
         bunch_variable = None
@@ -272,7 +274,11 @@ for k, v in params.items():
         non_unique_loaded_names = [node.id for node in ast.walk(root) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)]
         self.loaded_names = remove_duplicates_from_list (non_unique_loaded_names)
         
-        self.previous_variables = [x for x in self.loaded_names if x not in self.created_variables]
+        # A previous variable is a variable that is loaded and that existed before the 
+        # current function. We ensure the first condition here, and we will ensure the second
+        # condition when calling match_variables_and_locals, where we only keep variables that
+        # also exist in previous_values dict.
+        self.previous_variables = self.loaded_names
         if self.unpack_bunch is not None and self.unpack_bunch not in self.previous_variables:
             self.previous_variables.append (self.unpack_bunch)
         
@@ -384,6 +390,7 @@ keys = joblib.load ('function_processor_keys.pk')
             store_values=True, 
             first_call=True,
             function_in_previous_cells=None,
+            not_run=False,
         ):
         """
         Runs the code in the function, and collects local variables.
@@ -410,7 +417,10 @@ keys = joblib.load ('function_processor_keys.pk')
             if function_in_previous_cells is not None:
                 # if previous_values is in current_values of previous cells of this function, it cannot be a previous value
                 self.previous_values = {k:self.previous_values[k] for k in self.previous_values if k not in function_in_previous_cells.current_values}
-            self._store_values ("current_values", code=code + "\n", store_values=store_values)
+            if not not_run:
+                self._store_values ("current_values", code=code + "\n", store_values=store_values)
+            else:
+                self.current_values = {k: None for k in self.created_variables}
         else:
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("previous_variables", locals())')
             get_ipython().run_cell ('from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("created_variables", locals())')
@@ -493,7 +503,7 @@ keys = joblib.load ('function_processor_keys.pk')
         io_locals,
         load_args,
     ):
-        store_variables_code = f'\nfrom nbmodular.core.cell2func import store_variables\nstore_variables ("{path_variables}", locals (), {io_type}, {io_locals}, {load_args}, {self.return_values})'
+        store_variables_code = f'\nfrom nbmodular.core.cell2func import store_variables\nstore_variables ("{path_variables}", locals (), "{io_type}", {io_locals}, {load_args}, {self.return_values})'
         get_ipython().run_cell(store_variables_code)
         
     def get_cell_function_code (self, unique=True, first=False, last=False):
@@ -639,17 +649,17 @@ def update_cell_code (
     cell, 
     defined=False
 ):
-    if defined:
-        v = cell.split(':')
-        v[1] = v[1][1:]
-        if len(v) > 0 and v[1][0] in ['\n','\r']:
-            v[1] = v[1][1:]
-        cell=':'.join(v[1:])
-    
     original_code = ''
     for line in cell.splitlines():
         if 'return' not in line and '#|' not in line:
             original_code += (line + '\n')
+
+    if defined:
+        v = original_code.split(':')
+        v[1] = v[1][1:]
+        if len(v) > 0 and v[1][0] in ['\n','\r']:
+            v[1] = v[1][1:]
+        original_code=':'.join(v[1:])
     
     # Hack for avoiding indentation in defined functions.
     # If True is removed later when calling FunctionProcessor's update_code
@@ -675,6 +685,8 @@ def add_function_to_list (function, function_list, idx=None, position=None):
             remove_idx = idx
         assert function_list[remove_idx].name==function.name
         del function_list[remove_idx]
+        for idx, function in enumerate(function_list):
+            function.idx = idx
     return function_list
 
 # %% ../../nbs/cell2func.ipynb 22
@@ -710,7 +722,7 @@ def get_args_and_defaults (list_args, list_defaults):
 # %% ../../nbs/cell2func.ipynb 24
 def get_args_and_defaults_from_ast (root):    
     args_without_defaults, args_with_defaults1, default_values1 = get_args_and_defaults (root.body[0].args.posonlyargs + root.body[0].args.args, root.body[0].args.defaults)
-    args_with_defaults2, default_values2 = get_args_and_defaults (root.body[0].args.kwonlyargs, root.body[0].args.kw_defaults)
+    _, args_with_defaults2, default_values2 = get_args_and_defaults (root.body[0].args.kwonlyargs, root.body[0].args.kw_defaults)
     
     return args_without_defaults, args_with_defaults1+args_with_defaults2, default_values1+default_values2
 
@@ -917,6 +929,10 @@ class CellProcessor():
 
         import ipdb
         ipdb.runcall (self.process_function_call, *self.call_history[idx], add_call=False)
+
+    def run_call_history (self, call_history):
+        for call in call_history:
+            self.process_function_call (*call, add_call=False)
         
     def reset_function_list (self, function_list, function_info, previous_values=False, only_previous_values=False):
         if len(function_list)==0:
@@ -1094,12 +1110,8 @@ for arg, val in zip (args_with_defaults, default_values):
             if len(name) > 0:
                 name=name[0]
                 func=name
-            #arguments = [[x.arg for x in node.args.args] for node in ast.walk(root) if isinstance (node, ast.FunctionDef)]
-            #if len(arguments)>0:
-            #    arguments = arguments[0]
             arguments, arguments_with_defaults, default_values = get_args_and_defaults_from_ast (root)
             kwarguments = {k:v for k, v in zip(arguments_with_defaults, default_values)}
-            #return_values = [([x.id for x in node.value.elts if isinstance (node, ast.Name)] if hasattr(node.value, 'elts') else [node.value.id]) if isinstance (node.value, ast.Name) else '' for node in ast.walk(root) if isinstance (node, ast.Return)] 
             returned_names = lambda node: [x.id for x in node.elts if isinstance (node, ast.Name)] if hasattr (node, 'elts') else [node.id]
             return_values = []
             for node in ast.walk(root):
@@ -1118,6 +1130,7 @@ for arg, val in zip (args_with_defaults, default_values):
             input = arguments
             output = return_values
             defined = True
+            self._evaluate_kwargs_defaults (cell)
         else:
             defined = False
             arguments=[]
@@ -1165,11 +1178,6 @@ for arg, val in zip (args_with_defaults, default_values):
         if defined and permanent:
             this_function.code = cell
         this_function.parse_variables ()
-        
-        if False and defined:
-            loaded_names_not_in_arguments = set(this_function.loaded_names).difference (arguments)
-            if len(loaded_names_not_in_arguments) > 0:
-                self.logger.debug (f'The following loaded names were not found in the arguments list: {loaded_names_not_in_arguments}')
         
         return this_function
     
@@ -1253,15 +1261,15 @@ for arg, val in zip (args_with_defaults, default_values):
             if found:
                 not_run = True
 
-        if not not_run:
-            is_test_function = self.current_function.test and not self.current_function.data
-            function_in_previous_cells = function_list[idx] if merge and idx is not None else None
-            self.current_function.run_code_and_collect_locals(
-                is_test_function=is_test_function, 
-                store_values=store_values, 
-                first_call=first_call,
-                function_in_previous_cells=function_in_previous_cells,
-            )
+        is_test_function = self.current_function.test and not self.current_function.data
+        function_in_previous_cells = function_list[idx] if merge and idx is not None else None
+        self.current_function.run_code_and_collect_locals(
+            is_test_function=is_test_function, 
+            store_values=store_values, 
+            first_call=first_call,
+            function_in_previous_cells=function_in_previous_cells,
+            not_run=not_run,
+        )
                     
         self.current_function = self.update_pipeline (
             self.current_function,
@@ -1330,7 +1338,7 @@ for arg, val in zip (args_with_defaults, default_values):
                            input)
             if current_function.defined and not current_function.fixed_io:
                 # keep the arguments specified in function signature
-                arguments = current_function.arguments + [x for x in arguments if x not in current_function.arguments]
+                arguments = current_function.arguments + [x for x in arguments if x not in current_function.arguments and x not in current_function.kwarguments]
                 
             if self.restrict_inputs and not current_function.test and not current_function.data:
                 variables_created_by_previous_functions = [x for f in function_list[:idx] for x in f.created_variables]
@@ -1363,8 +1371,8 @@ for arg, val in zip (args_with_defaults, default_values):
             unknown_output=unknown_output
         )
         
-        if current_function.test and not current_function.data and not not_run: 
-            current_function.run_code_and_collect_locals(is_test_function=False, store_values=store_values, first_call=first_call)
+        if current_function.test and not current_function.data: 
+            current_function.run_code_and_collect_locals(is_test_function=False, store_values=store_values, first_call=first_call, not_run=not_run)
         
         if current_function.test and not current_function.data:
             current_function.update_code()
@@ -1372,7 +1380,7 @@ for arg, val in zip (args_with_defaults, default_values):
         if current_function.defined:
             #potential_arguments = current_function.loaded_names
             potential_arguments = current_function.previous_variables
-            potential_arguments = list (set (potential_arguments).difference (current_function.arguments))
+            potential_arguments = list (set (potential_arguments).difference (set(current_function.arguments).union(current_function.kwarguments)))
             self.posterior_not_in_results = list (set (current_function.posterior_variables).difference (current_function.return_values))
             
             non_callable = get_non_callable (potential_arguments)
@@ -1755,8 +1763,8 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
         io_root_path = self.io_root_path if io_root_path is None else io_root_path
         io_folder = self.io_folder if io_folder is None else io_folder
         io_file = f'{self.current_function.name}_result' if io_file is None else io_file
-        load_args = self.load_args if load_args is None else load_args
-        save_args = self.save_args if save_args is None else save_args
+        load_args = self.load_args if load_args is None else eval(f'dict({load_args})') if isinstance (load_args, str) else load_args
+        save_args = self.save_args if save_args is None else eval(f'dict({save_args})') if isinstance (save_args, str) else save_args
         path_variables = Path (io_root_path) / f'{io_file}.{io_type}'
         
         io_results = not io_locals and hasattr(self, 'return_values')
@@ -1790,7 +1798,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
                 if len(data_to_save)==1: 
                     data_to_save = data_to_save[0]
             else:
-                data_to_save = self.current_values
+                data_to_save = self.current_function.current_values
 
             function_io.save (data_to_save, path_variables, io_type, **save_args)
 
