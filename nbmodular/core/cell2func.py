@@ -5,7 +5,8 @@ __all__ = ['get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_du
            'update_cell_code', 'add_function_to_list', 'get_args_and_defaults', 'get_args_and_defaults_from_ast',
            'get_args_and_defaults_from_function_in_cell', 'CellProcessor', 'CellProcessorMagic',
            'load_ipython_extension', 'retrieve_function_values_through_disk', 'retrieve_function_values_through_memory',
-           'acceptable_variable', 'store_variables']
+           'retrieve_nb_locals_through_disk', 'retrieve_nb_locals_through_memory', 'acceptable_variable',
+           'store_variables']
 
 # %% ../../nbs/cell2func.ipynb 3
 import pdb
@@ -1984,7 +1985,7 @@ def load_ipython_extension(ipython):
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 32
+# %% ../../nbs/cell2func.ipynb 33
 def retrieve_function_values_through_disk (filename='variable_values.pk'):
     """
     Store `variables` in disk
@@ -1994,7 +1995,7 @@ def retrieve_function_values_through_disk (filename='variable_values.pk'):
     variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
     return variable_values
 
-# %% ../../nbs/cell2func.ipynb 33
+# %% ../../nbs/cell2func.ipynb 35
 def retrieve_function_values_through_memory (field):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -2018,13 +2019,45 @@ def retrieve_function_values_through_memory (field):
         return variable_values
     return None
 
-# %% ../../nbs/cell2func.ipynb 34
+# %% ../../nbs/cell2func.ipynb 37
+def retrieve_nb_locals_through_disk (variable_values, filename='variable_values.pk'):
+    """
+    Store `variables` in disk
+    """
+    import joblib
+    variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
+    joblib.dump (variable_values, filename)
+
+# %% ../../nbs/cell2func.ipynb 39
+def retrieve_nb_locals_through_memory (field, variable_values):
+    """
+    Store `variables` in dictionary entry `self[field]`
+    """
+    frame_number = 0
+    ##pdb.no_set_trace()
+    self = None
+    while not isinstance (self, FunctionProcessor):
+        try:
+            fr = sys._getframe(frame_number)
+        except:
+            break
+        args = argnames(fr, True)
+        if len(args)>0:
+            self = fr.f_locals[args[0]]
+        frame_number += 1
+    if isinstance (self, FunctionProcessor):
+        variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
+        variable_values['created_current_values'] = True
+        self[field]=variable_values.copy()
+        #del variable_values['created_current_values']
+
+# %% ../../nbs/cell2func.ipynb 41
 def acceptable_variable (variable_values, k):
     return (not k.startswith ('_') and not callable(variable_values[k]) 
             and type(variable_values[k]).__name__ not in ['module', 'FunctionProcessor', 'CellProcessor'] 
             and k not in ['variable_values', 'In', 'Out'])
 
-# %% ../../nbs/cell2func.ipynb 36
+# %% ../../nbs/cell2func.ipynb 43
 def store_variables (
     path_variables,
     locals_,  
