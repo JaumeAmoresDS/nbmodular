@@ -97,10 +97,34 @@ class FunctionProcessor (Bunch):
         self,
         **kwargs,
     ):
-        self._io_code_added=False
         super().__init__ (
             **kwargs,
         )
+
+    def set_io_args (
+        self,
+        io_code=False,
+        load_default=False,
+        save_default=False,
+        io_type='pickle',
+        io_locals=False,
+        io_root_path='results',
+        io_folder=None,
+        io_file=None,
+        save_args={},
+        load_args={},
+        **kwargs,
+    ):
+        self.io_code=io_code
+        self.load_default=load_default
+        self.save_default=save_default
+        self.io_type=io_type
+        self.io_locals=io_locals
+        self.io_root_path=io_root_path
+        self.io_folder=io_folder
+        self.io_file=io_file
+        self.save_args={} if save_args is None else eval(f'dict({save_args})') if isinstance (save_args, str) else save_args
+        self.load_args={} if load_args is None else eval(f'dict({load_args})') if isinstance (load_args, str) else load_args
 
     def to_file (self, file_path, mode='w'):
         with open (file_path, mode=mode) as file:
@@ -132,6 +156,14 @@ class FunctionProcessor (Bunch):
         function = self._store_values (return_variables=[self.name])
         return inspect.signature (function)
     
+    def _add_io (
+        self,
+    ):
+        self._add_and_evaluate_io_kwargs ()
+        self._add_code_for_loading_result ()
+        self._add_code_for_saving_result ()
+        
+
     def update_code (
         self, 
         arguments=None, 
@@ -146,6 +178,8 @@ class FunctionProcessor (Bunch):
         For this purpose, it makes use of `arguments`, `kwarguments`, `return_values`, `self.created_variables`,
         `self.previous_values` and `self.current_values`
         """
+        if self.io_code:
+            self._add_io ()
         if self.permanent and not not_run:
             get_ipython().run_cell(self.code)
             return
@@ -519,67 +553,45 @@ keys = joblib.load ('function_processor_keys.pk')
             function_code = self.code_parts.function_code
         return function_code
     
-    def _add_io_code (
-        self,
-        io_type,
-        io_root_path,
-        io_folder,
-        io_file,
-        load_args,
-        save_args,
-    ):
-        if self._io_code_added: 
-            return
-        self._io_code_added = True
-        if self.test:
-            self.test_imports.append ('from pathlib import Path')
-            self.test_imports.append ('from nbmodular.core import function_io')
-        self.kwarguments += dict (
+    def _add_and_evaluate_io_kwargs (self):
+        self.kwarguments.update (
             load=False,
             save=False,
-            io_type=io_type,
-            io_root_path=io_root_path,
-            io_folder=io_folder,
-            io_file=io_file,
-            load_args={k:str(load_args[k]) for k in load_args},
-            save_args={k:str(save_args[k]) for k in save_args},
+            io_type=self.io_type,
+            io_root_path=self.io_root_path,
+            io_folder=self.io_folder,
+            io_file=f'{self.name}_result' if self.io_file is None else self.io_file,
+            load_args={k:str(self.load_args[k]) for k in self.load_args},
+            save_args={k:str(self.save_args[k]) for k in self.save_args},
         )
         
         io_argument_initialization_code = (
 f'''
-exec (load=False)
-exec (save=False)
-exec (io_type={io_type})
-exec (io_root_path={io_root_path})
-exec (io_folder={io_folder})
-exec (io_file={io_file})
-exec (load_args={load_args})
-for k in load_args:
-    exec (load_args[k]={load_args[k]})
-exec (save_args={save_args})
-for k in save_args:
-    exec (save_args[k]={save_args[k]})
+exec ("load=False")
+exec ("save=False")
+exec ("io_type='{self.io_type}'")
+exec ("io_root_path='{self.io_root_path}'")
+exec ("io_folder='{self.io_folder}'")
+exec ("io_file='{self.io_file}'")
+exec ("load_args={self.load_args}")
+exec ("save_args={self.save_args}")
 '''
     )
         get_ipython().run_cell(io_argument_initialization_code)
     
     def _add_code_for_saving_result (self):
         
-        return_values = f'[{self.return_values}]' if len(self.return_values)>1 else f'{self.return_values[0]}'
+        return_values = f'[{self.return_values}]' if len(self.return_values)>1 else f'{self.return_values[0]}' if len(self.return_values)==1 else 'None' 
         new_code = (
 f'''
 if save:
     function_io.save ({return_values}, path_variables, io_type, **save_args)
 ''').splitlines()
-        
-        if not self._io_code_added:
-            path_variables_line = 'path_variables = Path (io_root_path) / f"{io_file}.{io_type}"\n'
-            new_code = [path_variables_line] + new_code
-
+        new_code = new_code[1:] # first line is empty
         # add indentation
         for i, line in enumerate(new_code):
             new_code[i] = f'{" "*self.tab_size}{line}'
-        self.original_code = self.original_code + "if True:\n" + '\n'.join (new_code)
+        self.original_code = self.original_code + "\n\nif True:\n" + '\n'.join (new_code)
 
     def _add_code_for_loading_result (self):
         path_variables_line = 'path_variables = Path (io_root_path) / f"{io_file}.{io_type}"'
@@ -589,12 +601,12 @@ f'''
 if load and path_variables.exists():
     result = function_io.load (path_variables, io_type, **load_args)
     return result
-
 ''').splitlines()
+        new_code = new_code[1:] # first line is empty
         # add indentation
         for i, line in enumerate(new_code):
             new_code[i] = f'{" "*self.tab_size}{line}'
-        self.original_code = "if True:\n" + '\n'.join (new_code) + self.original_code
+        self.original_code = "if True:\n" + '\n'.join (new_code) + '\n\n' + self.original_code
 
     def _copy_values_and_run_code_in_nb (self, field='shared_variables', code=""):
         """Makes desired variables available in notebook context.
@@ -832,13 +844,17 @@ class CellProcessor():
         self.save = False
         self.load = False
 
+        self.io_code=False
+        self.load_default=False
+        self.save_default=False
         self.io_type='pickle'
         self.io_locals=False
-        self.io_result=True
         self.io_root_path='results'
         self.io_folder=self.file_name_without_extension
         self.load_args={}
         self.save_args={}
+
+        self._added_io_imports = False
         
         self.parser = argparse.ArgumentParser(description='Arguments to `function` magic cell.')
         self.parser.add_argument('-i', '--input', type=str, nargs='+', help='Strict input. No other input considered, regardless of any dependencies.')
@@ -851,8 +867,10 @@ class CellProcessor():
         self.parser.add_argument('-s', '--show',  action='store_true', help='show function code')
         self.parser.add_argument('-l', '--load',  action='store_true', help='load variables')
         self.parser.add_argument('--save',  action='store_true', help='save variables')
+        self.parser.add_argument('--io-code',  action='store_true', help='add I/O code to function')
+        self.parser.add_argument('--save-default',  action='store_true', help='have save=True as default arg value in function')
+        self.parser.add_argument('--load-default',  action='store_true', help='have load=True as default arg value in function')
         self.parser.add_argument('--io-type', type=str, default='pickle', help='I/O functions to use. `x` means use `save_x` for saving and `load_x` for loading.')
-        self.parser.add_argument('--io-result',  action='store_true', help='save/load result of function')
         self.parser.add_argument('--io-locals',  action='store_true', help='save/load local variables of function')
         self.parser.add_argument('--io-root-path',  type=str, default='results', help='root of path where function data is stored.')
         self.parser.add_argument('--io-folder',  type=str, default=None, help='Folder where the data is stored. It can be several folders `folder1/folder2/...`. '
@@ -1075,6 +1093,42 @@ for arg, val in zip (args_with_defaults, default_values):
 ''')
         get_ipython().run_cell(argument_initialization_code)
                    
+    def set_function_io_args (
+        self,
+        this_function,
+        io_code=False,
+        load_default=False,
+        save_default=False,
+        io_type='pickle',
+        io_locals=False,
+        io_root_path='results',
+        io_folder=None,
+        io_file=None,
+        save_args={},
+        load_args={},
+        **kwargs,
+    ):
+        io_code=self.io_code if io_code is None else io_code
+        if io_code and not self._added_io_imports:
+            if this_function.test:
+                self.test_imports += 'from pathlib import Path\n'
+                self.test_imports += 'from nbmodular.core import function_io\n'
+            else:
+                self.imports += 'from pathlib import Path\n'
+                self.imports += 'from nbmodular.core import function_io\n'
+            self._added_io_imports = True
+        this_function.set_io_args (
+            io_code=io_code,
+            load_default=self.load_default if load_default is None else load_default,
+            save_default=self.save_default if save_default is None else save_default,
+            io_type=self.io_type if io_type is None else io_type,
+            io_locals=self.io_locals if io_locals is None else io_locals,
+            io_root_path=self.io_root_path if io_root_path is None else io_root_path,
+            io_file=io_file,
+            load_args=self.load_args if load_args is None else load_args,
+            save_args=self.save_args if save_args is None else save_args,
+        )
+
     def create_function (
         self, 
         cell, 
@@ -1179,6 +1233,7 @@ for arg, val in zip (args_with_defaults, default_values):
         if defined and permanent:
             this_function.code = cell
         this_function.parse_variables ()
+        self.set_function_io_args (this_function, **kwargs)
         
         return this_function
     
@@ -1749,7 +1804,6 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
         self, 
         io_type=None,
         io_locals=None,
-        io_result=None,
         io_root_path=None,
         io_folder=None,
         io_file=None,
@@ -1760,7 +1814,6 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
     ):
         io_type = self.io_type if io_type is None else io_type
         io_locals = self.io_locals if io_locals is None else io_locals
-        io_result = self.io_result if io_result is None else io_result
         io_root_path = self.io_root_path if io_root_path is None else io_root_path
         io_folder = self.io_folder if io_folder is None else io_folder
         io_file = f'{self.current_function.name}_result' if io_file is None else io_file
@@ -1768,25 +1821,12 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
         save_args = self.save_args if save_args is None else eval(f'dict({save_args})') if isinstance (save_args, str) else save_args
         path_variables = Path (io_root_path) / f'{io_file}.{io_type}'
         
-        io_results = not io_locals and hasattr(self, 'return_values')
-        if io_results:
-            self.current_function._add_io_code (
-                io_type,
-                io_root_path,
-                io_folder,
-                io_file,
-                load_args,
-                save_args,
-            )
-            self.current_function._add_code_for_loading_result ()
-            self.current_function._add_code_for_saving_result ()
-
         if io_action=='load':
             if path_variables.exists():
                 self.current_function.store_variables (
                     path_variables,
                     io_type,
-                    not io_results,
+                    io_locals,
                     load_args,
                 )
                 return True
@@ -1794,10 +1834,9 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
                 return False
             
         else:
-            if io_results:
+            if not io_locals:
                 data_to_save = [self.current_function.current_values[k] for k in self.current_function.return_values] 
-                if len(data_to_save)==1: 
-                    data_to_save = data_to_save[0]
+                data_to_save = None if len(data_to_save)==0 else data_to_save[0] if len(data_to_save)==1 else data_to_save
             else:
                 data_to_save = self.current_function.current_values
 
