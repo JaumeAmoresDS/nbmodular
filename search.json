@@ -1,0 +1,289 @@
+[
+  {
+    "objectID": "function_io.html",
+    "href": "function_io.html",
+    "title": "function_io",
+    "section": "",
+    "text": "source\n\n\n\n load_df (path, **kwargs)\n\n\nsource\n\n\n\n\n save_df (df, path, **kwargs)"
+  },
+  {
+    "objectID": "function_io.html#df",
+    "href": "function_io.html#df",
+    "title": "function_io",
+    "section": "",
+    "text": "source\n\n\n\n load_df (path, **kwargs)\n\n\nsource\n\n\n\n\n save_df (df, path, **kwargs)"
+  },
+  {
+    "objectID": "function_io.html#pickle",
+    "href": "function_io.html#pickle",
+    "title": "function_io",
+    "section": "pickle",
+    "text": "pickle\n\nsource\n\nload_pickle\n\n load_pickle (path, **kwargs)\n\n\nsource\n\n\nsave_pickle\n\n save_pickle (data, path, **kwargs)"
+  },
+  {
+    "objectID": "function_io.html#csv",
+    "href": "function_io.html#csv",
+    "title": "function_io",
+    "section": "csv",
+    "text": "csv\n\nsource\n\nload_csv\n\n load_csv (path, **kwargs)\n\n\nsource\n\n\nsave_csv\n\n save_csv (df, path, **kwargs)"
+  },
+  {
+    "objectID": "function_io.html#parquet",
+    "href": "function_io.html#parquet",
+    "title": "function_io",
+    "section": "parquet",
+    "text": "parquet\n\nsource\n\nload_parquet\n\n load_parquet (df, **kwargs)\n\n\nsource\n\n\nsave_parquet\n\n save_parquet (df, path, **kwargs)"
+  },
+  {
+    "objectID": "function_io.html#load",
+    "href": "function_io.html#load",
+    "title": "function_io",
+    "section": "load",
+    "text": "load\n\nsource\n\nload\n\n load (path_variables, io_type='pickle', **kwargs)"
+  },
+  {
+    "objectID": "function_io.html#save",
+    "href": "function_io.html#save",
+    "title": "function_io",
+    "section": "save",
+    "text": "save\n\nsource\n\nsave\n\n save (data, path_variables, io_type='pickle', **kwargs)"
+  },
+  {
+    "objectID": "tutorials/index.html",
+    "href": "tutorials/index.html",
+    "title": "Tutorials",
+    "section": "",
+    "text": "Click through to any of these tutorials to get started with nbdev’s features.\n\n\n\n\n\n\n\n\n\n\nTitle\n\n\nDescription\n\n\n\n\n\n\nDebugging\n\n\n\n\n\n\n\nWriting tests\n\n\nHow to write tests with nbmodular\n\n\n\n\n\n\nNo matching items"
+  },
+  {
+    "objectID": "cell2func.html",
+    "href": "cell2func.html",
+    "title": "cell2func",
+    "section": "",
+    "text": "def bunch_io(func):\n    def bunch_wrapper (*args, **kwargs):\n        if (len(args)&gt;1) or ((len(args)==1) and not isinstance(args[0], Bunch)):\n            raise ValueError ('can only accept Bunch as positional argument')\n        if len(args)==1:\n            bunch = args[0]\n            f_args = {k: kwargs[k] for k in kwargs if k in inspect.signature(f).parameters}\n        else:\n            f_args = {}\n            for k in kwargs:\n                if isinstance(kwargs[k], Bunch):\n                    bunch = kwargs[k]\n                    f_args.update ({k: bunch[k] for k in bunch if k in inspect.signature(f).parameters})\n                elif k in inspect.signature(f).parameters:\n                    f_args[k] = kwargs[k]\n        result = func (**f_args)\n        bunch.update (result)\n        return bunch\n    return bunch_wrapper"
+  },
+  {
+    "objectID": "cell2func.html#bunch_io",
+    "href": "cell2func.html#bunch_io",
+    "title": "cell2func",
+    "section": "",
+    "text": "def bunch_io(func):\n    def bunch_wrapper (*args, **kwargs):\n        if (len(args)&gt;1) or ((len(args)==1) and not isinstance(args[0], Bunch)):\n            raise ValueError ('can only accept Bunch as positional argument')\n        if len(args)==1:\n            bunch = args[0]\n            f_args = {k: kwargs[k] for k in kwargs if k in inspect.signature(f).parameters}\n        else:\n            f_args = {}\n            for k in kwargs:\n                if isinstance(kwargs[k], Bunch):\n                    bunch = kwargs[k]\n                    f_args.update ({k: bunch[k] for k in bunch if k in inspect.signature(f).parameters})\n                elif k in inspect.signature(f).parameters:\n                    f_args[k] = kwargs[k]\n        result = func (**f_args)\n        bunch.update (result)\n        return bunch\n    return bunch_wrapper"
+  },
+  {
+    "objectID": "cell2func.html#get_non_callable",
+    "href": "cell2func.html#get_non_callable",
+    "title": "cell2func",
+    "section": "get_non_callable",
+    "text": "get_non_callable\n\nget_non_callable_ipython\n\nsource\n\n\nget_non_callable_ipython\n\n get_non_callable_ipython (variables_to_inspect, locals_)\n\nStore variables in dictionary entry self.variables_field[function]\n\n\nget_non_callable\n\nsource\n\n\nget_non_callable\n\n get_non_callable (variables)"
+  },
+  {
+    "objectID": "cell2func.html#get_ast",
+    "href": "cell2func.html#get_ast",
+    "title": "cell2func",
+    "section": "get_ast",
+    "text": "get_ast\n\nsource\n\nremove_duplicates_from_list\n\n remove_duplicates_from_list (list_with_potential_duplicates)\n\n\nsource\n\n\nget_ast\n\n get_ast (code)\n\n\nsource\n\n\nFunctionProcessor\n\n FunctionProcessor (**kwargs)\n\nFunction processor.\n\n\nupdate_cell_code\n\nsource\n\n\nupdate_cell_code\n\n update_cell_code (cell, defined=False)\n\n\n\nadd_function_to_list\n\nsource\n\n\nadd_function_to_list\n\n add_function_to_list (function, function_list, idx=None, position=None)\n\n\n\nget_args_and_defaults_from_function_in_cell\n\nget_args_and_defaults\n\nsource\n\n\n\nget_args_and_defaults\n\n get_args_and_defaults (list_args, list_defaults)\n\n\nget_args_and_defaults_from_function_in_cell\n\nsource\n\n\n\nget_args_and_defaults_from_function_in_cell\n\n get_args_and_defaults_from_function_in_cell ()\n\n\nsource\n\n\nget_args_and_defaults_from_ast\n\n get_args_and_defaults_from_ast (root)\n\n\n\nCellProcessor\n\nsource\n\n\nCellProcessor\n\n CellProcessor (tab_size=4, log_level='INFO', restrict_inputs=False,\n                **kwargs)\n\nProcesses the cell’s code according to the magic command.\n\nsource\n\n\nCellProcessorMagic\n\n CellProcessorMagic (shell, **kwargs)\n\nBase magic class for converting cells to modular functions.\n\nsource\n\n\nretrieve_function_values_through_disk\n\n retrieve_function_values_through_disk (filename='variable_values.pk')\n\nStore variables in disk\n\nsource\n\n\nretrieve_function_values_through_memory\n\n retrieve_function_values_through_memory (field)\n\nStore variables in dictionary entry self[field]\n\nsource\n\n\nretrieve_nb_locals_through_disk\n\n retrieve_nb_locals_through_disk (variable_values,\n                                  filename='variable_values.pk')\n\nStore variables in disk\n\nsource\n\n\nretrieve_nb_locals_through_memory\n\n retrieve_nb_locals_through_memory (field, variable_values)\n\nStore variables in dictionary entry self[field]\n\nsource\n\n\nacceptable_variable\n\n acceptable_variable (variable_values, k)"
+  },
+  {
+    "objectID": "cell2func.html#store_variables",
+    "href": "cell2func.html#store_variables",
+    "title": "cell2func",
+    "section": "store_variables",
+    "text": "store_variables\n\nsource\n\nstore_variables\n\n store_variables (path_variables, locals_, io_type=None, io_locals=False,\n                  load_args=None, return_values=[])\n\nStore variables in dictionary entry self.variables_field[function]"
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "nbmodular",
+    "section": "",
+    "text": "Convert data science notebooks with poor modularity to fully modular notebooks that are automatically exported as python modules."
+  },
+  {
+    "objectID": "index.html#motivation",
+    "href": "index.html#motivation",
+    "title": "nbmodular",
+    "section": "Motivation",
+    "text": "Motivation\nIn data science, it is usual to develop experimentally and quickly based on notebooks, with little regard to software engineering practices and modularity. It can become challenging to start working on someone else’s notebooks with no modularity in terms of separate functions, and a great degree of duplicated code between the different notebooks. This makes it difficult to understand the logic in terms of semantically separate units, see what are the commonalities and differences between the notebooks, and be able to extend, generalize, and configure the current solution."
+  },
+  {
+    "objectID": "index.html#objectives",
+    "href": "index.html#objectives",
+    "title": "nbmodular",
+    "section": "Objectives",
+    "text": "Objectives\nnbmodular is a library conceived with the objective of helping converting the cells of a notebook into separate functions with clear dependencies in terms of inputs and outputs. This is done though a combination of tools which semi-automatically understand the data-flow in the code, based on mild assumptions about its structure. It also helps test the current logic and compare it against a modularized solution, to make sure that the refactored code is equivalent to the original one."
+  },
+  {
+    "objectID": "index.html#features",
+    "href": "index.html#features",
+    "title": "nbmodular",
+    "section": "Features",
+    "text": "Features\n\nConvert cells to functions.\nThe logic of a single function can be written across multiple cells.\nFunctions can be either regular functions or unit test functions.\nFunctions and tests are exported to separate python modules.\nTODO: use nbdev to sync the exported python module with the notebook code, so that changes to the module are reflected back in the notebook.\nProcessed cells can continue to operate as cells or be only used as functions.\nA pipeline function is automatically created and updated. This pipeline provides the data-flow from the first to the last function call in the notebook.\nFunctions act as nodes in a dependency graph. These nodes can optionally hold the values of local variables for inspection outside of the function. This is similar to having a single global scope, which is the original situation. Since this is memory-consuming, storing local variables is optional.\nLocal variables are persisted in disk, so that we may decide to reuse previous results without running the whole notebook.\nTODO: Once we are able to construct a graph, we may be able to draw it or show it in text, and pass it to ADG processors that can run functions sequentially or in parallel.\nTODO: if we have the dependency graph and persisted inputs / outputs, we may decide to only run those cells that are predecessors of the current one, i.e., the ones that provide the inputs needed by the current cell.\nTODO: if we associate a hash code to input data, we may only run the cells when the input data changes. Similarly, if we associate a hash code with AST-converted function code, we may only run those cells whose code has been updated.\nTODO: the output of a test cell can be used for assertions, where we require that the current output is the same as the original one.\nTODO: Compare the result of the pipeline with the result of running the original notebook.\nTODO: Currently, AST processing is used for assessing whether variables are modified in the cell or are just read. This just gives an estimate. We may want to compare the values of existing variables before and after running the code in the cell. We may also use a type checker such as mypy to assess whether a variable is immutable in the cell (e.g., mark the variable as Final and see if mypy complaints)\nTODO: have indicated test be used as examples in docstrings. Have optional flag indicate that the next cell’s output should be converted to text and included as example output in the docstring.\nTODO: have the possibility of writing the tests in the same module as the functions, where each test goes after the function that is testing. This can help as a form of documentation for the function, especially if the test code is not included in the function’s docstring."
+  },
+  {
+    "objectID": "index.html#install",
+    "href": "index.html#install",
+    "title": "nbmodular",
+    "section": "Install",
+    "text": "Install\npip install nbmodular"
+  },
+  {
+    "objectID": "index.html#usage",
+    "href": "index.html#usage",
+    "title": "nbmodular",
+    "section": "Usage",
+    "text": "Usage\nLoad ipython extension\n\n%load_ext nbmodular.core.cell2func\n\nThis allows us to use the following magic commands, among others\n\nfunction \nprint \nfunction_info \nprint_pipeline\n\nLet’s go one by one\n\nfunction\n\nBasic usage\nThe magic command function allows to run the code in the cell, as it would be normally done, and at the same time it performs a number of additional steps. Let’s go over each one in turn through the following example:\n\n%%function two_plus_three\na = 2\nb = 3\nc = a+b\nprint (f'The result of adding {a}+{b} is {c}')\n\n\nThe result of adding 2+3 is 5\n\n\n\n(a, b, c)\n\n(2, 3, 5)\n\n\nAs we can see, the previous cell just runs as it would normally do. In addition to this, the code syntax is analyzed using an ast, and the result of this analysis is stored in a new object called two_plus_three_info. Let’s look at some of the information provided by this object.\nFirst, the object stores the list of variables that were created inside this function:\n\ntwo_plus_three_info.created_variables\n\n['a', 'b', 'c']\n\n\nBy default, this object also stores the values of those variables:\n\ntwo_plus_three_info.current_values\n\n{'a': 2, 'b': 3, 'c': 5}\n\n\nIt stores the names of the variables used by this function and created before calling it:\n\ntwo_plus_three_info.previous_variables\n\n[]\n\n\nIn the previous example, there are no previous variables. We will see later an example which makes use of previous variables.\nIn addition to this, the cell magic %%function  creates a new function  which can be called normally later on. In our previous example, a function called two_plus_three has been created, let’s call it:\n\ntwo_plus_three ()\n\nThe result of adding 2+3 is 5\n\n\nWe can also print the code of that function, using the line magic %print \n\n%print two_plus_three\n\n\n\ndef two_plus_three():\n    a = 2\n    b = 3\n    c = a+b\n    print (f'The result of adding {a}+{b} is {c}')\n\n\n\nUsing the cell magic %%function is handy when we want to be able to inspect the variables created in the cell. In the short future, we will allow to prevent some of the variables to persist out of the cell, to avoid memory issues. We plan to do this in two ways:\n\nDelete the variable (del), with the disadvantage that we won’t be able to inspect it later on.\nDelete the variable only when a new cell magic is executed, so that we can still inspect the variables created in the last cell, and then move on to execute the next cell, at which point we remove previous variables that were memory-consuming.\nWe might as well, more in the long-term future, delete variables based on how much memory they consume, using some threshold parameter.\n\nLet’s see now an example which uses variables created elsewhere:\n\nmy_previous_variable=10\n\n\n%%function add_100\nmy_previous_variable = my_previous_variable + 100\nprint (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\n\n\n\nThe result of adding 100 to my_previous_variable is 110\n\n\n\nadd_100_info.previous_variables\n\n['my_previous_variable']\n\n\nmy_previous_variable is also included in the list of created_variables, since a new value for this variable has been generated:\n\nadd_100_info.created_variables\n\n['my_previous_variable']\n\n\nAll the functions created so far can be printed at once using print all:\n\n%print all\n\n\n\ndef two_plus_three():\n    a = 2\n    b = 3\n    c = a+b\n    print (f'The result of adding {a}+{b} is {c}')\n\ndef add_100(my_previous_variable):\n    my_previous_variable = my_previous_variable + 100\n    print (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\n\n\n\nAnd they are also written to a python module with the same name of the notebook (the current notebook being called “index.ipynb”):\n\n!cat ../nbmodular/index.py\n\ndef two_plus_three():\n    a = 2\n    b = 3\n    c = a+b\n    print (f'The result of adding {a}+{b} is {c}')\n\ndef add_100(my_previous_variable):\n    my_previous_variable = my_previous_variable + 100\n    print (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\n\n# -----------------------------------------------------\n# pipeline\n# -----------------------------------------------------\ndef index_pipeline (test=False, load=True, save=True, result_file_name=\"index_pipeline\"):\n    \"\"\"Pipeline calling each one of the functions defined in this module.\"\"\"\n    \n    # load result\n    result_file_name += '.pk'\n    path_variables = Path (\"index\") / result_file_name\n    if load and path_variables.exists():\n        result = joblib.load (path_variables)\n        return result\n\n    two_plus_three ()\n    add_100 (my_previous_variable)\n\n    # save result\n    result = Bunch ()\n    if save:    \n        path_variables.parent.mkdir (parents=True, exist_ok=True)\n        joblib.dump (result, path_variables)\n    return result\n\n\n\n\n\nDynamic outputs\nSo far, none of the created functions return any result. This is because there is no other function that needs any of the variables created inside neither two_plus_three nor add_100. Let’s see what happens when we add a new function that requires the variable c, which was created in two_plus_three:\n\n%%function multiply_by_two\n#|echo: false\nd = c*2\nprint (f'Two times {c} is {d}')\n\n\nTwo times 5 is 10\n\n\nOur new function makes use of the result computed in two_plus_three, so we need that function to return this result. This is done automatically, and the function two_plus_three updated:\n\n%print two_plus_three\n\n\ndef two_plus_three():\n    a = 2\n    b = 3\n    c = a+b\n    print (f'The result of adding {a}+{b} is {c}')\n    return c\n\n\n\nWe can see that two_plus_three now returns c. We can call it with the updated signature:\n\nmy_new_c = two_plus_three ()\nmy_new_c\n\nThe result of adding 2+3 is 5\n\n\n5\n\n\n\n\nIndicating function position\nWhen adding a new function, we can indicate in which position of the pipeline we want it to be added. By default, it is added at the end. To indicate the position, simply pass –position to the magic cell\n%%function my_function_in_pos_2 --position 2\n&lt;my code...&gt;\nSection print_pipeline below includes an example of this.\n\n\n\nprint\nWe can see each of the defined functions with print my_function:\n\n%print multiply_by_two\n\n\ndef multiply_by_two(c):\n    d = c*2\n    print (f'Two times {c} is {d}')\n\n\n\nWe can print all the functions defined so far with %%function using print all\n\n%print all\n\n\ndef two_plus_three():\n    a = 2\n    b = 3\n    c = a+b\n    print (f'The result of adding {a}+{b} is {c}')\n    return c\n\ndef add_100(my_previous_variable):\n    my_previous_variable = my_previous_variable + 100\n    print (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\n\ndef multiply_by_two(c):\n    d = c*2\n    print (f'Two times {c} is {d}')\n\n\n\n\n\nprint_pipeline\nAs we add functions to the notebook, a pipeline function is defined. We can print this pipeline with the magic print_pipeline\n\n%print_pipeline\n\n\n# -----------------------------------------------------\n# pipeline\n# -----------------------------------------------------\ndef index_pipeline (test=False, load=True, save=True, result_file_name=\"index_pipeline\"):\n    \"\"\"Pipeline calling each one of the functions defined in this module.\"\"\"\n    \n    # load result\n    result_file_name += '.pk'\n    path_variables = Path (\"index\") / result_file_name\n    if load and path_variables.exists():\n        result = joblib.load (path_variables)\n        return result\n\n    c = two_plus_three ()\n    add_100 (my_previous_variable)\n    multiply_by_two (c)\n\n    # save result\n    result = Bunch (c=c)\n    if save:    \n        path_variables.parent.mkdir (parents=True, exist_ok=True)\n        joblib.dump (result, path_variables)\n    return result\n\n\n\nAs we can see, the first and last parts of the pipeline function are dedicated to loading previously stored results, if the pipeline was run before, and saving the results of this execution. The central part calls the functions defined so far, using proper inputs and outputs. Having a pipeline function implemented for us is handy to see the data-flow (in terms of inputs and outputs) from the first function call to the last one.\nOne detail that we can see in the previous pipeline is that the variable my_previous_variable has not been defined before being used. However, if we try to call the pipeline function, it will not fail. This is because my_previous_variable exists in the global scope, and it is therefore treated as a global variable. If we want to make sure that all variables are local, we can do:\n\n%delete_globals\n\nraised_exception=False\ntry:\n    index_pipeline()\nexcept Exception as e:\n    print (f'could not run pipeline: {e}')\n    raised_exception=True\nassert raised_exception\n\nThe result of adding 2+3 is 5\ncould not run pipeline: name 'my_previous_variable' is not defined\n\n\nWe can then add a new function that will provide a value for my_previous_variable:\n\n%%function get_my_previous_variable --position 0\nmy_previous_variable = 100\n\n%print_pipeline\n\n\n# -----------------------------------------------------\n# pipeline\n# -----------------------------------------------------\ndef index_pipeline (test=False, load=True, save=True, result_file_name=\"index_pipeline\"):\n    \"\"\"Pipeline calling each one of the functions defined in this module.\"\"\"\n    \n    # load result\n    result_file_name += '.pk'\n    path_variables = Path (\"index\") / result_file_name\n    if load and path_variables.exists():\n        result = joblib.load (path_variables)\n        return result\n\n    my_previous_variable = get_my_previous_variable ()\n    c = two_plus_three ()\n    add_100 (my_previous_variable)\n    multiply_by_two (c)\n\n    # save result\n    result = Bunch (my_previous_variable=my_previous_variable,c=c)\n    if save:    \n        path_variables.parent.mkdir (parents=True, exist_ok=True)\n        joblib.dump (result, path_variables)\n    return result\n\n\n\nNow we can call the pipeline without issues\n\nindex_pipeline()\n\nThe result of adding 2+3 is 5\nThe result of adding 100 to my_previous_variable is 200\nTwo times 5 is 10\n\n\n{'my_previous_variable': 100, 'c': 5}\n\n\nWe can see that the returned value for my_previous_variable is the original value, since this value was not returned by add_100. If we want this function to return that variable, we need to either create another function that makes use of that value, or explictly indicate that we want add_100 to return that variable, as follows:\n\n%%function add_100 --include-output my_previous_variable\nmy_previous_variable = my_previous_variable + 100\nprint (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\n\n\nThe result of adding 100 to my_previous_variable is 200\n\n\nWe can see that my_previous_variable was added in the output:\n\n%print add_100\n\n\n\ndef add_100(my_previous_variable):\n    my_previous_variable = my_previous_variable + 100\n    print (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\n    return my_previous_variable\n\n\n\nnow we can call the function and obtain the output we indicated:\n\nadd_100(50)==150\n\nThe result of adding 100 to my_previous_variable is 150\n\n\nTrue\n\n\nAnother possibility is to modify the signature of a previously defined function using the magic line add_to_signature. Let’s do that with multiply_by_two. As we can see in the code above, this function doesn’t output anything at the moment.\n\n%print multiply_by_two\n\n\ndef multiply_by_two(c):\n    d = c*2\n    print (f'Two times {c} is {d}')\n\n\n\nLet’s call add_to_signature on it:\n\n%add_to_signature multiply_by_two --output d\nand check the result:\n\n%print multiply_by_two\n\n\ndef multiply_by_two(c):\n    d = c*2\n    print (f'Two times {c} is {d}')\n    return d\n\n\n\n\nmultiply_by_two (150)\n\nTwo times 150 is 300\n\n\n300\n\n\nThe pipeline is updated with these changes:\n\n%print_pipeline\n\n\n# -----------------------------------------------------\n# pipeline\n# -----------------------------------------------------\ndef index_pipeline (test=False, load=True, save=True, result_file_name=\"index_pipeline\"):\n    \"\"\"Pipeline calling each one of the functions defined in this module.\"\"\"\n    \n    # load result\n    result_file_name += '.pk'\n    path_variables = Path (\"index\") / result_file_name\n    if load and path_variables.exists():\n        result = joblib.load (path_variables)\n        return result\n\n    my_previous_variable = get_my_previous_variable ()\n    c = two_plus_three ()\n    my_previous_variable = add_100 (my_previous_variable)\n    d = multiply_by_two (c)\n\n    # save result\n    result = Bunch (my_previous_variable=my_previous_variable,d=d,c=c)\n    if save:    \n        path_variables.parent.mkdir (parents=True, exist_ok=True)\n        joblib.dump (result, path_variables)\n    return result\n\n\n\nLet’s check the result of calling the new pipeline:\n\ncell_processor.call_history\n\n[('two_plus_three',\n  \"#|echo: false\\na = 2\\nb = 3\\nc = a+b\\nprint (f'The result of adding {a}+{b} is {c}')\\n\"),\n ('add_100',\n  \"#|echo: false\\nmy_previous_variable = my_previous_variable + 100\\nprint (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\\n\"),\n ('add_100',\n  \"#|echo: false\\nmy_previous_variable = my_previous_variable + 100\\nprint (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\\n\"),\n ('hybrid', 'x = 3\\nx = x + 4\\nprint (x)\\n'),\n ('hybrid', 'x = 3\\nx = x + 4\\nprint (x)\\n'),\n ('multiply_by_two',\n  \"#|echo: false\\nd = c*2\\nprint (f'Two times {c} is {d}')\\n\"),\n ('get_my_previous_variable --position 0',\n  '#| echo: false\\nmy_previous_variable = 100\\n'),\n ('add_100 --include-output my_previous_variable',\n  \"#| echo: false\\nmy_previous_variable = my_previous_variable + 100\\nprint (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\\n\")]\n\n\n\n\nfunction_info\nWe can get access to many of the details of each of the defined functions by calling function_info on a given function name:\n\ntwo_plus_three_info = %function_info two_plus_three\n\ntwo_plus_three_info = %function_info two_plus_three\n#| echo: false\n\nThis allows us to see:\n\nThe name and value (at the time of running) of the local variables, arguments and results from the function:\n\n\ntwo_plus_three_info.arguments\n\n[]\n\n\n\ntwo_plus_three_info.current_values\n\n{'a': 2, 'b': 3, 'c': 5}\n\n\nThe variables in current_values can be accessed directly as attributes of two_plus_three_info:\n\ntwo_plus_three_info.a, two_plus_three_info.b, two_plus_three_info.c\n\n(2, 3, 5)\n\n\nWe can also see the return values of the function:\n\ntwo_plus_three_info.return_values\n\n['c']\n\n\nWe can inspect the original code written in the cell…\n\nprint (two_plus_three_info.original_code)\n\na = 2\nb = 3\nc = a+b\nprint (f'The result of adding {a}+{b} is {c}')\n\n\n\nthe code of the function we just created:\n\nprint (two_plus_three_info.code)\n\ndef two_plus_three():\n    a = 2\n    b = 3\n    c = a+b\n    print (f'The result of adding {a}+{b} is {c}')\n    return c\n\n\n\n.. and the AST trees:\n\nprint (two_plus_three_info.get_ast (code=two_plus_three_info.original_code))\n\nModule(\n  body=[\n    Assign(\n      targets=[\n        Name(id='a', ctx=Store())],\n      value=Constant(value=2)),\n    Assign(\n      targets=[\n        Name(id='b', ctx=Store())],\n      value=Constant(value=3)),\n    Assign(\n      targets=[\n        Name(id='c', ctx=Store())],\n      value=BinOp(\n        left=Name(id='a', ctx=Load()),\n        op=Add(),\n        right=Name(id='b', ctx=Load()))),\n    Expr(\n      value=Call(\n        func=Name(id='print', ctx=Load()),\n        args=[\n          JoinedStr(\n            values=[\n              Constant(value='The result of adding '),\n              FormattedValue(\n                value=Name(id='a', ctx=Load()),\n                conversion=-1),\n              Constant(value='+'),\n              FormattedValue(\n                value=Name(id='b', ctx=Load()),\n                conversion=-1),\n              Constant(value=' is '),\n              FormattedValue(\n                value=Name(id='c', ctx=Load()),\n                conversion=-1)])],\n        keywords=[]))],\n  type_ignores=[])\nNone\n\n\n\nprint (two_plus_three_info.get_ast (code=two_plus_three_info.code))\n\nModule(\n  body=[\n    FunctionDef(\n      name='two_plus_three',\n      args=arguments(\n        posonlyargs=[],\n        args=[],\n        kwonlyargs=[],\n        kw_defaults=[],\n        defaults=[]),\n      body=[\n        Assign(\n          targets=[\n            Name(id='a', ctx=Store())],\n          value=Constant(value=2)),\n        Assign(\n          targets=[\n            Name(id='b', ctx=Store())],\n          value=Constant(value=3)),\n        Assign(\n          targets=[\n            Name(id='c', ctx=Store())],\n          value=BinOp(\n            left=Name(id='a', ctx=Load()),\n            op=Add(),\n            right=Name(id='b', ctx=Load()))),\n        Expr(\n          value=Call(\n            func=Name(id='print', ctx=Load()),\n            args=[\n              JoinedStr(\n                values=[\n                  Constant(value='The result of adding '),\n                  FormattedValue(\n                    value=Name(id='a', ctx=Load()),\n                    conversion=-1),\n                  Constant(value='+'),\n                  FormattedValue(\n                    value=Name(id='b', ctx=Load()),\n                    conversion=-1),\n                  Constant(value=' is '),\n                  FormattedValue(\n                    value=Name(id='c', ctx=Load()),\n                    conversion=-1)])],\n            keywords=[])),\n        Return(\n          value=Name(id='c', ctx=Load()))],\n      decorator_list=[])],\n  type_ignores=[])\nNone\n\n\n\n\ncell_processor\nThis magic line allows us to get access to the CellProcessor object managing the logic for running the above magic commands, which can become handy:\n\ncell_processor = %cell_processor\n\ncell_processor = %cell_processor\n#| echo: false"
+  },
+  {
+    "objectID": "index.html#merging-function-cells",
+    "href": "index.html#merging-function-cells",
+    "title": "nbmodular",
+    "section": "Merging function cells",
+    "text": "Merging function cells\nIn order to explore intermediate results, it is convenient to split the code in a function among different cells. This can be done by passing the flag --merge True\n\n%%function analyze\nx = [1, 2, 3]\ny = [100, 200, 300]\nz = [u+v for u,v in zip(x,y)]\n\nz\n\n[101, 202, 303]\n\n\n\n%print analyze\n\n\ndef analyze(x):\n    x = [1, 2, 3]\n    y = [100, 200, 300]\n    z = [u+v for u,v in zip(x,y)]\n\n\n\n\n%%function analyze --merge\nproduct = [u*v for u, v in zip(x,y)]\n\n%print analyze\n\n\ndef analyze(x):\n    x = [1, 2, 3]\n    y = [100, 200, 300]\n    z = [u+v for u,v in zip(x,y)]\n    product = [u*v for u, v in zip(x,y)]\n    return x"
+  },
+  {
+    "objectID": "index.html#saving-loading-previous-results",
+    "href": "index.html#saving-loading-previous-results",
+    "title": "nbmodular",
+    "section": "Saving / loading previous results",
+    "text": "Saving / loading previous results\nFunctions can load previously computed results and save the results of the current execution. Let’s see an example:\n\nx = 3\nn = 5\n\n\ndef multiples (x, n):\n    print ('computing multiples')\n    factors = range(n)\n    result = [x*i for i in factors]\n    return result\n\ncomputing multiples\n\n\nAfter running the previous cell, we can load the result of the function from disk:\n\njoblib.load ('results/multiples_result.pickle')\n\n[0, 3, 6, 9, 12]\n\n\nBy default, the result is saved in a folder called “results”, inside the current directory, and with a file name that is the same one as the name of the function, adding the suffix “_result” at the end. The type of result file used by default is “pickle”. All of these options can be changed as we will see later.\nWe can avoid the re-computing the results if we pass the flag --load:\n\ndef multiples (x, n):\n    print ('computing multiples')\n    factors = range(n)\n    result = [x*i for i in factors]\n    return result\n\nAs we can see, the function hasn’t run, since there is no message printed on screen. If we don’t use the load flag, it will run normally:\n\ndef multiples (x, n):\n    print ('computing multiples')\n    factors = range(n)\n    result = [x*i for i in factors]\n    return result\n\ncomputing multiples"
+  },
+  {
+    "objectID": "index.html#saving-loading-local-variables",
+    "href": "index.html#saving-loading-local-variables",
+    "title": "nbmodular",
+    "section": "Saving / loading local variables",
+    "text": "Saving / loading local variables\nInstead of saving / loading the variables returned by the function, we can save or load the local variables by passing io-locals:\n\ndef multiples (x, n):\n    print ('computing multiples')\n    factors = range(n)\n    result = [x*i for i in factors]\n    return result\n\ncomputing multiples\n\n\nAfter running the previous cell, we will have a file with path locals/multiples_locals.pickle, storing the local variables of the function:\n\njoblib.load ('locals/multiples_locals.pickle')\n\n{'factors': range(0, 5), 'result': [0, 3, 6, 9, 12]}\n\n\nBy default, the file is saved in a folder called “locals”, inside the current directory, and with a file name that is the same one as the name of the function, adding the suffix “_locals” at the end. The type of file used by default is “pickle”. All of these options can be changed as we will see later.\nAgain, we can avoid the re-computing the results if we pass the flag --load. This will load the local variables into the notebook’s memory. To demonstrate that, let’s first delete those variables from memory:\n\ndel factors\ndel result\n\nWe now load them from disk by passing the flags load and io-locals:\n\ndef multiples (x, n):\n    print ('computing multiples')\n    factors = range(n)\n    result = [x*i for i in factors]\n    return result\n\nAs we can see, the function hasn’t run, since there is no printed message, and the local variables have been loaded and are now available:\n\nprint (f'factors: {factors}, result: {result}')\n\nfactors: range(0, 5), result: [0, 3, 6, 9, 12]"
+  },
+  {
+    "objectID": "index.html#loading-saving-in-functions-code",
+    "href": "index.html#loading-saving-in-functions-code",
+    "title": "nbmodular",
+    "section": "loading / saving in function’s code",
+    "text": "loading / saving in function’s code\nWe insert loading / saving code into the function being defined, by passing the flag --io-code:\n\ndef multiples (x, n):\n    print ('computing multiples')\n    factors = range(n)\n    result = [x*i for i in factors]\n    return result\n\ncomputing multiples\n\n\n\nmultiples??\n\nSignature:\nmultiples(\n    n,\n    x,\n    load=False,\n    save=False,\n    io_type='pickle',\n    io_root_path='results',\n    io_file='multiples_result',\n    load_args={},\n    save_args={},\n)\nDocstring: &lt;no docstring&gt;\nSource:   \ndef multiples(n, x, load=False, save=False, io_type=\"pickle\", io_root_path=\"results\", io_file=\"multiples_result\", load_args={}, save_args={}):\n    path_variables = Path (io_root_path) / f\"{io_file}.{io_type}\"\n    if load and path_variables.exists():\n        result = function_io.load (path_variables, io_type, **load_args)\n        return result\n\n    print ('computing multiples')\n    factors = range(n)\n    result = [x*i for i in factors]\n    if save:\n        function_io.save (result, path_variables, io_type, **save_args)\n    return result\nFile:      /tmp/ipykernel_19269/2033624923.py\nType:      function\n\n\nCalling this function with save=True will save the results to ‘results/multiples_result.pickle’, by default. This is the same path as the one used before, so let us remove it from disk first:\n\nos.remove ('results/multiples_result.pickle')\n\n\nmultiples (7, 5, save=True)\n\ncomputing multiples\n\n\n[0, 5, 10, 15, 20, 25, 30]\n\n\n\njoblib.load ('results/multiples_result.pickle')\n\n[0, 5, 10, 15, 20, 25, 30]\n\n\nWe can also skip the computation in subsequent calls, by passing load=True:\n\nmultiples (7, 5, load=True)\n\n[0, 5, 10, 15, 20, 25, 30]\n\n\nAs we can see, no message has been printed by calling the function, since the result is loaded from disk and the computation is skipped."
+  },
+  {
+    "objectID": "index.html#loading-saving-config-parameters",
+    "href": "index.html#loading-saving-config-parameters",
+    "title": "nbmodular",
+    "section": "Loading / saving config parameters",
+    "text": "Loading / saving config parameters\n\ndef multiples (x, n):\n    print ('computing multiples')\n    factors = range(n)\n    result = pd.DataFrame (dict(\n        factors=factors,\n        multiples=[x*i for i in factors],\n    ))\n    return result\n\ncomputing multiples\n\n\n\npd.read_parquet ('results_df/computed_multiples.parquet')\n\n\n\n\n\n\n\n\nfactors\nmultiples\n\n\n\n\n0\n0\n0\n\n\n1\n1\n3\n\n\n2\n2\n6\n\n\n3\n3\n9\n\n\n4\n4\n12"
+  },
+  {
+    "objectID": "nbdev_sync.html",
+    "href": "nbdev_sync.html",
+    "title": "FunctionNBProcessor",
+    "section": "",
+    "text": "import os import joblib import warnings from execnb.nbio import read_nb, write_nb, new_nb, mk_cell from nbdev.process import NBProcessor, Processor\na = [4, 2, 5]\nimport pdb\nclass FunctionNBProcessor(Processor):\n    def __init__ (self, cell_processor, debug=False):\n        self.cell_processor = cell_processor\n        self.function_idx = 0\n        self.cell_list = []\n        self.function_name_to_list_idx = {}\n        self.debug=debug\n        #for function in self.cell_processor.cell_nodes:\n        #    function.cell_idx = None\n    \n    def cell(self, cell):\n        separator = '\\n**********************************************************************\\n'\n        cell_lines = cell.source.splitlines()\n        if len(cell_lines) &gt; 0 and '%%function' in cell_lines[0]:\n            if self.debug:\n                pdb.set_trace()\n            if self.function_idx &lt; len(self.cell_processor.cell_nodes):\n                this_function = self.cell_processor.cell_nodes[self.function_idx]\n                this_function.cell_idx = cell.idx_\n                if this_function.name in self.function_name_to_list_idx:\n                    list_idx = self.function_name_to_list_idx[this_function.name]\n                    self.cell_list[list_idx] = '#| export\\n' + this_function.code\n                else:\n                    list_idx = len(self.cell_list)-1\n                    self.cell_list.append (separator + '#| export\\n' + this_function.code)\n                    self.function_name_to_list_idx[this_function.name] = list_idx\n                self.function_idx += 1\n        else:\n            self.cell_list.append (cell.source)\n    def end(self): \n        for cell in self.cell_list:\n            print (cell)\n\n## process_notebook\n\ndef process_notebook (cell_processor, debug=False):\n    function_processor = FunctionNBProcessor (cell_processor, debug=debug)\n    NBProcessor ('./nbdev_sync.ipynb', function_processor).process()\n\n## simple case: each function is written in a single cell\n\n# This is markdown\n\n#%%function first_function\na = 3 \nprint ('a', a)\n\n# normal code cell\nprint ('outside', a)\n\n#%%function second_function\nb = 4\nc = a+b\nprint (a, b, c)\n\n#cell_processor = %cell_processor\n\n[function['name'] for function in cell_processor.cell_nodes]\n\nprint ('last cell:', a, b, c)\n\nprocess_notebook (cell_processor)\n\n## second case: functions are split into different cells\n\n#%%function myf\nprint ('hello')\na = 3\n\n#%print myf\n\nmyf_info.original_cell\n\n#%%function myf --merge\nb = 4\n\n#%print myf\n\n#%%function myf --merge\nc = 5\nd = a+b+c\n\n#%print myf\n\nmyf_info.original_cell\n\nprocess_notebook (cell_processor)\n\n### (TODO) Use only the last cell associated with this function, e.g., by replacing previous cells.\n\n## third case: have defined functions in cells\n\nx=4\n\n#%%function \ndef my_defined_function (x, a=3):\n    print (x)\n    print (a)\n\nprocess_notebook (cell_processor, debug=True)\n\n### (TODO) Debug why the code of last function doesn't appear at all\n\n## end\na\n\n[4, 5, 5]\nimport pdb\n\nclass FunctionNBProcessor(Processor):\n    def __init__ (\n        self, \n        cell_processor, \n        path_to_notebook,\n        debug=False\n    ):\n        self.cell_processor = cell_processor\n        self.function_idx = 0\n        self.cell_list = []\n        self.function_name_to_list_idx = {}\n        self.path_to_src_notebook = path_to_notebook\n        self.path_to_dst_notebook = path_to_notebook.parent / f'{path_to_notebook.name[:-len(\".ipynb\")]}_nbdev.ipynb'\n        self.debug=debug\n    \n    def cell(self, cell):\n        separator = '\\n**********************************************************************\\n'\n        cell_lines = cell.source.splitlines()\n        if len(cell_lines) &gt; 0 and '%%function' in cell_lines[0]:\n            if self.debug:\n                pdb.set_trace()\n            if self.function_idx &lt; len(self.cell_processor.cell_nodes):\n                this_function = self.cell_processor.cell_nodes[self.function_idx]\n                this_function.cell_idx = cell.idx_\n                new_cell = mk_cell ('#| export\\n' + this_function.code)\n                if this_function.name in self.function_name_to_list_idx:\n                    list_idx = self.function_name_to_list_idx[this_function.name]\n                    self.cell_list[list_idx] = new_cell\n                else:\n                    list_idx = len(self.cell_list)\n                    self.cell_list.append (new_cell)\n                    self.function_name_to_list_idx[this_function.name] = list_idx\n                self.function_idx += 1\n        else:\n            self.cell_list.append (mk_cell(cell.source, cell_type=cell.cell_type))\n    def end(self): \n        original_nb = read_nb (self.path_to_src_notebook)\n        write_nb (new_nb (self.cell_list, meta=original_nb.metadata), self.path_to_dst_notebook)"
+  },
+  {
+    "objectID": "nbdev_sync.html#process_notebook",
+    "href": "nbdev_sync.html#process_notebook",
+    "title": "FunctionNBProcessor",
+    "section": "process_notebook",
+    "text": "process_notebook\n\ndef process_notebook (\n    cell_processor, \n    path_to_notebook='./nbdev_sync.ipynb', \n    debug=False\n):\n    path_to_notebook=Path(path_to_notebook)\n    function_processor = FunctionNBProcessor (\n        cell_processor, \n        path_to_notebook=path_to_notebook,\n        debug=debug,\n    )\n    NBProcessor (path_to_notebook, function_processor).process()"
+  },
+  {
+    "objectID": "nbdev_sync.html#simple-case-each-function-is-written-in-a-single-cell",
+    "href": "nbdev_sync.html#simple-case-each-function-is-written-in-a-single-cell",
+    "title": "FunctionNBProcessor",
+    "section": "simple case: each function is written in a single cell",
+    "text": "simple case: each function is written in a single cell\nThis is markdown\n\na = 3 \nprint ('a', a)\n\na 3\nStored the following local variables in the first_function current_values dictionary: ['a']\n\n\n\n# normal code cell\nprint ('outside', a)\n\noutside 3\n\n\n\nb = 4\nc = a+b\nprint (a, b, c)\n\n3 4 7\nStored the following local variables in the second_function current_values dictionary: ['b', 'c']\n\n\n\ncell_processor = %cell_processor\n\n\n[function['name'] for function in cell_processor.cell_nodes]\n\n['first_function', 'second_function']\n\n\n\nprint ('last cell:', a, b, c)\n\nlast cell: 3 4 7\n\n\n\nprocess_notebook (cell_processor)"
+  },
+  {
+    "objectID": "nbdev_sync.html#second-case-functions-are-split-into-different-cells",
+    "href": "nbdev_sync.html#second-case-functions-are-split-into-different-cells",
+    "title": "FunctionNBProcessor",
+    "section": "second case: functions are split into different cells",
+    "text": "second case: functions are split into different cells\n\nprint ('hello')\na = 3\n\nhello\nStored the following local variables in the myf current_values dictionary: ['a']\n\n\n\n\n\ndef myf():\n    print ('hello')\n    a = 3\n    return a\n\n\n\n\nmyf_info.original_cell\n\n\"print ('hello')\\na = 3\\n\"\n\n\n\nb = 4\n\nStored the following local variables in the myf current_values dictionary: ['b']\nhello\nStored the following local variables in the myf current_values dictionary: ['a', 'b']\n\n\n\n\n\ndef myf():\n    print ('hello')\n    a = 3\n    b = 4\n    return b,a\n\n\n\n\nc = 5\nd = a+b+c\n\nStored the following local variables in the myf current_values dictionary: ['c', 'd']\nhello\nStored the following local variables in the myf current_values dictionary: ['a', 'b', 'c', 'd']\n\n\n\n\n\ndef myf():\n    print ('hello')\n    a = 3\n    b = 4\n    c = 5\n    d = a+b+c\n    return b,d,a,c\n\n\n\n\nmyf_info.original_cell\n\n\"print ('hello')\\na = 3\\nb = 4\\nc = 5\\nd = a+b+c\\n\"\n\n\n\nprocess_notebook (cell_processor)\n\n\n(TODO) Use only the last cell associated with this function, e.g., by replacing previous cells."
+  },
+  {
+    "objectID": "nbdev_sync.html#third-case-have-defined-functions-in-cells",
+    "href": "nbdev_sync.html#third-case-have-defined-functions-in-cells",
+    "title": "FunctionNBProcessor",
+    "section": "third case: have defined functions in cells",
+    "text": "third case: have defined functions in cells\n\nx=4\n\n\ndef my_defined_function (x, a=3):\n    print (x)\n    print (a)\n\n4\n3\nStored the following local variables in the my_defined_function current_values dictionary: []\n\n\n\nprocess_notebook (cell_processor)\n\n\n(TODO) Debug why the code of last function doesn’t appear at all"
+  },
+  {
+    "objectID": "nbdev_sync.html#end",
+    "href": "nbdev_sync.html#end",
+    "title": "FunctionNBProcessor",
+    "section": "end",
+    "text": "end"
+  },
+  {
+    "objectID": "tutorials/test_tutorial.html",
+    "href": "tutorials/test_tutorial.html",
+    "title": "Writing tests",
+    "section": "",
+    "text": "a=1\nb=2\n\n{'input': None, 'unknown_input': True, 'output': None, 'unknown_output': True}\n\n\n\nc = a+b\n\n\nprint (c)\n\n3"
+  },
+  {
+    "objectID": "tutorials/test_tutorial.html#implement-functions",
+    "href": "tutorials/test_tutorial.html#implement-functions",
+    "title": "Writing tests",
+    "section": "",
+    "text": "a=1\nb=2\n\n{'input': None, 'unknown_input': True, 'output': None, 'unknown_output': True}\n\n\n\nc = a+b\n\n\nprint (c)\n\n3"
+  },
+  {
+    "objectID": "tutorials/test_tutorial.html#writing-tests-with-dependencies",
+    "href": "tutorials/test_tutorial.html#writing-tests-with-dependencies",
+    "title": "Writing tests",
+    "section": "Writing tests with dependencies",
+    "text": "Writing tests with dependencies\nIt is best to define data variables in separate data functions, so that they can be retrieved and reused from different test functions:\n\na = 1\n\n\nb = 2\n\nThen we can define our test function. This function uses the variables defined in our previous data functions:\nAnd we can call it in our test function:\n\nc = add_function (a, b)\nassert c==3\n\nLet’s look at the resulting implementation of our test function:\n\n\n\ndef test_add_function():\n    a = test_first_data()\n    b = test_second_data()\n    c = add_function (a, b)\n    assert c==3\n\n\n\nIf we try to define the same variable in another data function, we will get an error:\n\nb = 3\n\nValueError: detected common variables with other test data functions {'b'}:"
+  },
+  {
+    "objectID": "tutorials/test_tutorial.html#using-test_pipeline",
+    "href": "tutorials/test_tutorial.html#using-test_pipeline",
+    "title": "Writing tests",
+    "section": "Using test_pipeline",
+    "text": "Using test_pipeline\n\n\n\n\ndef test_tutorial_pipeline (test=False, load=True, save=True, result_file_name=\"test_tutorial_pipeline\"):\n\n    # load result\n    result_file_name += '.pk'\n    path_variables = Path (\"test_tutorial\") / result_file_name\n    if load and path_variables.exists():\n        result = joblib.load (path_variables)\n        return result\n\n    b, a = data ()\n    c = add_function (b, a)\n    print_result (c)\n\n    # save result\n    result = Bunch (c=c,b=b,a=a)\n    if save:    \n        path_variables.parent.mkdir (parents=True, exist_ok=True)\n        joblib.dump (result, path_variables)\n    return result\n\n\n\n\ntest_tutorial_pipeline ()\n\n{'b': 2, 'a': 1, 'c': 3}\n\n\n\n\n\n\nfrom sklearn.utils import Bunch\nfrom pathlib import Path\nimport joblib\nimport pandas as pd\nimport numpy as np\n\ndef test_test_tutorial_pipeline (test=True, prev_result=None, result_file_name=\"test_tutorial_pipeline\"):\n    result = test_tutorial_pipeline (test=test, load=True, save=True, result_file_name=result_file_name)\n    if prev_result is None:\n        prev_result = test_tutorial_pipeline (test=test, load=True, save=True, result_file_name=f\"test_{result_file_name}\")\n    for k in prev_result:\n        assert k in result\n        if type(prev_result[k]) is pd.DataFrame:    \n            pd.testing.assert_frame_equal (result[k], prev_result[k])\n        elif type(prev_result[k]) is np.array:\n            np.testing.assert_array_equal (result[k], prev_result[k])\n        else:\n            assert result[k]==prev_result[k]\n\n\n\n\ntest_test_tutorial_pipeline ()"
+  },
+  {
+    "objectID": "tutorials/test_tutorial.html#persisting-test-results",
+    "href": "tutorials/test_tutorial.html#persisting-test-results",
+    "title": "Writing tests",
+    "section": "Persisting test results",
+    "text": "Persisting test results\n\nos.listdir ()\n\n['Untitled.ipynb',\n '.ipynb_checkpoints',\n 'test_tutorial',\n 'debugging.ipynb',\n 'test_tutorial.ipynb']\n\n\n\ntest_test_tutorial_pipeline ()\n\n\nos.listdir ()\n\n['Untitled.ipynb',\n '.ipynb_checkpoints',\n 'test_tutorial',\n 'debugging.ipynb',\n 'test_tutorial.ipynb']\n\n\nWe see that there is a new folder called test_tutorial. Let’s look at its contents\n\nos.listdir ('test_tutorial')\n\n['test_tutorial_pipeline.pk',\n 'test_test_tutorial_pipeline.pk',\n 'test_add_function.pk',\n 'test_add.pk']\n\n\nThere are two pickle files:\n\ntest_tutorial_pipeline.pk stores the result of running the test_tutorial_pipeline\ntest_test_tutorial_pipeline.pk stores the result of testing that pipeline.\n\n\njoblib.load ('test_tutorial/test_tutorial_pipeline.pk')\n\n{'b': 2, 'a': 1, 'c': 3}\n\n\n\njoblib.load ('test_tutorial/test_test_tutorial_pipeline.pk')\n\n{'b': 2, 'a': 1, 'c': 3}\n\n\nIf the results of the test are not the same as results from the previously run pipeline, the test fails. We can check that by storing different results for the pipeline:\n\nfrom sklearn.utils import Bunch\n\n{'b': 2, 'a': 1, 'c': 3} =={'b': 2, 'a': 1, 'c': 3}\n\nTrue\n\n\n\njoblib.dump ({'b': 200, 'a': 1, 'c': 3}, 'test_tutorial/test_tutorial_pipeline.pk')\n\n['test_tutorial/test_tutorial_pipeline.pk']\n\n\n\ntest_test_tutorial_pipeline ()\n\nAssertionError: \n\n\nNow we change it back, to see that the test passes:\n\njoblib.dump ({'b': 2, 'a': 1, 'c': 3}, 'test_tutorial/test_tutorial_pipeline.pk')\n\n['test_tutorial/test_tutorial_pipeline.pk']\n\n\n\ntest_test_tutorial_pipeline ()"
+  },
+  {
+    "objectID": "tutorials/test_tutorial.html#refining-signature",
+    "href": "tutorials/test_tutorial.html#refining-signature",
+    "title": "Writing tests",
+    "section": "Refining signature",
+    "text": "Refining signature\nLet’s revisit the first example, but this time we don’t add the function print_result. By doing so, add_function won’t have any output, since there is no other function in the notebook using its result.\n\n\n\ncould not remove c\ncould not remove a\ncould not remove b\n\n\n\na=1\nb=2\n\n\nc = a+b\n\n\na = 1\n\n\nb = 2\n\nBefore trying to test a previous function we need to ensure that its output is the required one:\n\n\n\ndef add_function(b, a):\n    c = a+b\n\n\n\nAs we can see add_function still doesn’t return anything because there were no other functions depending on it. The way to create a function depending on it is to use any of its created variables in another cell function, like so:\n%%function uses_c\nprint (c)\nSince we won’t be needing such function for the time being, we can just manually add this dependency with the magic add_to_signature:\nNow add_function has the required output:\n\n\n\ndef add_function(b, a):\n    c = a+b\n    return c\n\n\n\nNow we can finally add our test function:\n\nc = add_function (a, b)\nassert c==3"
+  },
+  {
+    "objectID": "tutorials/test_tutorial.html#turning-on-and-off-running-test-results",
+    "href": "tutorials/test_tutorial.html#turning-on-and-off-running-test-results",
+    "title": "Writing tests",
+    "section": "Turning on and off running test results",
+    "text": "Turning on and off running test results\n\nfrom time import sleep\n\n\nprint ('Sleeping...')\nsleep (2)\nprint ('Ready!')\na = 1\nb = 2\nassert a+b==3\n\n\nprint (f'previous values: {a}, {b}')\n\nprevious values: 1, 2\n\n\nTo avoid load pre-existing results, we can set the flag override to True. By doing so, the global load flag is overriden with False, unless we explicitly pass –load in the command line.\n\nprint ('Sleeping...')\nsleep (2)\nprint ('Ready!')\na = 10\nb = 20\nassert a+b==30\n\nSleeping...\nReady!\n\n\n\nprint (f'new values: {a}, {b}')\n\nnew values: 10, 20\n\n\nWe can also set the global load flag to false:\n\n\n\nchanging global load flag to False\n\n\n\nprint ('Sleeping...')\nsleep (2)\nprint ('Ready!')\na = 100\nb = 200\nassert a+b==300\n\nSleeping...\nReady!\n\n\n\nprint (f'new values: {a}, {b}')\n\nnew values: 100, 200"
+  },
+  {
+    "objectID": "tutorials/debugging.html",
+    "href": "tutorials/debugging.html",
+    "title": "Debugging",
+    "section": "",
+    "text": "a = 1\n\n\nb = 2\n\n\nassert a+b == 3"
+  },
+  {
+    "objectID": "tutorials/debugging.html#example-of-history-call",
+    "href": "tutorials/debugging.html#example-of-history-call",
+    "title": "Debugging",
+    "section": "",
+    "text": "a = 1\n\n\nb = 2\n\n\nassert a+b == 3"
+  },
+  {
+    "objectID": "tutorials/debugging.html#how-to-debug-last-call",
+    "href": "tutorials/debugging.html#how-to-debug-last-call",
+    "title": "Debugging",
+    "section": "How to debug last call",
+    "text": "How to debug last call\n\nSingle step\n\n\nStep-by-step\nGet underlying CellProcessor object\n\nc = %cell_processor\n\nIf we already called the magic function, we can get access to the call history as follows:\n\nc.call_history\n\n[('first_data --test --data', 'a = 1\\n'),\n ('second_data --test --data', 'b = 2\\n'),\n ('first_test --test', 'assert a+b == 3\\n')]\n\n\nWe need to reset the cell_processor to erase local variables:\n\nc.reset()\n\nIf we don’t have called the magic function before, we won’t have a call history, but we just can indicate it.\n\nc.call_history = [('first_data --test --data', 'a = 1\\n'),\n ('second_data --test --data', 'b = 2\\n'),\n ('first_test --test', 'assert a+b == 3\\n')]\n\nNow we simulate the calls until the point that we want to debug:\n\nfor call in c.call_history[:2]:\n    c.process_function_call (*call, add_call=False)\n\nWe import the ipdb debugger and make the call that we want to debug. In this example, this call is the one in position 2 in the call_history\n\nimport ipdb\n\n\nipdb.runcall (c.process_function_call, *c.call_history[2], add_call=False)\n\n&gt; /home/jaumeamllo/workspace/mine/nbmodular/nbmodular/core/cell2func.py(316)process_function_call()\n    315     def process_function_call (self, line, cell, add_call=True):\n--&gt; 316         call = (line, cell)\n    317         if add_call:\n\n\n\nipdb&gt;  q"
+  },
+  {
+    "objectID": "tutorials/debugging.html#how-to-debug-a-single-cell",
+    "href": "tutorials/debugging.html#how-to-debug-a-single-cell",
+    "title": "Debugging",
+    "section": "How to debug a single cell",
+    "text": "How to debug a single cell"
+  }
+]
