@@ -108,7 +108,7 @@ class FunctionProcessor (Bunch):
         save_default=False,
         io_type='pickle',
         io_locals=False,
-        io_root_path='results',
+        io_root_path=None,
         io_folder=None,
         io_file=None,
         save_args={},
@@ -120,7 +120,8 @@ class FunctionProcessor (Bunch):
         self.save_default=save_default
         self.io_type=io_type
         self.io_locals=io_locals
-        self.io_root_path=io_root_path
+        io_root_path_default = 'locals' if io_locals else 'results'
+        self.io_root_path=io_root_path_default if io_root_path is None else io_root_path
         self.io_folder=io_folder
         self.io_file=io_file
         self.save_args={} if save_args is None else eval(f'dict({save_args})') if isinstance (save_args, str) else save_args
@@ -198,7 +199,8 @@ class FunctionProcessor (Bunch):
                 self.kwarguments = kwarguments
             arguments = ', '.join (self.arguments) 
             if len(self.kwarguments)>0:
-                arguments += ', ' + ', '.join ([f'{k}={self.kwarguments[k]}' for k in self.kwarguments])
+                kwarguments = {k:(self.kwarguments[k] if not isinstance(self.kwarguments[k], str) else f'"{self.kwarguments[k]}"') for k in self.kwarguments}
+                arguments += ', ' + ', '.join ([f'{k}={kwarguments[k]}' for k in kwarguments])
         unpack_input_code=''
         pack_output_code=''
         bunch_variable = None
@@ -554,13 +556,13 @@ keys = joblib.load ('function_processor_keys.pk')
         return function_code
     
     def _add_and_evaluate_io_kwargs (self):
+        file_suffix = '_locals' if self.io_locals else '_result'
         self.kwarguments.update (
             load=False,
             save=False,
             io_type=self.io_type,
-            io_root_path=self.io_root_path,
-            io_folder=self.io_folder,
-            io_file=f'{self.name}_result' if self.io_file is None else self.io_file,
+            io_root_path=f'{self.io_root_path}/{self.io_folder}' if self.io_folder is not None else self.io_root_path,
+            io_file=f'{self.name}{file_suffix}' if self.io_file is None else self.io_file,
             load_args={k:str(self.load_args[k]) for k in self.load_args},
             save_args={k:str(self.save_args[k]) for k in self.save_args},
         )
@@ -591,7 +593,7 @@ if save:
         # add indentation
         for i, line in enumerate(new_code):
             new_code[i] = f'{" "*self.tab_size}{line}'
-        self.original_code = self.original_code + "\n\nif True:\n" + '\n'.join (new_code)
+        self.original_code = self.original_code + "\nif True:\n" + '\n'.join (new_code) + '\n\n'
 
     def _add_code_for_loading_result (self):
         path_variables_line = 'path_variables = Path (io_root_path) / f"{io_file}.{io_type}"'
@@ -849,7 +851,8 @@ class CellProcessor():
         self.save_default=False
         self.io_type='pickle'
         self.io_locals=False
-        self.io_root_path='results'
+        self.io_root_path_default_locals='locals'
+        self.io_root_path_default_result='results'
         self.io_folder=self.file_name_without_extension
         self.load_args={}
         self.save_args={}
@@ -872,7 +875,7 @@ class CellProcessor():
         self.parser.add_argument('--load-default',  action='store_true', help='have load=True as default arg value in function')
         self.parser.add_argument('--io-type', type=str, default='pickle', help='I/O functions to use. `x` means use `save_x` for saving and `load_x` for loading.')
         self.parser.add_argument('--io-locals',  action='store_true', help='save/load local variables of function')
-        self.parser.add_argument('--io-root-path',  type=str, default='results', help='root of path where function data is stored.')
+        self.parser.add_argument('--io-root-path',  type=str, default=None, help='root of path where function data is stored.')
         self.parser.add_argument('--io-folder',  type=str, default=None, help='Folder where the data is stored. It can be several folders `folder1/folder2/...`. '
                                                                                'If not indicated, the folder has the same name as the python module ')
         self.parser.add_argument('--io-file',  type=str, default=None, help='Name of file where results are saved. If not indicated, the name of the function is used, adding "result" at the end.')
@@ -1101,7 +1104,7 @@ for arg, val in zip (args_with_defaults, default_values):
         save_default=False,
         io_type='pickle',
         io_locals=False,
-        io_root_path='results',
+        io_root_path=None,
         io_folder=None,
         io_file=None,
         save_args={},
@@ -1117,13 +1120,15 @@ for arg, val in zip (args_with_defaults, default_values):
                 self.imports += 'from pathlib import Path\n'
                 self.imports += 'from nbmodular.core import function_io\n'
             self._added_io_imports = True
+        io_root_path_default = self.io_root_path_default_locals if io_locals else self.io_root_path_default_result
         this_function.set_io_args (
             io_code=io_code,
             load_default=self.load_default if load_default is None else load_default,
             save_default=self.save_default if save_default is None else save_default,
             io_type=self.io_type if io_type is None else io_type,
             io_locals=self.io_locals if io_locals is None else io_locals,
-            io_root_path=self.io_root_path if io_root_path is None else io_root_path,
+            io_root_path=io_root_path_default if io_root_path is None else io_root_path,
+            io_folder=self.io_folder if io_folder is None else io_folder,
             io_file=io_file,
             load_args=self.load_args if load_args is None else load_args,
             save_args=self.save_args if save_args is None else save_args,
@@ -1812,14 +1817,16 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
         io_action='load',
         **kwargs,
     ):
+        file_suffix = '_locals' if io_locals else '_result'
         io_type = self.io_type if io_type is None else io_type
         io_locals = self.io_locals if io_locals is None else io_locals
-        io_root_path = self.io_root_path if io_root_path is None else io_root_path
+        io_root_path_default = self.io_root_path_default_locals if io_locals else self.io_root_path_default_result
+        io_root_path=io_root_path_default if io_root_path is None else io_root_path
         io_folder = self.io_folder if io_folder is None else io_folder
-        io_file = f'{self.current_function.name}_result' if io_file is None else io_file
+        io_file = f'{self.current_function.name}{file_suffix}' if io_file is None else io_file
         load_args = self.load_args if load_args is None else eval(f'dict({load_args})') if isinstance (load_args, str) else load_args
         save_args = self.save_args if save_args is None else eval(f'dict({save_args})') if isinstance (save_args, str) else save_args
-        path_variables = Path (io_root_path) / f'{io_file}.{io_type}'
+        path_variables = Path (io_root_path) / io_folder / f'{io_file}.{io_type}'
         
         if io_action=='load':
             if path_variables.exists():
