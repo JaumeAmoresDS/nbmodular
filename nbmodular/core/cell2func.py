@@ -10,6 +10,9 @@ __all__ = ['get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_du
 
 # %% ../../nbs/cell2func.ipynb 3
 import pdb
+from textwrap import indent
+import ipdb
+from pyclbr import Function
 import joblib
 import os
 import re
@@ -200,7 +203,9 @@ class FunctionProcessor (Bunch):
             arguments = ', '.join (self.arguments) 
             if len(self.kwarguments)>0:
                 kwarguments = {k:(self.kwarguments[k] if not isinstance(self.kwarguments[k], str) else f'"{self.kwarguments[k]}"') for k in self.kwarguments}
-                arguments += ', ' + ', '.join ([f'{k}={kwarguments[k]}' for k in kwarguments])
+                if len(arguments) > 0:
+                    arguments += ', '
+                arguments += ', '.join ([f'{k}={kwarguments[k]}' for k in kwarguments])
         unpack_input_code=''
         pack_output_code=''
         bunch_variable = None
@@ -262,6 +267,11 @@ class FunctionProcessor (Bunch):
         )
         # assemble
         function_code = f'{signature}\n' + function_calls + unpack_input_code + function_code + pack_output_code + return_line
+        if self.method:
+            indented_code = ''
+            for line in function_code.splitlines():
+                indented_code += f'{" " * self.tab_size}{line}\n'
+            function_code = indented_code
         self.code = function_code
         get_ipython().run_cell(function_code)
         param_assignment_code = (
@@ -901,6 +911,7 @@ class CellProcessor():
         self.parser.add_argument('--position', type=int, help='position of function to be added')
         self.parser.add_argument('--history',  action='store_true', help='resets everything, including history')
         self.parser.add_argument('--previous-values',  action='store_true', help='deletes both current and previous values for each function')
+        self.parser.add_argument('--method',  action='store_true', help='Convert to class method.')
 
     def set_load_tests (self, value):
         if (value != self.load_tests):
@@ -1073,13 +1084,22 @@ class CellProcessor():
             function = function_list[idx]
         function.restore_locals ()
         
-    def process_function_call (self, line, cell, add_call=True):
+    def process_function_call (self, line, cell, add_call=True, is_class=False):
         call = (line, cell)
         if add_call:
             self.add_call (call)
         function_name, kwargs = self.parse_signature (line)
-        self.function (function_name, cell, call=call, original_kwargs=kwargs.copy(), **kwargs)
+        if is_class:
+            self.add_class (cell, **kwargs)
+        else:
+            self.function (function_name, cell, call=call, original_kwargs=kwargs.copy(), **kwargs)
 
+    def add_class (self, cell, **kwargs):
+        get_ipython().run_cell (cell + f'\n{" "*self.tab_size}pass')
+        #self.last_class = self.obtain_class (cell)
+        self.function_list.append (
+            FunctionProcessor (code=cell, idx=len(self.function_list))
+        )
     def add_call (self, call):
         self.call_history.append (call)
 
@@ -1092,7 +1112,10 @@ from nbmodular.core.cell2func import get_args_and_defaults_from_function_in_cell
 _, args_with_defaults, default_values = get_args_and_defaults_from_function_in_cell ()
 for arg, val in zip (args_with_defaults, default_values):
     if arg not in locals():
-        exec (arg + "=" + str(val))
+        if isinstance (val, str):
+            exec (arg + f' = "{{val}}"')
+        else:
+            exec (arg + f' = {{val}}')
 ''')
         get_ipython().run_cell(argument_initialization_code)
                    
@@ -1159,6 +1182,7 @@ for arg, val in zip (args_with_defaults, default_values):
         not_store_locals_in_disk=False,
         copy_locals=False,
         cell_idx=None,
+        method=False,
         **kwargs,
     ):
         #pdb.no_set_trace()
@@ -1233,6 +1257,7 @@ for arg, val in zip (args_with_defaults, default_values):
             copy_locals=copy_locals,
             original_kwargs=original_kwargs,
             cell_idx=cell_idx,
+            method=method,
             logger=self.logger,
         )
         if defined and permanent:
@@ -1878,6 +1903,17 @@ class CellProcessorMagic (Magics):
     def function (self, line, cell):
         "Converts cell to function"
         self.processor.process_function_call (line, cell)
+
+    @cell_magic
+    def method (self, line, cell):
+        "Converts cell to method"
+        line += '--method'
+        self.processor.process_function_call (line, cell)
+
+    @cell_magic
+    def class (self, line, cell):
+        "Converts cell to function"
+        self.processor.add_class (line, cell)
         
     @cell_magic
     def debug_cell (self, line, cell):
