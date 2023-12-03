@@ -571,7 +571,7 @@ keys = joblib.load ('function_processor_keys.pk')
             load=False,
             save=False,
             io_type=self.io_type,
-            io_root_path=f'{self.io_root_path}/{self.io_folder}' if self.io_folder is not None else self.io_root_path,
+            io_root_path=f'{self.io_root_path}/{self.io_folder}' if self.io_folder is not None and self.io_folder!='None' else self.io_root_path,
             io_file=f'{self.name}{file_suffix}' if self.io_file is None else self.io_file,
             load_args={k:str(self.load_args[k]) for k in self.load_args},
             save_args={k:str(self.save_args[k]) for k in self.save_args},
@@ -771,10 +771,7 @@ class CellProcessor():
         **kwargs,
     ):
         self.logger = logging.getLogger('CellProcessor')
-        self.logger.setLevel(log_level)
-        ch = logging.StreamHandler()
-        ch.setLevel(log_level)
-        self.logger.addHandler(ch)
+        self.set_log_level (log_level)
         
         self.restrict_inputs = restrict_inputs
         self.current_function = Bunch()
@@ -802,6 +799,9 @@ class CellProcessor():
 
         self.cell_nodes = []        
         self.cell_nodes_per_function = Bunch()
+
+        self.pipeline = None
+        self.test_pipeline = None
         
         self.imports = ''
         #self.test_imports = 'from sklearn.utils import Bunch\nfrom pathlib import Path\nimport joblib\nimport pandas as pd\nimport numpy as np\n'
@@ -821,6 +821,14 @@ class CellProcessor():
             self.file_name = 'temporary.py'
             nb_path = Path ('.').absolute()
             found_notebook = False
+            warning_message = ('Name of notebook could not be automatically detected. '
+                               'We will be using `temporary.py` as the name of the python module '
+                               'where the code from the current notebook will be exported to. '
+                               'In order to change this name, run the magic command '
+                               '%set file_name "<name_of_python_module>.py".')
+            warnings.warn (warning_message)
+            #self.logger.warning (warning_message)
+                                 
         
         self.file_name_without_extension = self.file_name.split('.')[0]
         
@@ -927,16 +935,32 @@ class CellProcessor():
         self.run_tests = value
     
     def set_file_path (self, file_path):
-        file_path = Path(file_path)
-        self.file_name = file_path.name
-        self.file_path = file_path
+        self.file_path = Path(file_path)
+        self.file_path.parent.mkdir (parents=True, exist_ok=True)
+        self.set_file_name (self.file_path.name)
+    
+    def set_file_name (self, file_name):
+        self.file_name = file_name
+        self.file_name_without_extension = self.file_name.split('.')[0]
+        self.io_folder=self.file_name_without_extension
+        self.test_file_path = self.test_file_path.parent / f'test_{self.file_name}'
+        self.file_path = self.file_path.parent / self.file_name
+
+    def set_log_level (self, log_level):
+        self.logger.setLevel(log_level)
+        ch = logging.StreamHandler()
+        ch.setLevel(log_level)
+        self.logger.addHandler(ch)
 
     def set (self, attr, value):
         if callable(getattr (self, f'set_{attr}', None)):
             getattr (self, f'set_{attr}', None) (value)
-        else:
+        elif hasattr (self, attr):
             setattr (self, attr, value)
-        
+        else:
+            list_of_attributes = [k for k in self.__dict__ if not k.startswith('_') and not k.endswith('_') and not callable(getattr (self, k, None))]
+            raise ValueError (f'Cell processor has no attribute {attr}. Existing attributes are:\n{list_of_attributes}')
+    
     def debug_function (self, call_history=None, idx=None, name=None, test=False, data=False, **kwargs):
         if call_history is not None:
             self.call_history = call_history
@@ -1851,7 +1875,8 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
         io_file = f'{self.current_function.name}{file_suffix}' if io_file is None else io_file
         load_args = self.load_args if load_args is None else eval(f'dict({load_args})') if isinstance (load_args, str) else load_args
         save_args = self.save_args if save_args is None else eval(f'dict({save_args})') if isinstance (save_args, str) else save_args
-        path_variables = Path (io_root_path) / io_folder / f'{io_file}.{io_type}'
+        io_root_path = f'{io_root_path}/{io_folder}' if io_folder!='None' else io_root_path
+        path_variables = Path (io_root_path) / f'{io_file}.{io_type}'
         
         if io_action=='load':
             if path_variables.exists():
@@ -1911,7 +1936,7 @@ class CellProcessorMagic (Magics):
         self.processor.process_function_call (line, cell)
 
     @cell_magic
-    def class (self, line, cell):
+    def add_class (self, line, cell):
         "Converts cell to function"
         self.processor.add_class (line, cell)
         
