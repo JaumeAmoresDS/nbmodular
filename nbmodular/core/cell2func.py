@@ -100,6 +100,7 @@ class FunctionProcessor (Bunch):
         self,
         **kwargs,
     ):
+        self.is_class = False
         super().__init__ (
             **kwargs,
         )
@@ -716,6 +717,12 @@ def add_function_to_list (function, function_list, idx=None, position=None):
 
 # %% ../../nbs/cell2func.ipynb 22
 def get_args_and_defaults (list_args, list_defaults):
+    if len(list_defaults)==0:
+        args_without_defaults = [arg.arg for arg in list_args]
+        args_with_defaults = []
+        default_values = []
+        return args_without_defaults, args_with_defaults, default_values
+
     default_nodes = [x for x in list_defaults if isinstance (x, ast.Constant) or isinstance (x, ast.Attribute) or isinstance (x, ast.Name)]
     if len(default_nodes)==0 and len(list_defaults)>0:
         raise ValueError ('Default values are neither constant, name, or attribute')
@@ -1043,7 +1050,7 @@ class CellProcessor():
                          self.data_function_list if data else
                          self.function_list)
         if not all:
-            function_list = [f for f in function_list if isinstance(f, FunctionProcessor)]
+            function_list = [f for f in function_list if isinstance(f, FunctionProcessor) and not f.is_class]
         return function_list
     
     def get_function_info (self, test=False, data=False):
@@ -1118,12 +1125,40 @@ class CellProcessor():
         else:
             self.function (function_name, cell, call=call, original_kwargs=kwargs.copy(), **kwargs)
 
-    def add_class (self, cell, **kwargs):
-        get_ipython().run_cell (cell + f'\n{" "*self.tab_size}pass')
-        #self.last_class = self.obtain_class (cell)
-        self.function_list.append (
-            FunctionProcessor (code=cell, idx=len(self.function_list))
+    def create_self (self, cell):
+        root = ast.parse (cell)
+        name=[x.name for x in ast.walk(root) if isinstance (x, ast.ClassDef)]
+        if len(name)!=1:
+            raise RuntimeError (f'Found {len(name)} classes, expected one.')
+        object_class_creation_code = (
+f'''
+exec ("self={name[0]}()")
+'''    
         )
+        get_ipython().run_cell(object_class_creation_code)
+        
+        return name[0]
+        
+    def add_class (self, cell, **kwargs):
+        object_creation_code = cell + f'\n{" "*self.tab_size}pass'
+        get_ipython().run_cell (object_creation_code)
+        self.last_class = self.create_self (object_creation_code)
+        self.function_list.append (
+            FunctionProcessor (
+                code=cell, 
+                idx=len(self.function_list),
+                is_class=True,
+            )
+        )
+
+    def add_method (self, method_name):
+        add_method_code = (
+f'''
+exec ("{self.last_class}.{method_name} = {method_name}")
+'''
+        )
+        get_ipython().run_cell(add_method_code)
+
     def add_call (self, call):
         self.call_history.append (call)
 
@@ -1314,6 +1349,7 @@ for arg, val in zip (args_with_defaults, default_values):
         fixed_io=False,
         restrict_inputs=None,
         merge=False,
+        io_locals=False,
         **kwargs,
     ) -> FunctionProcessor:
         load = self.load if load is None else load
@@ -1330,6 +1366,8 @@ for arg, val in zip (args_with_defaults, default_values):
             load = self.load_tests
             save = self.save_tests
             not_run = not self.run_tests
+            if load or save:
+                io_locals = True
         
         self.current_function = self.create_function (
             cell, 
@@ -1342,6 +1380,7 @@ for arg, val in zip (args_with_defaults, default_values):
             permanent=permanent,
             fixed_io=fixed_io,
             not_run=not_run,
+            io_locals=io_locals,
             **kwargs
         )
         
@@ -1367,7 +1406,7 @@ for arg, val in zip (args_with_defaults, default_values):
         
         # get variables specific about this function
         if load:
-            found = self.load_data (**kwargs)
+            found = self.load_data (io_locals=io_locals, **kwargs)
             if found:
                 not_run = True
 
@@ -1420,7 +1459,7 @@ for arg, val in zip (args_with_defaults, default_values):
             self.current_function._create_function_info_object_with_only_parsed_variables ()
         
         if save and not not_run:
-            self.save_data (**kwargs)
+            self.save_data (io_locals=io_locals, **kwargs)
         
         return self.current_function
     
@@ -1611,6 +1650,9 @@ for arg, val in zip (args_with_defaults, default_values):
                     unknown_output=unknown_output
                 )
        
+        if this_function.method:
+            self.add_method (this_function.name)
+
         if this_function.name in self.cell_nodes_per_function:
             self.cell_nodes_per_function[this_function.name].append(this_function.copy())
         else:
@@ -1938,7 +1980,7 @@ class CellProcessorMagic (Magics):
     @cell_magic
     def add_class (self, line, cell):
         "Converts cell to function"
-        self.processor.add_class (line, cell)
+        self.processor.add_class (cell)
         
     @cell_magic
     def debug_cell (self, line, cell):
@@ -2185,6 +2227,8 @@ def store_variables (
         **load_args
     )
     if not io_locals:
+        if not isinstance (current_values, list) or isinstance (current_values, tuple):
+            current_values = [current_values]
         current_values = {k: v for k, v in zip (return_values, current_values)}
     locals_.update (current_values)
     
