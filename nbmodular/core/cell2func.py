@@ -124,32 +124,6 @@ class FunctionProcessor (Bunch):
             **kwargs,
         )
 
-    def set_io_args (
-        self,
-        io_code=False,
-        load_default=False,
-        save_default=False,
-        io_type='pickle',
-        io_locals=False,
-        io_root_path=None,
-        io_folder=None,
-        io_file=None,
-        save_args={},
-        load_args={},
-        **kwargs,
-    ):
-        self.io_code=io_code
-        self.load_default=load_default
-        self.save_default=save_default
-        self.io_type=io_type
-        self.io_locals=io_locals
-        io_root_path_default = 'locals' if io_locals else 'results'
-        self.io_root_path=io_root_path_default if io_root_path is None else io_root_path
-        self.io_folder=io_folder
-        self.io_file=io_file
-        self.save_args={} if save_args is None else eval(f'dict({save_args})') if isinstance (save_args, str) else save_args
-        self.load_args={} if load_args is None else eval(f'dict({load_args})') if isinstance (load_args, str) else load_args
-
     def to_file (self, file_path, mode='w'):
         with open (file_path, mode=mode) as file:
             file.write (self.code)
@@ -600,7 +574,7 @@ keys = joblib.load ('function_processor_keys.pk')
             load=False,
             save=False,
             io_type=self.io_type,
-            io_root_path=f'{self.io_root_path}/{self.io_folder}' if self.io_folder is not None and self.io_folder!='None' else self.io_root_path,
+            io_root_path=self.io_root_path,
             io_file=f'{self.name}{file_suffix}' if self.io_file is None else self.io_file,
             load_args={k:str(self.load_args[k]) for k in self.load_args},
             save_args={k:str(self.save_args[k]) for k in self.save_args},
@@ -893,25 +867,62 @@ class CellProcessor():
             self.test_file_path = nb_path /  f'test_{file_name}'
             
         self.call_history = []
-        self.load_tests = True
-        self.save_tests = True
-        self.run_tests = True
-        self.save = False
-        self.load = False
 
-        self.io_code=False
-        self.load_default=False
-        self.save_default=False
-        self.io_type='pickle'
-        self.io_locals=False
-        self.io_root_path_default_locals='locals'
-        self.io_root_path_default_result='results'
-        self.io_folder=self.file_name_without_extension
-        self.load_args={}
-        self.save_args={}
+        self.default_load=False
+        self.overriden_load=None
+        self.default_test_load=True
+        self.overriden_test_load=None
+
+        self.default_save=False
+        self.overriden_save=None
+        self.default_test_save=True
+        self.overriden_test_save=None
+
+        self.default_io_type='pickle'
+        self.overriden_io_type=None
+        self.default_test_io_type='pickle'
+        self.overriden_test_io_type=None
+
+        self.default_io_code=False
+        self.overriden_io_code=None
+        self.default_test_io_code=False
+        self.overriden_test_io_code=None
+
+        self.default_io_locals=False
+        self.overriden_io_locals=None
+        self.default_test_io_locals=True
+        self.overriden_test_io_locals=None
+        
+        self.default_io_folder=self.file_name_without_extension
+        self.overriden_io_folder=None
+        self.default_test_io_folder=self.file_name_without_extension
+        self.overriden_test_io_folder=None
+
+        self.default_io_locals_root_path='locals'
+        self.overriden_io_locals_root_path=None
+        self.default_test_io_locals_root_path='locals'
+        self.overriden_test_io_locals_root_path=None
+        
+        self.default_io_result_root_path='results'
+        self.overriden_io_result_root_path=None
+        self.default_test_io_result_root_path='results'
+        self.overriden_test_io_result_root_path=None
+
+        self.default_run=True
+        self.overriden_run=None
+        self.default_test_run=True
+        self.overriden_test_run=None
+
+        self.default_load_args={}
+        self.overriden_load_args=None
+        self.default_test_load_args={}
+        self.overriden_test_load_args=None
+        self.default_save_args={}
+        self.overriden_save_args=None
+        self.default_test_save_args={}
+        self.overriden_test_save_args=None
 
         self._added_io_imports = False
-
         self.variable_classifier = VariableClassifier ()
         
         self.parser = argparse.ArgumentParser(description='Arguments to `function` magic cell.')
@@ -959,17 +970,17 @@ class CellProcessor():
         self.parser.add_argument('--method',  action='store_true', help='Convert to class method.')
 
     def set_load_tests (self, value):
-        if (value != self.load_tests):
+        if (value != self.default_test_load):
             self.logger.info (f'changing global load flag to {value}')
-        self.load_tests = value
+        self.default_test_load = value
     def set_save_tests (self, value):
-        if (value != self.save_tests):
+        if (value != self.default_test_save):
             self.logger.info (f'changing global save flag to {value}')
-        self.save_tests = value
+        self.default_test_save = value
     def set_run_tests (self, value):
-        if (value != self.run_tests):
+        if (value != self.default_test_run):
             self.logger.info (f'changing global run flag to {value}')
-        self.run_tests = value
+        self.default_test_run = value
     
     def set_file_path (self, file_path):
         self.file_path = Path(file_path)
@@ -979,7 +990,7 @@ class CellProcessor():
     def set_file_name (self, file_name):
         self.file_name = file_name
         self.file_name_without_extension = self.file_name.split('.')[0]
-        self.io_folder=self.file_name_without_extension
+        self.default_io_folder=self.file_name_without_extension
         self.test_file_path = self.test_file_path.parent / f'test_{self.file_name}'
         self.file_path = self.file_path.parent / self.file_name
 
@@ -1207,44 +1218,6 @@ for arg, val in zip (args_with_defaults, default_values):
             exec (arg + f' = {{val}}')
 ''')
         get_ipython().run_cell(argument_initialization_code)
-                   
-    def set_function_io_args (
-        self,
-        this_function,
-        io_code=False,
-        load_default=False,
-        save_default=False,
-        io_type='pickle',
-        io_locals=False,
-        io_root_path=None,
-        io_folder=None,
-        io_file=None,
-        save_args={},
-        load_args={},
-        **kwargs,
-    ):
-        io_code=self.io_code if io_code is None else io_code
-        if io_code and not self._added_io_imports:
-            if this_function.test:
-                self.test_imports += 'from pathlib import Path\n'
-                self.test_imports += 'from nbmodular.core import function_io\n'
-            else:
-                self.imports += 'from pathlib import Path\n'
-                self.imports += 'from nbmodular.core import function_io\n'
-            self._added_io_imports = True
-        io_root_path_default = self.io_root_path_default_locals if io_locals else self.io_root_path_default_result
-        this_function.set_io_args (
-            io_code=io_code,
-            load_default=self.load_default if load_default is None else load_default,
-            save_default=self.save_default if save_default is None else save_default,
-            io_type=self.io_type if io_type is None else io_type,
-            io_locals=self.io_locals if io_locals is None else io_locals,
-            io_root_path=io_root_path_default if io_root_path is None else io_root_path,
-            io_folder=self.io_folder if io_folder is None else io_folder,
-            io_file=io_file,
-            load_args=self.load_args if load_args is None else load_args,
-            save_args=self.save_args if save_args is None else save_args,
-        )
 
     def create_function (
         self, 
@@ -1258,7 +1231,6 @@ for arg, val in zip (args_with_defaults, default_values):
         data=False,
         permanent=False,
         fixed_io=False,
-        not_run=False,
         returns_dict=False,
         returns_bunch=False,
         unpack_bunch=None,
@@ -1275,6 +1247,7 @@ for arg, val in zip (args_with_defaults, default_values):
         **kwargs,
     ):
         #pdb.no_set_trace()
+
         original_name=func
         root = ast.parse (cell)
         name=[x.name for x in ast.walk(root) if isinstance (x, ast.FunctionDef)]
@@ -1332,7 +1305,6 @@ for arg, val in zip (args_with_defaults, default_values):
             defined=defined,
             permanent=permanent,
             fixed_io=fixed_io,
-            not_run=not_run,
             previous_values={},
             current_values={},
             returns_dict=returns_dict,
@@ -1352,10 +1324,86 @@ for arg, val in zip (args_with_defaults, default_values):
         if defined and permanent:
             this_function.code = cell
         this_function.parse_variables ()
-        self.set_function_io_args (this_function, **kwargs)
+        self.set_function_io_args (this_function, test=test, **kwargs)
         
         return this_function
     
+    def set_function_attr (self, this_function, attr, value, test):
+        test_string = 'test_' if test else ''
+        overriden_value = getattr (self, f'overriden_{test_string}{attr}')
+        default_value = getattr (self, f'default_{test_string}{attr}')
+        value  = overriden_value if overriden_value is not None  else default_value if value is None else value
+        setattr (this_function, attr, value)
+
+    def set_function_io_args (
+        self,
+        this_function,
+        load=None,
+        save=None,
+        io_type=None,
+        io_code=None,
+        io_locals=None,
+        io_folder=None,
+        io_root_path=None,
+        io_file=None,
+        save_args=None,
+        load_args=None,
+        not_run=None,
+        test=False,
+        **kwargs,
+    ):
+        self.set_function_attr (this_function, 'load', load, test)
+        self.set_function_attr (this_function, 'save', save, test)
+        self.set_function_attr (this_function, 'io_type', io_type, test)
+        self.set_function_attr (this_function, 'io_code', io_code, test)
+        self.set_function_attr (this_function, 'io_locals', io_locals, test)
+        self.set_function_attr (this_function, 'io_folder', io_folder, test)
+        self.set_function_attr (this_function, 'load_args', load_args, test)
+        self.set_function_attr (this_function, 'save_args', save_args, test)
+        this_function.load_args = eval (f'dict({this_function.load_args})') if isinstance (this_function.load_args, str) else this_function.load_args
+        this_function.save_args = eval (f'dict({this_function.save_args})') if isinstance (this_function.save_args, str) else this_function.save_args
+
+        if this_function.io_locals:
+            if not test:
+                this_function.io_root_path = (self.overriden_io_locals_root_path if self.overriden_io_locals_root_path is not None else
+                                              self.default_io_locals_root_path if io_root_path is None else
+                                              io_root_path)
+            else:
+                this_function.io_root_path = (self.overriden_test_io_locals_root_path if self.overriden_test_io_locals_root_path is not None else
+                                              self.default_test_io_locals_root_path if io_root_path is None else
+                                              io_root_path)
+        else:
+            if not test:
+                this_function.io_root_path = (self.overriden_io_result_root_path if self.overriden_io_result_root_path is not None else
+                                              self.default_io_result_root_path if io_root_path is None else
+                                              io_root_path)
+            else:
+                this_function.io_root_path = (self.overriden_test_io_result_root_path if self.overriden_test_io_result_root_path is not None else
+                                              self.default_test_io_result_root_path if io_root_path is None else
+                                              io_root_path)
+
+        this_function.io_root_path = f'{this_function.io_root_path}/{this_function.io_folder}' if this_function.io_folder is not None and this_function.io_folder != 'None' else this_function.io_root_path
+        
+        if not test:
+            this_function.not_run = (not self.overriden_run if self.overriden_run is not None else
+                                    not self.default_run if not_run is None else
+                                    not_run)
+        else:
+            this_function.not_run = (not self.overriden_test_run if self.overriden_test_run is not None else
+                                    not self.default_test_run if not_run is None else
+                                    not_run)
+
+        this_function.io_file=io_file
+
+        if this_function.io_code and not self._added_io_imports:
+            if this_function.test:
+                self.test_imports += 'from pathlib import Path\n'
+                self.test_imports += 'from nbmodular.core import function_io\n'
+            else:
+                self.imports += 'from pathlib import Path\n'
+                self.imports += 'from nbmodular.core import function_io\n'
+            self._added_io_imports = True
+
     def create_function_and_run_code(
         self,
         func, 
@@ -1369,35 +1417,20 @@ for arg, val in zip (args_with_defaults, default_values):
         make_function=True,
         update_previous_functions=True,
         show=False,
-        load=None,
-        save=None,
-        not_run=False,
-        override=False,
         test=False,
         data=False,
         permanent=False,
         fixed_io=False,
         restrict_inputs=None,
         merge=False,
-        io_locals=False,
         **kwargs,
     ) -> FunctionProcessor:
-        load = self.load if load is None else load
-        save = self.save if save is None else save
-
         if restrict_inputs is None:
             restrict_inputs = self.restrict_inputs
         store_values = not not_store
         #pdb.no_set_trace()
         if test:
             func = 'test_' + func
-            
-        if test and not data and not override:
-            load = self.load_tests
-            save = self.save_tests
-            not_run = not self.run_tests
-            if load or save:
-                io_locals = True
         
         self.current_function = self.create_function (
             cell, 
@@ -1409,8 +1442,6 @@ for arg, val in zip (args_with_defaults, default_values):
             data=data,
             permanent=permanent,
             fixed_io=fixed_io,
-            not_run=not_run,
-            io_locals=io_locals,
             **kwargs
         )
         
@@ -1435,10 +1466,10 @@ for arg, val in zip (args_with_defaults, default_values):
             self.current_function.idx = function_list[idx].idx
         
         # get variables specific about this function
-        if load:
-            found = self.load_data (io_locals=io_locals, **kwargs)
+        if self.current_function.load:
+            found = self.load_data (**kwargs)
             if found:
-                not_run = True
+                self.current_function.not_run = True
 
         is_test_function = self.current_function.test and not self.current_function.data
         function_in_previous_cells = function_list[idx] if merge and idx is not None else None
@@ -1447,7 +1478,7 @@ for arg, val in zip (args_with_defaults, default_values):
             store_values=store_values, 
             first_call=first_call,
             function_in_previous_cells=function_in_previous_cells,
-            not_run=not_run,
+            not_run=self.current_function.not_run,
         )
                     
         self.current_function = self.update_pipeline (
@@ -1460,7 +1491,7 @@ for arg, val in zip (args_with_defaults, default_values):
             unknown_output=unknown_output,
             make_function=make_function,
             update_previous_functions=update_previous_functions,
-            not_run=not_run,
+            not_run=self.current_function.not_run,
             store_values=store_values,
             first_call=first_call,
         )
@@ -1483,13 +1514,13 @@ for arg, val in zip (args_with_defaults, default_values):
         else:
             self.all_variables |= set(self.current_function.all_variables)            
         
-        if not not_run:
+        if not self.current_function.not_run:
             self.current_function._update_function_info_object ()
         else:
             self.current_function._create_function_info_object_with_only_parsed_variables ()
         
-        if save and not not_run:
-            self.save_data (io_locals=io_locals, **kwargs)
+        if self.current_function.save and not self.current_function.not_run:
+            self.save_data (**kwargs)
         
         return self.current_function
     
@@ -1928,48 +1959,34 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
 
     def run_io  (
         self, 
-        io_type=None,
-        io_locals=None,
-        io_root_path=None,
-        io_folder=None,
         io_file=None,
-        load_args=None,
-        save_args=None,
         io_action='load',
         **kwargs,
     ):
-        file_suffix = '_locals' if io_locals else '_result'
-        io_type = self.io_type if io_type is None else io_type
-        io_locals = self.io_locals if io_locals is None else io_locals
-        io_root_path_default = self.io_root_path_default_locals if io_locals else self.io_root_path_default_result
-        io_root_path=io_root_path_default if io_root_path is None else io_root_path
-        io_folder = self.io_folder if io_folder is None else io_folder
+        file_suffix = '_locals' if self.current_function.io_locals else '_result'
         io_file = f'{self.current_function.name}{file_suffix}' if io_file is None else io_file
-        load_args = self.load_args if load_args is None else eval(f'dict({load_args})') if isinstance (load_args, str) else load_args
-        save_args = self.save_args if save_args is None else eval(f'dict({save_args})') if isinstance (save_args, str) else save_args
-        io_root_path = f'{io_root_path}/{io_folder}' if io_folder!='None' else io_root_path
-        path_variables = Path (io_root_path) / f'{io_file}.{io_type}'
+        path_variables = Path (self.current_function.io_root_path) / f'{io_file}.{self.current_function.io_type}'
         
         if io_action=='load':
             if path_variables.exists():
                 self.current_function.store_variables (
                     path_variables,
-                    io_type,
-                    io_locals,
-                    load_args,
+                    self.current_function.io_type,
+                    self.current_function.io_locals,
+                    self.current_function.load_args,
                 )
                 return True
             else:
                 return False
             
         else:
-            if not io_locals:
+            if not self.current_function.io_locals:
                 data_to_save = [self.current_function.current_values[k] for k in self.current_function.return_values] 
                 data_to_save = None if len(data_to_save)==0 else data_to_save[0] if len(data_to_save)==1 else data_to_save
             else:
                 data_to_save = self.current_function.current_values
 
-            function_io.save (data_to_save, path_variables, io_type, **save_args)
+            function_io.save (data_to_save, path_variables, self.current_function.io_type, **self.current_function.save_args)
 
     def load_data (self, **kwargs):
         return self.run_io (io_action='load', **kwargs)
