@@ -582,8 +582,8 @@ keys = joblib.load ('function_processor_keys.pk')
         
         io_argument_initialization_code = (
 f'''
-exec ("load=False")
-exec ("save=False")
+exec ("load={self.load_arg}")
+exec ("save={self.save_arg}")
 exec ("io_type='{self.io_type}'")
 exec ("io_root_path='{self.io_root_path}'")
 exec ("io_folder='{self.io_folder}'")
@@ -767,6 +767,15 @@ def get_args_and_defaults_from_function_in_cell ():
     root = ast.parse (cell)
     return get_args_and_defaults_from_ast (root)
 
+def _set_pars_attr (pars, attr, use_not=False):
+    if not getattr (pars, attr) and not getattr (pars, f'not_{attr}'):
+        if use_not:
+            setattr (pars, f'not_{attr}', None)
+        else:
+            setattr (pars, attr, None)
+    elif getattr (pars, attr) and getattr (pars, f'not_{attr}'):
+        raise ValueError (f'{attr} and not-{attr} cannot be passed at the same time')
+
 # %% ../../nbs/cell2func.ipynb 28
 class CellProcessor():
     """
@@ -908,11 +917,6 @@ class CellProcessor():
         self.default_test_io_result_root_path='results'
         self.overriden_test_io_result_root_path=None
 
-        self.default_run=True
-        self.overriden_run=None
-        self.default_test_run=True
-        self.overriden_test_run=None
-
         self.default_load_args={}
         self.overriden_load_args=None
         self.default_test_load_args={}
@@ -921,6 +925,20 @@ class CellProcessor():
         self.overriden_save_args=None
         self.default_test_save_args={}
         self.overriden_test_save_args=None
+
+        self.default_load_arg=False
+        self.overriden_load_arg=None
+        self.default_test_load_arg=True
+        self.overriden_test_load_arg=None
+        self.default_save_arg=False
+        self.overriden_save_arg=False
+        self.default_test_save_arg=True
+        self.overriden_test_save_arg=None
+
+        self.default_run=True
+        self.overriden_run=None
+        self.default_test_run=True
+        self.overriden_test_run=None
 
         self._added_io_imports = False
         self.variable_classifier = VariableClassifier ()
@@ -935,18 +953,25 @@ class CellProcessor():
         self.parser.add_argument('-m', '--merge',  action='store_true', help='merge with previous function')
         self.parser.add_argument('-s', '--show',  action='store_true', help='show function code')
         self.parser.add_argument('-l', '--load',  action='store_true', help='load variables')
+        self.parser.add_argument('--not-load',  action='store_true', help='load variables')
         self.parser.add_argument('--save',  action='store_true', help='save variables')
+        self.parser.add_argument('--not-save',  action='store_true', help='save variables')
         self.parser.add_argument('--io-code',  action='store_true', help='add I/O code to function')
-        self.parser.add_argument('--save-default',  action='store_true', help='have save=True as default arg value in function')
-        self.parser.add_argument('--load-default',  action='store_true', help='have load=True as default arg value in function')
+        self.parser.add_argument('--not-io-code',  action='store_true', help='add I/O code to function')
+        self.parser.add_argument('--save-arg',  action='store_true', help='have save=True as default arg value in function')
+        self.parser.add_argument('--not-save-arg',  action='store_true', help='have save=True as default arg value in function')
+        self.parser.add_argument('--load-arg',  action='store_true', help='have load=True as default arg value in function')
+        self.parser.add_argument('--not-load-arg',  action='store_true', help='have load=True as default arg value in function')
         self.parser.add_argument('--io-type', type=str, default='pickle', help='I/O functions to use. `x` means use `save_x` for saving and `load_x` for loading.')
         self.parser.add_argument('--io-locals',  action='store_true', help='save/load local variables of function')
+        self.parser.add_argument('--not-io-locals',  action='store_true', help='save/load local variables of function')
         self.parser.add_argument('--io-root-path',  type=str, default=None, help='root of path where function data is stored.')
         self.parser.add_argument('--io-folder',  type=str, default=None, help='Folder where the data is stored. It can be several folders `folder1/folder2/...`. '
                                                                                'If not indicated, the folder has the same name as the python module ')
         self.parser.add_argument('--io-file',  type=str, default=None, help='Name of file where results are saved. If not indicated, the name of the function is used, adding "result" at the end.')
         self.parser.add_argument('--save-args',  type=str, default='', help='Arguments passed to save function, like so: "param1=value1, param2=value2"')
         self.parser.add_argument('--load-args',  type=str, default='', help='Arguments passed to load function, like so: "param1=value1, param2=value2"')
+        self.parser.add_argument('--run',  action='store_true', help='do not execute the contents of the cell')
         self.parser.add_argument('-n', '--not-run',  action='store_true', help='do not execute the contents of the cell')
         self.parser.add_argument('--not-store',  action='store_true', help='do not store local values from cell')
         self.parser.add_argument('--not-store-locals-in-disk',  action='store_true', help='do not store local values from cell in disk')
@@ -1000,7 +1025,12 @@ class CellProcessor():
         ch.setLevel(log_level)
         self.logger.addHandler(ch)
 
-    def set (self, attr, value):
+    def set_value(self, attr, value, convert=True):
+        if convert:
+            try:
+                value = eval (value)
+            except:
+                pass
         if callable(getattr (self, f'set_{attr}', None)):
             getattr (self, f'set_{attr}', None) (value)
         elif hasattr (self, attr):
@@ -1348,6 +1378,8 @@ for arg, val in zip (args_with_defaults, default_values):
         io_file=None,
         save_args=None,
         load_args=None,
+        load_arg=None,
+        save_arg=None,
         not_run=None,
         test=False,
         **kwargs,
@@ -1360,6 +1392,8 @@ for arg, val in zip (args_with_defaults, default_values):
         self.set_function_attr (this_function, 'io_folder', io_folder, test)
         self.set_function_attr (this_function, 'load_args', load_args, test)
         self.set_function_attr (this_function, 'save_args', save_args, test)
+        self.set_function_attr (this_function, 'load_arg', load_arg, test)
+        self.set_function_attr (this_function, 'save_arg', save_arg, test)
         this_function.load_args = eval (f'dict({this_function.load_args})') if isinstance (this_function.load_args, str) else this_function.load_args
         this_function.save_args = eval (f'dict({this_function.save_args})') if isinstance (this_function.save_args, str) else this_function.save_args
 
@@ -1768,9 +1802,21 @@ for arg, val in zip (args_with_defaults, default_values):
     
     def parse_args (self, line):
         argv = shlex.split(line, posix=(os.name == 'posix'))
-        pars = self.parser.parse_args(argv)
-        kwargs = vars(pars)
+        kwargs, _ = self._parse_args (argv)
         return kwargs
+    
+    def _parse_args (self, argv):
+        pars = self.parser.parse_args(argv)
+        _set_pars_attr (pars, 'load')
+        _set_pars_attr (pars, 'save')
+        _set_pars_attr (pars, 'io_code')
+        _set_pars_attr (pars, 'save_arg')
+        _set_pars_attr (pars, 'load_arg')
+        _set_pars_attr (pars, 'io_locals')
+        _set_pars_attr (pars, 'run', use_not=True)
+        
+        kwargs = vars(pars)
+        return kwargs, pars
                 
     def parse_signature (self, line):
         argv = shlex.split(line, posix=(os.name == 'posix'))
@@ -1783,6 +1829,7 @@ for arg, val in zip (args_with_defaults, default_values):
             unknown_output=True
         )
         found_io = False
+        idx=0
         for idx, arg in enumerate(argv):
             if arg and arg.startswith('-') and arg != '-' and arg != '->':
                 found_io = True
@@ -1790,17 +1837,14 @@ for arg, val in zip (args_with_defaults, default_values):
         if found_io and idx==0:
             function_name = ''
             ##pdb.no_set_trace()
+        kwargs, pars = self._parse_args (argv[idx:])
         if found_io:
-            pars = self.parser.parse_args(argv[idx:])
             unknown_input = 'input' not in pars
             if not unknown_input:
                 signature.update (input=() if pars.input==['None'] else pars.input, unknown_input=pars.input is None)
             unknown_output = 'output' not in pars
             if not unknown_output:
                 signature.update (output=() if pars.output==['None'] else pars.output, unknown_output=pars.output is None)
-            kwargs = vars(pars)
-        else:
-            kwargs = {}
         kwargs.update (signature)
             
         return function_name, kwargs
@@ -2171,7 +2215,7 @@ class CellProcessorMagic (Magics):
         if len(values) != 2:
             raise ValueError ('The set line magic should have exactly two arguments separated by space: %set attr value')
         attr, value = values
-        self.processor.set (attr, eval(value))
+        self.processor.set_value (attr, value)
 
 # %% ../../nbs/cell2func.ipynb 32
 def load_ipython_extension(ipython):
