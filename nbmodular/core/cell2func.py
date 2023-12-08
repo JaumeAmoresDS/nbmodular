@@ -119,7 +119,9 @@ class FunctionProcessor (Bunch):
         self,
         **kwargs,
     ):
-        self.is_class = False
+        self.is_class=False
+        self.is_pipeline=False
+        self.pipeline_name_or_default=None
         super().__init__ (
             **kwargs,
         )
@@ -767,12 +769,10 @@ def get_args_and_defaults_from_function_in_cell ():
     root = ast.parse (cell)
     return get_args_and_defaults_from_ast (root)
 
-def _set_pars_attr (pars, attr, use_not=False):
+def _set_pars_attr (pars, attr):
     if not getattr (pars, attr) and not getattr (pars, f'not_{attr}'):
-        if use_not:
-            setattr (pars, f'not_{attr}', None)
-        else:
-            setattr (pars, attr, None)
+        setattr (pars, f'not_{attr}', None)
+        setattr (pars, attr, None)
     elif getattr (pars, attr) and getattr (pars, f'not_{attr}'):
         raise ValueError (f'{attr} and not-{attr} cannot be passed at the same time')
 
@@ -820,6 +820,8 @@ class CellProcessor():
 
         self.pipeline = None
         self.test_pipeline = None
+
+        self.pipelines = ['default_pipeline']
         
         self.imports = ''
         #self.test_imports = 'from sklearn.utils import Bunch\nfrom pathlib import Path\nimport joblib\nimport pandas as pd\nimport numpy as np\n'
@@ -940,6 +942,13 @@ class CellProcessor():
         self.default_test_run=True
         self.overriden_test_run=None
 
+        self.default_pipe=True
+        self.overriden_pipe=None
+        self.default_test_pipe=False
+        self.overriden_test_pipe=None
+
+        self.default_pipe_name=f'{self.file_name_without_extension}_pipeline'
+
         self._added_io_imports = False
         self.variable_classifier = VariableClassifier ()
         
@@ -987,12 +996,14 @@ class CellProcessor():
         self.parser.add_argument('-d', '--data',  action='store_true', help='data function')
         self.parser.add_argument('-p', '--permanent',  action='store_true', help='do not change the contents of the function')
         self.parser.add_argument('--fixed-io',  action='store_true', help='do not change the inputs and outputs when %%function is applied on a defined function, e.g., %%function\ndef my_function...')
-        self.parser.add_argument('--name', type=str, help='name of function to debug')
         self.parser.add_argument('--idx', type=int, help='position of function to debug')
         self.parser.add_argument('--position', type=int, help='position of function to be added')
         self.parser.add_argument('--history',  action='store_true', help='resets everything, including history')
         self.parser.add_argument('--previous-values',  action='store_true', help='deletes both current and previous values for each function')
         self.parser.add_argument('--method',  action='store_true', help='Convert to class method.')
+        self.parser.add_argument('--pipe-name', type=str, default='default_pipeline', help='name of pipeline - if default, default_pipe_name is used. This is, initially, the name of the python module.')
+        self.parser.add_argument('--pipe',  action='store_true', help='Insert function into pipeline.')
+        self.parser.add_argument('--not-pipe',  action='store_true', help='Do not insert function into pipeline.')
 
     def set_load_tests (self, value):
         if (value != self.default_test_load):
@@ -1013,9 +1024,12 @@ class CellProcessor():
         self.set_file_name (self.file_path.name)
     
     def set_file_name (self, file_name):
+        change_default_pipe_name = self.default_pipe_name==f'{self.file_name_without_extension}_pipeline'
         self.file_name = file_name
         self.file_name_without_extension = self.file_name.split('.')[0]
         self.default_io_folder=self.file_name_without_extension
+        if change_default_pipe_name:
+            self.default_pipe_name=f'{self.file_name_without_extension}_pipeline'
         self.test_file_path = self.test_file_path.parent / f'test_{self.file_name}'
         self.file_path = self.file_path.parent / self.file_name
 
@@ -1024,6 +1038,11 @@ class CellProcessor():
         ch = logging.StreamHandler()
         ch.setLevel(log_level)
         self.logger.addHandler(ch)
+    
+    def set_pipe (self, function_name, pipeline_name):
+        self.function_info[function_name].pipeline_name=pipeline_name
+        if pipeline_name is not None and pipeline_name!='None' and pipeline_name not in self.pipelines:
+            self.pipelines.append(pipeline_name)
 
     def set_value(self, attr, value, convert=True):
         if convert:
@@ -1069,7 +1088,7 @@ class CellProcessor():
         for call in call_history:
             self.process_function_call (*call, add_call=False)
         
-    def reset_function_list (self, function_list, function_info, previous_values=False, only_previous_values=False):
+    def reset_function_list (self, function_list, previous_values=False, only_previous_values=False):
         if len(function_list)==0:
             return [], Bunch()
         if not only_previous_values:
@@ -1090,10 +1109,9 @@ class CellProcessor():
         return [], Bunch()
     
     def delete_globals (self, **kwargs):
-        self.reset_function_list (self.test_data_function_list, self.test_data_function_info, previous_values=True, only_previous_values=True)
-        self.reset_function_list (self.test_function_list, self.test_function_info, previous_values=True, only_previous_values=True)
-        self.reset_function_list (self.data_function_list, self.data_function_info, previous_values=True, only_previous_values=True)
-        self.reset_function_list (self.function_list, self.function_info, previous_values=True, only_previous_values=True)
+        for test in [False, True]:
+            for data in [False, True]:
+                self.reset_function_list (self.get_function_list (test=test, data=data), previous_values=True, only_previous_values=True)
         
     def reset (self, history=False, previous_values=False, **kwargs):
         if previous_values:
@@ -1115,13 +1133,25 @@ class CellProcessor():
             self.logger.info ('Removing call history')
             self.call_history = []
             
-    def get_function_list (self, test=False, data=False, all=False):
+    def get_functions_from_pipeline (self, pipeline_name_or_default):
+        function_list = self.get_function_list (test=False, data=True) + self.get_function_list (test=False, data=False)
+        return [f for f in function_list if f.pipeline_name_or_default==pipeline_name_or_default]
+
+    def get_pipeline_functions (self, test=False):
+        if test:
+            return [self.test_function_info['default_test_pipeline']]
+        else:
+            return [self.function_info[pipeline_name_of_default] for pipeline_name_of_default in self.pipelines]
+
+    def get_function_list (self, test=False, data=False, all=False, include_pipelines=False):
         function_list = (self.test_data_function_list if test and data else
                          self.test_function_list if test else
                          self.data_function_list if data else
-                         self.function_list)
+                         self.function_list).copy()
         if not all:
             function_list = [f for f in function_list if isinstance(f, FunctionProcessor) and not f.is_class]
+        if include_pipelines:
+            function_list += self.get_pipeline_functions (test=test)
         return function_list
     
     def get_function_info (self, test=False, data=False):
@@ -1358,10 +1388,13 @@ for arg, val in zip (args_with_defaults, default_values):
         
         return this_function
     
-    def set_function_attr (self, this_function, attr, value, test):
+    def set_function_attr (self, this_function, attr, value, test, negate=False):
         test_string = 'test_' if test else ''
         overriden_value = getattr (self, f'overriden_{test_string}{attr}')
         default_value = getattr (self, f'default_{test_string}{attr}')
+        if negate:
+            overriden_value = not overriden_value
+            default_value = not default_value
         value  = overriden_value if overriden_value is not None  else default_value if value is None else value
         setattr (this_function, attr, value)
 
@@ -1381,6 +1414,7 @@ for arg, val in zip (args_with_defaults, default_values):
         load_arg=None,
         save_arg=None,
         not_run=None,
+        not_pipe=None,
         test=False,
         **kwargs,
     ):
@@ -1394,6 +1428,9 @@ for arg, val in zip (args_with_defaults, default_values):
         self.set_function_attr (this_function, 'save_args', save_args, test)
         self.set_function_attr (this_function, 'load_arg', load_arg, test)
         self.set_function_attr (this_function, 'save_arg', save_arg, test)
+        self.set_function_attr (this_function, 'run', not_run, test, negate=True)
+        self.set_function_attr (this_function, 'pipe', not_pipe, test, negate=True)
+
         this_function.load_args = eval (f'dict({this_function.load_args})') if isinstance (this_function.load_args, str) else this_function.load_args
         this_function.save_args = eval (f'dict({this_function.save_args})') if isinstance (this_function.save_args, str) else this_function.save_args
 
@@ -1418,15 +1455,6 @@ for arg, val in zip (args_with_defaults, default_values):
 
         this_function.io_root_path = f'{this_function.io_root_path}/{this_function.io_folder}' if this_function.io_folder is not None and this_function.io_folder != 'None' else this_function.io_root_path
         
-        if not test:
-            this_function.not_run = (not self.overriden_run if self.overriden_run is not None else
-                                    not self.default_run if not_run is None else
-                                    not_run)
-        else:
-            this_function.not_run = (not self.overriden_test_run if self.overriden_test_run is not None else
-                                    not self.default_test_run if not_run is None else
-                                    not_run)
-
         this_function.io_file=io_file
 
         if this_function.io_code and not self._added_io_imports:
@@ -1683,14 +1711,12 @@ for arg, val in zip (args_with_defaults, default_values):
         cell,
         merge=False,
         show=False,
-        register_pipeline=True,
-        pipeline_name=None,
+        pipe_name='default_pipeline',
         write=True,
         test=False,
         data=False,
         idx=None,
         position=None,
-        not_run=False,
         input=None,
         output=None,
         unknown_input=True,
@@ -1709,7 +1735,6 @@ for arg, val in zip (args_with_defaults, default_values):
             test=test, 
             data=data, 
             idx=idx, 
-            not_run=not_run, 
             input=input,
             output=output,
             unknown_input=unknown_input,
@@ -1756,10 +1781,15 @@ for arg, val in zip (args_with_defaults, default_values):
         self.cell_nodes.append(this_function)
         self.export_cell_nodes ()
             
-        if register_pipeline:
-            self.register_pipeline (pipeline_name=pipeline_name)
+        get_ipython().run_cell(self.imports)
+        get_ipython().run_cell(self.test_imports)
+        
+        if not this_function.not_pipe:
+            this_function.pipeline_name_or_default=pipe_name
+            self.register_pipeline (pipeline_name_or_default=pipe_name)
         else:
-            self.pipeline = None
+            this_function.pipeline_name_or_default=None
+
         if write:
             self.write ()
             self.write (test=True)
@@ -1813,7 +1843,8 @@ for arg, val in zip (args_with_defaults, default_values):
         _set_pars_attr (pars, 'save_arg')
         _set_pars_attr (pars, 'load_arg')
         _set_pars_attr (pars, 'io_locals')
-        _set_pars_attr (pars, 'run', use_not=True)
+        _set_pars_attr (pars, 'run')
+        _set_pars_attr (pars, 'pipe')
         
         kwargs = vars(pars)
         return kwargs, pars
@@ -1828,23 +1859,25 @@ for arg, val in zip (args_with_defaults, default_values):
             output=None,
             unknown_output=True
         )
-        found_io = False
+        found_pars = False
         idx=0
         for idx, arg in enumerate(argv):
             if arg and arg.startswith('-') and arg != '-' and arg != '->':
-                found_io = True
+                found_pars = True
                 break
-        if found_io and idx==0:
+        if found_pars and idx==0:
             function_name = ''
             ##pdb.no_set_trace()
-        kwargs, pars = self._parse_args (argv[idx:])
-        if found_io:
+        if found_pars:
+            kwargs, pars = self._parse_args (argv[idx:])
             unknown_input = 'input' not in pars
             if not unknown_input:
                 signature.update (input=() if pars.input==['None'] else pars.input, unknown_input=pars.input is None)
             unknown_output = 'output' not in pars
             if not unknown_output:
                 signature.update (output=() if pars.output==['None'] else pars.output, unknown_output=pars.output is None)
+        else:
+            kwargs, pars = self._parse_args ([])
         kwargs.update (signature)
             
         return function_name, kwargs
@@ -1863,7 +1896,7 @@ for arg, val in zip (args_with_defaults, default_values):
         self.write (test=test)
     
     def write (self, test=False, data=False):
-        function_list = self.get_function_list (test, True) + self.get_function_list (test, False, all=True)
+        function_list = self.get_function_list (test, True) + self.get_function_list (test, False, all=True, include_pipelines=True)
         
         file_path = self.file_path if not test else self.test_file_path
         imports = self.imports if not test else self.test_imports
@@ -1872,8 +1905,6 @@ for arg, val in zip (args_with_defaults, default_values):
             file.write (imports)
             for function in function_list:
                 function.write (file)
-            if not test and self.pipeline is not None:
-                self.pipeline.write (file)
                 
     def print (self, function_name, test=False, data=False, **kwargs):
         function_list = self.get_function_list (test, data)
@@ -1900,9 +1931,8 @@ for arg, val in zip (args_with_defaults, default_values):
     def get_nbs_path (self):
         return nbdev.config.get_config()['nbs_path']
     
-    def pipeline_code (self, pipeline_name=None):
-        pipeline_name = f'{self.file_name_without_extension}_pipeline' if pipeline_name is None else pipeline_name
-        function_list = self.get_function_list (test=False, data=True) + self.get_function_list (test=False, data=False)
+    def pipeline_code (self, pipeline_name, pipeline_name_or_default='default_pipeline'):
+        function_list = self.get_functions_from_pipeline (pipeline_name_or_default)
         
         code = (
 f'''# -----------------------------------------------------
@@ -1972,28 +2002,39 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
 ''')
         return code, f'test_{pipeline_name}'
     
-    def register_pipeline (self, pipeline_name=None):
-        code, name = self.pipeline_code (pipeline_name=pipeline_name)
-        self.pipeline = FunctionProcessor (code=code,
-                                           arguments=[],
-                                           return_values=[],
-                                           name=name)
-        get_ipython().run_cell(self.imports)
-        get_ipython().run_cell(code)
+    def register_pipeline (self, pipeline_name_or_default='default_pipeline'):
+        if pipeline_name_or_default is not None and pipeline_name_or_default!='None' and pipeline_name_or_default not in self.pipelines:
+            self.pipelines.append(pipeline_name_or_default)
+
+        input_pipeline_name_or_default = pipeline_name_or_default
+        for pipeline_name_or_default in self.pipelines:
+            pipeline_name=self.default_pipe_name if pipeline_name_or_default is None or pipeline_name_or_default=='default_pipeline' else pipeline_name_or_default
+            code, name = self.pipeline_code (pipeline_name, pipeline_name_or_default=pipeline_name_or_default)
+            self.function_info[pipeline_name_or_default] = FunctionProcessor (
+                code=code,
+                arguments=[],
+                return_values=[],
+                name=name,
+                is_pipeline=True,
+            )
+            get_ipython().run_cell(code)
         
-        code, name = self.test_pipeline_code (pipeline_name=pipeline_name)
-        self.test_pipeline = FunctionProcessor (code=code,
-                                           arguments=[],
-                                           return_values=[],
-                                           name=name)
-        get_ipython().run_cell(self.test_imports)
+        # test pipeline
+        test_pipeline_name = self.default_pipe_name if input_pipeline_name_or_default is None or input_pipeline_name_or_default=='default_pipeline' else input_pipeline_name_or_default
+        test_pipeline_name=f'test_{test_pipeline_name}'
+        code, name = self.test_pipeline_code (pipeline_name=test_pipeline_name)
+        self.test_function_info['default_test_pipeline'] = FunctionProcessor (
+            code=code,
+            arguments=[],
+            return_values=[],
+            name=name,
+            is_pipeline=True,
+        )
+        
         get_ipython().run_cell(code)
     
     def print_pipeline (self, test=False, **kwargs):
-        if test:
-            code, name = self.test_pipeline_code()  
-        else:
-            code, name = self.pipeline_code()  
+        code = self.function_info['default_test_pipeline'].code if test else self.function_info['default_pipeline'].code
         print (code)
 
     def include (self, cell, test=False, data=False, **kwargs):
@@ -2130,7 +2171,8 @@ class CellProcessorMagic (Magics):
         
     @line_magic
     def pipeline_code (self, line):
-        return self.processor.pipeline_code ()
+        function_name, kwargs = self.processor.parse_signature (line)
+        return self.processor.pipeline_code (function_name, pipeline_name_or_default=function_name)
     
     @line_magic
     def print_pipeline (self, line):
