@@ -153,7 +153,7 @@ class FunctionProcessor (Bunch):
         # finish the implementation of this function if required
         import inspect
         get_ipython().run_cell (cell)
-        function = self._store_values (return_variables=[self.name])
+        function = self.store_values (return_variables=[self.name])
         return inspect.signature (function)
     
     def _add_io (
@@ -348,7 +348,7 @@ for k, v in params.items():
         self.all_variables += [k for k in self.previous_variables if k not in self.all_variables]
         self.all_variables += [k for k in self.argument_variables if k not in self.all_variables]
                    
-    def _store_values (self, field='shared_variables', code="", store_values=True, return_variables=None):
+    def store_values (self, field='shared_variables', code="", store_values=True, return_variables=None):
         """Stores local variables in field `field`of self"""
         code_to_run1 = code + f'from nbmodular.core.cell2func import retrieve_nb_locals_through_memory\nretrieve_nb_locals_through_memory ("{field}", locals ())'
         code_to_run2 = code + f'from nbmodular.core.cell2func import retrieve_nb_locals_through_disk\nretrieve_nb_locals_through_disk (locals ())'
@@ -463,14 +463,14 @@ keys = joblib.load ('function_processor_keys.pk')
         if not is_test_function:
             #pdb.no_set_trace()
             if first_call:
-                self._store_values ("previous_values", code="", store_values=store_values)
+                self.store_values ("previous_values", code="", store_values=store_values)
                 if self.copy_locals:
                     self.previous_values = copy.deepcopy (self.previous_values)
             if function_in_previous_cells is not None:
                 # if previous_values is in current_values of previous cells of this function, it cannot be a previous value
                 self.previous_values = {k:self.previous_values[k] for k in self.previous_values if k not in function_in_previous_cells.current_values}
             if not not_run:
-                self._store_values ("current_values", code=code + "\n", store_values=store_values)
+                self.store_values ("current_values", code=code + "\n", store_values=store_values)
             else:
                 self.current_values = {k: None for k in self.created_variables}
         else:
@@ -625,10 +625,10 @@ if load and path_variables.exists():
             new_code[i] = f'{" "*self.tab_size}{line}'
         self.original_code = "if True:\n" + '\n'.join (new_code) + '\n\n' + self.original_code
 
-    def _copy_values_and_run_code_in_nb (self, field='shared_variables', code=""):
+    def copy_values_and_run_code_in_nb (self, field='shared_variables', code=""):
         """Makes desired variables available in notebook context.
          
-          Uses field `field`of self for communicating these variables. 
+          Uses field `field` of CellProcessor object for communicating these variables. 
         """
 
         code_with_tabs = []
@@ -659,20 +659,23 @@ os.remove ('variable_values.pk')
         if 'retrieve_function_values_through_memory' not in self:
             get_ipython().run_cell (code_to_run2)
 
+    def copy_values_in_nb (self, field="shared_variables"):
+        copy_values_in_nb (self, field=field)
+
     def restore_locals (self):
         delete_current_values_code=(
 f'''
 for k in variables_to_insert:
     exec ("del k")
 ''')
-        self._copy_value_copy_values_and_run_code_in_nb (field='current_values', code=delete_current_values_code)
+        self.copy_values_and_run_code_in_nb (field='current_values', code=delete_current_values_code)
         
         restore_previous_values_code=(
 f'''
 for k, v in variables_to_insert.items():
     exec ("k=str(v)")
 ''')
-        self._copy_values_and_run_code_in_nb (field='previous_values', code=restore_previous_values_code)
+        self.copy_values_and_run_code_in_nb (field='previous_values', code=restore_previous_values_code)
 
 # %% ../../nbs/cell2func.ipynb 19
 def update_cell_code (
@@ -698,6 +701,32 @@ def update_cell_code (
     return cell
 
 # %% ../../nbs/cell2func.ipynb 21
+def remove_name_from_nb (name):
+    get_ipython().run_cell(f'exec("del {name}")')
+                           
+def copy_values_in_nb (self, field='shared_variables'):
+        """Makes desired variables available in notebook context.
+         
+          Uses field `field` of CellProcessor object for communicating these variables. 
+        """
+
+        code_to_run1 = (
+f'''
+from nbmodular.core.cell2func import retrieve_function_values_through_memory
+_ = retrieve_function_values_through_memory ("{field}")
+''')
+        
+        code_to_run2 = (
+f'''
+from nbmodular.core.cell2func import retrieve_function_values_through_disk
+_ = retrieve_function_values_through_disk ()
+os.remove ('variable_values.pk')
+''')
+        
+        get_ipython().run_cell (code_to_run1)
+        if 'retrieve_function_values_through_memory' not in self:
+            get_ipython().run_cell (code_to_run2)
+
 def add_function_to_list (function, function_list, idx=None, position=None):
     if idx is None:
         function_list.append (function)
@@ -1022,14 +1051,22 @@ class CellProcessor():
         self.file_path = Path(file_path)
         self.file_path.parent.mkdir (parents=True, exist_ok=True)
         self.set_file_name (self.file_path.name)
-    
+
+    def get_pipeline_name (self, pipeline_name_or_default='default_pipeline'):
+        return self.default_pipe_name if pipeline_name_or_default is None or pipeline_name_or_default=='default_pipeline' else pipeline_name_or_default
+
     def set_file_name (self, file_name):
         change_default_pipe_name = self.default_pipe_name==f'{self.file_name_without_extension}_pipeline'
+        previous_default_pipe_name = self.default_pipe_name
         self.file_name = file_name
         self.file_name_without_extension = self.file_name.split('.')[0]
         self.default_io_folder=self.file_name_without_extension
         if change_default_pipe_name:
             self.default_pipe_name=f'{self.file_name_without_extension}_pipeline'
+            if self.default_pipe_name != previous_default_pipe_name:
+                get_ipython().run_cell (f"exec ('{self.default_pipe_name}={previous_default_pipe_name}')")
+                get_ipython().run_cell (f"exec ('del {previous_default_pipe_name}')")
+
         self.test_file_path = self.test_file_path.parent / f'test_{self.file_name}'
         self.file_path = self.file_path.parent / self.file_name
 
@@ -2008,7 +2045,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
 
         input_pipeline_name_or_default = pipeline_name_or_default
         for pipeline_name_or_default in self.pipelines:
-            pipeline_name=self.default_pipe_name if pipeline_name_or_default is None or pipeline_name_or_default=='default_pipeline' else pipeline_name_or_default
+            pipeline_name=self.get_pipeline_name (pipeline_name_or_default=pipeline_name_or_default)
             code, name = self.pipeline_code (pipeline_name, pipeline_name_or_default=pipeline_name_or_default)
             self.function_info[pipeline_name_or_default] = FunctionProcessor (
                 code=code,
@@ -2020,7 +2057,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
             get_ipython().run_cell(code)
         
         # test pipeline
-        test_pipeline_name = self.default_pipe_name if input_pipeline_name_or_default is None or input_pipeline_name_or_default=='default_pipeline' else input_pipeline_name_or_default
+        test_pipeline_name = self.get_pipeline_name (pipeline_name_or_default=input_pipeline_name_or_default)
         test_pipeline_name=f'test_{test_pipeline_name}'
         code, name = self.test_pipeline_code (pipeline_name=test_pipeline_name)
         self.test_function_info['default_test_pipeline'] = FunctionProcessor (
@@ -2285,7 +2322,7 @@ def retrieve_function_values_through_memory (field):
     frame_number = 0
     ##pdb.no_set_trace()
     self = None
-    while not isinstance (self, FunctionProcessor):
+    while not (isinstance (self, FunctionProcessor) or isinstance (self, CellProcessor) or isinstance (self, Bunch)):
         try:
             fr = sys._getframe(frame_number)
         except:
@@ -2294,9 +2331,9 @@ def retrieve_function_values_through_memory (field):
         if len(args)>0:
             self = fr.f_locals[args[0]]
         frame_number += 1
-    if isinstance (self, FunctionProcessor):
-        variable_values = self[field]
-        self['retrieve_function_values_through_memory'] = True
+    if isinstance (self, FunctionProcessor) or isinstance (self, CellProcessor) or isinstance(self, Bunch):
+        variable_values = getattr(self, field)
+        setattr (self, 'retrieve_function_values_through_memory', True)
         variable_values['retrieve_function_values_through_memory'] = True
         return variable_values
     return None
