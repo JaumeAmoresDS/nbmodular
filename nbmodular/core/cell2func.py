@@ -5,8 +5,9 @@ __all__ = ['get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_du
            'FunctionProcessor', 'update_cell_code', 'add_function_to_list', 'get_args_and_defaults',
            'get_args_and_defaults_from_ast', 'get_args_and_defaults_from_function_in_cell', 'CellProcessor',
            'CellProcessorMagic', 'load_ipython_extension', 'retrieve_function_values_through_disk',
-           'retrieve_function_values_through_memory', 'retrieve_nb_locals_through_disk',
-           'retrieve_nb_locals_through_memory', 'acceptable_variable', 'store_variables']
+           'retrieve_function_values_through_memory', 'copy_values_and_run_code_in_nb', 'copy_values_in_nb',
+           'transfer_variables_to_nb', 'retrieve_nb_locals_through_disk', 'retrieve_nb_locals_through_memory',
+           'remove_name_from_nb', 'acceptable_variable', 'store_variables']
 
 # %% ../../nbs/cell2func.ipynb 3
 import pdb
@@ -701,32 +702,6 @@ def update_cell_code (
     return cell
 
 # %% ../../nbs/cell2func.ipynb 21
-def remove_name_from_nb (name):
-    get_ipython().run_cell(f'exec("del {name}")')
-                           
-def copy_values_in_nb (self, field='shared_variables'):
-        """Makes desired variables available in notebook context.
-         
-          Uses field `field` of CellProcessor object for communicating these variables. 
-        """
-
-        code_to_run1 = (
-f'''
-from nbmodular.core.cell2func import retrieve_function_values_through_memory
-_ = retrieve_function_values_through_memory ("{field}")
-''')
-        
-        code_to_run2 = (
-f'''
-from nbmodular.core.cell2func import retrieve_function_values_through_disk
-_ = retrieve_function_values_through_disk ()
-os.remove ('variable_values.pk')
-''')
-        
-        get_ipython().run_cell (code_to_run1)
-        if 'retrieve_function_values_through_memory' not in self:
-            get_ipython().run_cell (code_to_run2)
-
 def add_function_to_list (function, function_list, idx=None, position=None):
     if idx is None:
         function_list.append (function)
@@ -2304,7 +2279,7 @@ def load_ipython_extension(ipython):
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 35
+# %% ../../nbs/cell2func.ipynb 36
 def retrieve_function_values_through_disk (filename='variable_values.pk'):
     """
     Store `variables` in disk
@@ -2314,13 +2289,13 @@ def retrieve_function_values_through_disk (filename='variable_values.pk'):
     variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
     return variable_values
 
-# %% ../../nbs/cell2func.ipynb 37
+# %% ../../nbs/cell2func.ipynb 38
 def retrieve_function_values_through_memory (field):
     """
     Store `variables` in dictionary entry `self[field]`
     """
     frame_number = 0
-    ##pdb.no_set_trace()
+    #pdb.no_set_trace()
     self = None
     while not (isinstance (self, FunctionProcessor) or isinstance (self, CellProcessor) or isinstance (self, Bunch)):
         try:
@@ -2338,7 +2313,63 @@ def retrieve_function_values_through_memory (field):
         return variable_values
     return None
 
-# %% ../../nbs/cell2func.ipynb 39
+# %% ../../nbs/cell2func.ipynb 40
+def copy_values_and_run_code_in_nb (self, field='shared_variables', code=""):
+    """
+    Makes desired variables available in notebook context.
+
+    Uses field `field` of CellProcessor object for communicating these variables. 
+    """
+
+    code_with_tabs = []
+    for line in code.splitlines():
+        code_with_tabs += [f'{" "*self.tab_size}{line}']
+    code_with_tabs = '\n'.join (code_with_tabs)
+
+    code_to_run1 = (
+f'''
+from nbmodular.core.cell2func import retrieve_function_values_through_memory
+
+variables_to_insert = retrieve_function_values_through_memory ("{field}")
+if "retrieve_function_values_through_memory" in variables_to_insert:
+{code_with_tabs}
+    del variables_to_insert
+''')
+
+    code_to_run2 = (
+f'''
+from nbmodular.core.cell2func import retrieve_function_values_through_disk
+
+variables_to_insert = retrieve_function_values_through_disk ()
+{code}
+os.remove ('variable_values.pk')
+''')
+
+    get_ipython().run_cell (code_to_run1)
+    if 'retrieve_function_values_through_memory' not in self:
+        get_ipython().run_cell (code_to_run2)
+
+# %% ../../nbs/cell2func.ipynb 41
+def copy_values_in_nb (self, field='shared_variables'):
+    copy_values_code=(
+'''
+for k, v in variables_to_insert.items():
+    if isinstance (v, str):
+        exec (f'{k} = "{v}"')
+    else:
+        exec (f'{k} = {v}')
+''')
+    copy_values_and_run_code_in_nb (self, field=field, code=copy_values_code)
+
+
+# %% ../../nbs/cell2func.ipynb 42
+def transfer_variables_to_nb (**kwargs):
+    communicator = Bunch()
+    communicator.shared_variables = kwargs
+    communicator.tab_size=4
+    copy_values_in_nb (communicator)
+
+# %% ../../nbs/cell2func.ipynb 48
 def retrieve_nb_locals_through_disk (variable_values, filename='variable_values.pk'):
     """
     Store `variables` in disk
@@ -2347,7 +2378,7 @@ def retrieve_nb_locals_through_disk (variable_values, filename='variable_values.
     variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
     joblib.dump (variable_values, filename)
 
-# %% ../../nbs/cell2func.ipynb 41
+# %% ../../nbs/cell2func.ipynb 50
 def retrieve_nb_locals_through_memory (field, variable_values):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -2370,13 +2401,17 @@ def retrieve_nb_locals_through_memory (field, variable_values):
         self[field]=variable_values.copy()
         #del variable_values['created_current_values']
 
-# %% ../../nbs/cell2func.ipynb 43
+# %% ../../nbs/cell2func.ipynb 52
+def remove_name_from_nb (name):
+    get_ipython().run_cell(f'exec("del {name}")')
+
+# %% ../../nbs/cell2func.ipynb 54
 def acceptable_variable (variable_values, k):
     return (not k.startswith ('_') and not callable(variable_values[k]) 
             and type(variable_values[k]).__name__ not in ['module', 'FunctionProcessor', 'CellProcessor'] 
             and k not in ['variable_values', 'In', 'Out'])
 
-# %% ../../nbs/cell2func.ipynb 45
+# %% ../../nbs/cell2func.ipynb 56
 def store_variables (
     path_variables,
     locals_,  
