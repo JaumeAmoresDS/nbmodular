@@ -2,7 +2,7 @@
 
 # %% auto 0
 __all__ = ['get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_duplicates_from_list', 'VariableClassifier',
-           'FunctionProcessor', 'update_cell_code', 'add_function_to_list', 'get_args_and_defaults',
+           'add_dict_values', 'FunctionProcessor', 'update_cell_code', 'add_function_to_list', 'get_args_and_defaults',
            'get_args_and_defaults_from_ast', 'get_args_and_defaults_from_function_in_cell', 'CellProcessor',
            'CellProcessorMagic', 'load_ipython_extension', 'retrieve_function_values_through_disk',
            'retrieve_function_values_through_memory', 'copy_values_and_run_code_in_nb', 'copy_values_in_nb',
@@ -112,6 +112,10 @@ class VariableClassifier (NodeVisitor):
         super().generic_visit(node)
 
 # %% ../../nbs/cell2func.ipynb 16
+def add_dict_values (d: dict):
+    return reduce(lambda x,y: ('+', x[1] + y[1]), d.items())[1]
+
+# %% ../../nbs/cell2func.ipynb 18
 class FunctionProcessor (Bunch):
     """
     Function processor.
@@ -123,6 +127,7 @@ class FunctionProcessor (Bunch):
         self.is_class=False
         self.is_pipeline=False
         self.pipeline_name_or_default=None
+        self.code_cell_indexes=[]
         super().__init__ (
             **kwargs,
         )
@@ -272,12 +277,12 @@ class FunctionProcessor (Bunch):
                 for line in code_part.splitlines():
                     indented_code += f'{" " * self.tab_size}{line}\n'
                 self.code_parts[part] = indented_code
-        # assemble
-        function_code = signature + function_calls + unpack_input_code + function_code + pack_output_code + return_line
-        self.code = function_code
-        get_ipython().run_cell(function_code)
+        
+        # assemble function parts into single text
+        self.code = add_dict_values (self.code_parts)
+        get_ipython().run_cell(self.code)
         if display:
-            print (function_code)
+            print (self.code)
     
     def get_ast(self, original=True, code=None):
         if code is None:
@@ -671,7 +676,7 @@ for k, v in variables_to_insert.items():
 ''')
         self.copy_values_and_run_code_in_nb (field='previous_values', code=restore_previous_values_code)
 
-# %% ../../nbs/cell2func.ipynb 19
+# %% ../../nbs/cell2func.ipynb 21
 def update_cell_code (
     cell, 
     defined=False
@@ -694,7 +699,7 @@ def update_cell_code (
     
     return cell
 
-# %% ../../nbs/cell2func.ipynb 21
+# %% ../../nbs/cell2func.ipynb 23
 def add_function_to_list (function, function_list, idx=None, position=None):
     if idx is None:
         function_list.append (function)
@@ -716,7 +721,7 @@ def add_function_to_list (function, function_list, idx=None, position=None):
             function.idx = idx
     return function_list
 
-# %% ../../nbs/cell2func.ipynb 24
+# %% ../../nbs/cell2func.ipynb 26
 def get_args_and_defaults (list_args, list_defaults):
     if len(list_defaults)==0:
         args_without_defaults = [arg.arg for arg in list_args]
@@ -752,7 +757,7 @@ def get_args_and_defaults (list_args, list_defaults):
     
     return args_without_defaults, args_with_defaults, default_values
 
-# %% ../../nbs/cell2func.ipynb 26
+# %% ../../nbs/cell2func.ipynb 28
 def get_args_and_defaults_from_ast (root):    
     args_without_defaults, args_with_defaults1, default_values1 = get_args_and_defaults (root.body[0].args.posonlyargs + root.body[0].args.args, root.body[0].args.defaults)
     _, args_with_defaults2, default_values2 = get_args_and_defaults (root.body[0].args.kwonlyargs, root.body[0].args.kw_defaults)
@@ -773,7 +778,7 @@ def _set_pars_attr (pars, attr):
     elif getattr (pars, attr) and getattr (pars, f'not_{attr}'):
         raise ValueError (f'{attr} and not-{attr} cannot be passed at the same time')
 
-# %% ../../nbs/cell2func.ipynb 28
+# %% ../../nbs/cell2func.ipynb 30
 class CellProcessor():
     """
     Processes the cell's code according to the magic command.
@@ -783,10 +788,13 @@ class CellProcessor():
         tab_size=4, 
         log_level='INFO',
         restrict_inputs=False,
+        code_cells_path='.nbmodular',
         **kwargs,
     ):
         self.logger = logging.getLogger('CellProcessor')
         self.set_log_level (log_level)
+        self.code_cells_path=Path(code_cells_path)
+        self.code_cells_path.mkdir (parents=True, exist_ok=True)
         
         self.restrict_inputs = restrict_inputs
         self.current_function = Bunch()
@@ -816,6 +824,8 @@ class CellProcessor():
         self.test_pipeline = None
 
         self.pipelines = ['default_pipeline']
+
+        self.code_cells = []
         
         self.imports = ''
         #self.test_imports = 'from sklearn.utils import Bunch\nfrom pathlib import Path\nimport joblib\nimport pandas as pd\nimport numpy as np\n'
@@ -945,6 +955,8 @@ class CellProcessor():
 
         self._added_io_imports = False
         self.variable_classifier = VariableClassifier ()
+
+        self.path_to_code_cells_file = self.code_cells_path / f'{self.file_name_without_extension}.pk'
         
         self.parser = argparse.ArgumentParser(description='Arguments to `function` magic cell.')
         self.parser.add_argument('-i', '--input', type=str, nargs='+', help='Strict input. No other input considered, regardless of any dependencies.')
@@ -1021,6 +1033,8 @@ class CellProcessor():
         return self.default_pipe_name if pipeline_name_or_default is None or pipeline_name_or_default=='default_pipeline' else pipeline_name_or_default
 
     def set_file_name (self, file_name):
+        if self.file_name==file_name:
+            return
         change_default_pipe_name = self.default_pipe_name==f'{self.file_name_without_extension}_pipeline'
         previous_default_pipe_name = self.default_pipe_name
         self.file_name = file_name
@@ -1034,6 +1048,7 @@ class CellProcessor():
 
         self.test_file_path = self.test_file_path.parent / f'test_{self.file_name}'
         self.file_path = self.file_path.parent / self.file_name
+        self.path_to_code_cells_file = self.code_cells_path / f'{self.file_name_without_extension}.pk'
 
     def set_log_level (self, log_level):
         self.logger.setLevel(log_level)
@@ -1726,6 +1741,7 @@ for arg, val in zip (args_with_defaults, default_values):
         make_function=True,
         update_previous_functions=True,
         store_values=True,
+        export=True,
         **kwargs,
     ) -> None:
             
@@ -1752,10 +1768,25 @@ for arg, val in zip (args_with_defaults, default_values):
         function_list = self.get_function_list (this_function.test, this_function.data)
         function_info = self.get_function_info (this_function.test, this_function.data)
         
-        if existing and (func in self.function_info) and merge:
-            this_function = self.merge_functions (self.function_info[func], this_function, idx=idx, show=show)
-            function_list[idx] = this_function
-        
+        new_code_cell = Bunch (
+            code=this_function.code, # strings are not mutable
+            code_parts=this_function.code_parts.copy(),
+            valid=True,
+        )
+        if existing:
+            if not func in self.function_info:
+                warnings.warn (f'Existing function {func} is not found in function_info')
+            elif func in self.function_info and merge:
+                this_function = self.merge_functions (self.function_info[func], this_function, idx=idx, show=show)
+
+        this_function = self.add_code_cell (
+            this_function,
+            new_code_cell,
+            func,
+            existing,
+            merge,
+        )
+
         function_name = this_function.name
         function_info[function_name] = this_function
         function_list = add_function_to_list (this_function, function_list, idx=idx, position=position)
@@ -1787,6 +1818,9 @@ for arg, val in zip (args_with_defaults, default_values):
         if write:
             self.write ()
             self.write (test=True)
+        
+        if export:
+            self.export ()
             
     def merge_functions (self, this_function, new_function, idx=None, show=False):
         """
@@ -1813,6 +1847,47 @@ for arg, val in zip (args_with_defaults, default_values):
             return_values=remove_duplicates_from_list (this_function.arguments + new_function.arguments),
             display=show,
         )
+        
+        return this_function
+    
+    def add_code_cell (
+        self,
+        this_function,
+        new_code_cell,
+        func,
+        existing,
+        merge,
+    ):
+        if existing:
+            if func in self.function_info and merge:
+                # update signature in firt to-be-exported cell:
+                first_cell=self.code_cells[this_function.code_cell_indexes[0]]
+                first_cell.code_parts.signature=this_function.code_parts.signature
+                relevant_parts = list(first_cell.code_parts.keys())[:-1] # do not include return line
+                first_cell.code=''.join ([first_cell.code_parts[k] for k in relevant_parts])
+                # update code or previous last cell, to not include return line:
+                if len(this_function.code_cell_indexes)>1: # if there is only one code cell, this update has been done in the previous line
+                    last_cell = self.code_cells[this_function.code_cell_indexes[-1]]
+                    relevant_parts = list(last_cell.code_parts.keys())[:-1]
+                    last_cell.code=''.join ([last_cell.code_parts[k] for k in relevant_parts])
+                # append new code cell to list, after udpating return line:
+                new_code_cell.code_parts.return_line = this_function.return_line
+                relevant_parts = list(new_code_cell.code_parts.keys())[1:] # do not include signature
+                new_code_cell.code=''.join ([new_code_cell.code_parts[k] for k in relevant_parts])
+                self.code_cells.append (new_code_cell)
+                this_function.code_cell_indexes.append(len(self.code_cells)-1)
+            else:
+                assert len(this_function.code_cell_indexes)>0, "Existing function has an empty code_cell_indexes list."
+                self.code_cells[this_function.code_cell_indexes[0]].update(new_code_cell)
+                # invalidate remaining cells, if there was more than one about the same function
+                for code_idx in this_function.code_cell_indexes[1:]:
+                    self.code_cells[code_idx].valid=False
+                # issue a warning in this case
+                if len(this_function.code_cell_indexes)>1:
+                    warnings.warn ('Found previous cells about this function, will invalidate them.')
+        else:
+            self.code_cells.append (new_code_cell)
+            this_function.code_cell_indexes=[len(self.code_cells)-1]
         
         return this_function
     
@@ -1892,6 +1967,9 @@ for arg, val in zip (args_with_defaults, default_values):
             for function in function_list:
                 function.write (file)
                 
+    def export (self):
+        joblib.dump (self.code_cells, self.code_cells_path)
+
     def print (self, function_name, test=False, data=False, **kwargs):
         function_list = self.get_function_list (test, data)
         function_info = self.get_function_info (test, data)
@@ -2065,7 +2143,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
     def save_data (self, **kwargs):
         self.run_io (io_action='save', **kwargs)
 
-# %% ../../nbs/cell2func.ipynb 30
+# %% ../../nbs/cell2func.ipynb 32
 @magics_class
 class CellProcessorMagic (Magics):
     """
@@ -2128,6 +2206,10 @@ class CellProcessorMagic (Magics):
     @line_magic
     def write (self, line):
         return self.processor.write ()
+    
+    @line_magic
+    def export (self, line):
+        self.processor.export ()
     
     @line_magic
     def print (self, line):
@@ -2245,7 +2327,7 @@ class CellProcessorMagic (Magics):
         attr, value = values
         self.processor.set_value (attr, value)
 
-# %% ../../nbs/cell2func.ipynb 32
+# %% ../../nbs/cell2func.ipynb 34
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -2253,7 +2335,7 @@ def load_ipython_extension(ipython):
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
 
-# %% ../../nbs/cell2func.ipynb 36
+# %% ../../nbs/cell2func.ipynb 38
 def retrieve_function_values_through_disk (filename='variable_values.pk'):
     """
     Store `variables` in disk
@@ -2263,7 +2345,7 @@ def retrieve_function_values_through_disk (filename='variable_values.pk'):
     variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
     return variable_values
 
-# %% ../../nbs/cell2func.ipynb 38
+# %% ../../nbs/cell2func.ipynb 40
 def retrieve_function_values_through_memory (field):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -2287,7 +2369,7 @@ def retrieve_function_values_through_memory (field):
         return variable_values
     return None
 
-# %% ../../nbs/cell2func.ipynb 40
+# %% ../../nbs/cell2func.ipynb 42
 def copy_values_and_run_code_in_nb (self, field='shared_variables', code=""):
     """
     Makes desired variables available in notebook context.
@@ -2323,7 +2405,7 @@ os.remove ('variable_values.pk')
     if 'retrieve_function_values_through_memory' not in self:
         get_ipython().run_cell (code_to_run2)
 
-# %% ../../nbs/cell2func.ipynb 41
+# %% ../../nbs/cell2func.ipynb 43
 def copy_values_in_nb (self, field='shared_variables'):
     copy_values_code=(
 '''
@@ -2336,14 +2418,14 @@ for k, v in variables_to_insert.items():
     copy_values_and_run_code_in_nb (self, field=field, code=copy_values_code)
 
 
-# %% ../../nbs/cell2func.ipynb 42
+# %% ../../nbs/cell2func.ipynb 44
 def transfer_variables_to_nb (**kwargs):
     communicator = Bunch()
     communicator.shared_variables = kwargs
     communicator.tab_size=4
     copy_values_in_nb (communicator)
 
-# %% ../../nbs/cell2func.ipynb 48
+# %% ../../nbs/cell2func.ipynb 50
 def retrieve_nb_locals_through_disk (variable_values, filename='variable_values.pk'):
     """
     Store `variables` in disk
@@ -2352,7 +2434,7 @@ def retrieve_nb_locals_through_disk (variable_values, filename='variable_values.
     variable_values = {k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}
     joblib.dump (variable_values, filename)
 
-# %% ../../nbs/cell2func.ipynb 50
+# %% ../../nbs/cell2func.ipynb 52
 def retrieve_nb_locals_through_memory (field, variable_values):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -2375,17 +2457,17 @@ def retrieve_nb_locals_through_memory (field, variable_values):
         self[field]=variable_values.copy()
         #del variable_values['created_current_values']
 
-# %% ../../nbs/cell2func.ipynb 52
+# %% ../../nbs/cell2func.ipynb 54
 def remove_name_from_nb (name):
     get_ipython().run_cell(f'exec("del {name}")')
 
-# %% ../../nbs/cell2func.ipynb 54
+# %% ../../nbs/cell2func.ipynb 56
 def acceptable_variable (variable_values, k):
     return (not k.startswith ('_') and not callable(variable_values[k]) 
             and type(variable_values[k]).__name__ not in ['module', 'FunctionProcessor', 'CellProcessor'] 
             and k not in ['variable_values', 'In', 'Out'])
 
-# %% ../../nbs/cell2func.ipynb 56
+# %% ../../nbs/cell2func.ipynb 58
 def store_variables (
     path_variables,
     locals_,  
