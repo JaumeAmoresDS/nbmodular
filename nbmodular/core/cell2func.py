@@ -255,34 +255,27 @@ class FunctionProcessor (Bunch):
         signature = f'def {self.name}({arguments}):'
         # store parts
         self.code_parts=Bunch(
-            signature=signature, 
+            signature=f'{signature}\n', 
             function_calls=function_calls, 
             unpack_input_code=unpack_input_code, 
             function_code=function_code, 
             pack_output_code=pack_output_code,
             return_line=return_line
         )
-        # assemble
-        function_code = f'{signature}\n' + function_calls + unpack_input_code + function_code + pack_output_code + return_line
         if self.method:
-            indented_code = ''
-            for line in function_code.splitlines():
-                indented_code += f'{" " * self.tab_size}{line}\n'
-            function_code = indented_code
+            # we indent each part of the code separately and then join them
+            # the indentation is done separately to allow nbm_update to
+            # use the indedent part, in particular the return line
+            # this might be handy also for other functionalities in the future
+            for part, code_part in self.code_parts.items():
+                indented_code = ''
+                for line in code_part.splitlines():
+                    indented_code += f'{" " * self.tab_size}{line}\n'
+                self.code_parts[part] = indented_code
+        # assemble
+        function_code = signature + function_calls + unpack_input_code + function_code + pack_output_code + return_line
         self.code = function_code
         get_ipython().run_cell(function_code)
-        param_assignment_code = (
-f'''
-import inspect
-x=inspect.signature ({self.name})
-params = dict(x.parameters)
-for k, v in params.items():
-    if (v.default) is not inspect._empty:
-        exec (f'k = v.default')
-
-'''
-        )
-        #get_ipython().run_cell(param_assignment_code)
         if display:
             print (function_code)
     
@@ -818,9 +811,6 @@ class CellProcessor():
         
         self.test_data_return_values = set()
         self.data_return_values = set()
-
-        self.cell_nodes = []        
-        self.cell_nodes_per_function = Bunch()
 
         self.pipeline = None
         self.test_pipeline = None
@@ -1784,14 +1774,6 @@ for arg, val in zip (args_with_defaults, default_values):
        
         if this_function.method:
             self.add_method (this_function.name)
-
-        if this_function.name in self.cell_nodes_per_function:
-            self.cell_nodes_per_function[this_function.name].append(this_function.copy())
-        else:
-            self.cell_nodes_per_function[this_function.name] = [this_function.copy()]
-            
-        self.cell_nodes.append(this_function)
-        self.export_cell_nodes ()
             
         get_ipython().run_cell(self.imports)
         get_ipython().run_cell(self.test_imports)
@@ -1805,14 +1787,6 @@ for arg, val in zip (args_with_defaults, default_values):
         if write:
             self.write ()
             self.write (test=True)
-            
-    def export_cell_nodes (self):
-        for cell_function in self.cell_nodes:
-            #code = cell_function.get_cell_function_code (unique=len(nodes_per_function[cell_function.name])==1,
-            #                                             first=cell_function is nodes_per_function[cell_function.name][0],
-            #                                             last=cell_function is nodes_per_function[cell_function.name][-1])
-            # make_cell (cell=code)
-            pass
             
     def merge_functions (self, this_function, new_function, idx=None, show=False):
         """
