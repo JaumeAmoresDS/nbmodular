@@ -10,11 +10,10 @@ __all__ = ['get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_du
            'remove_name_from_nb', 'acceptable_variable', 'store_variables']
 
 # %% ../../nbs/cell2func.ipynb 3
-from curses.ascii import isxdigit
-from doctest import UnexpectedException
 import pdb
-from textwrap import indent
 import ipdb
+from curses.ascii import isxdigit
+from textwrap import indent
 from pyclbr import Function
 import joblib
 import os
@@ -41,6 +40,7 @@ from fastcore.all import argnames
 import nbdev
 
 from . import function_io
+from .utils import set_log_level
 
 # %% ../../nbs/cell2func.ipynb 8
 import pdb
@@ -129,7 +129,6 @@ class FunctionProcessor (Bunch):
         self.is_class=False
         self.is_pipeline=False
         self.pipeline_name_or_default=None
-        self.code_cell_indexes=[]
         super().__init__ (
             **kwargs,
         )
@@ -1054,10 +1053,7 @@ class CellProcessor():
         self.path_to_code_cells_file = self.code_cells_path / f'{self.file_name_without_extension}.pk'
 
     def set_log_level (self, log_level):
-        self.logger.setLevel(log_level)
-        ch = logging.StreamHandler()
-        ch.setLevel(log_level)
-        self.logger.addHandler(ch)
+        set_log_level (self.logger, log_level)
     
     def set_pipe (self, function_name, pipeline_name):
         self.function_info[function_name].pipeline_name=pipeline_name
@@ -1872,8 +1868,6 @@ for arg, val in zip (args_with_defaults, default_values):
                 # uncomment the following line:
                 # previous_function = function_list[idx]
                 raise RuntimeError (f'Previously existing function {function_name} not found in `function_info` dictionary with keys: {list(function_info)}')
-            else:
-                this_function.code_cell_indexes = function_info[function_name].code_cell_indexes.copy()
             if function_name not in code_cells:
                 raise RuntimeError (f'Previously existing function {function_name} not found in `code_cells` dictionary with keys: {list(code_cells)}')
             code_cells_for_function = code_cells[function_name]
@@ -1881,14 +1875,13 @@ for arg, val in zip (args_with_defaults, default_values):
                 raise RuntimeError (f'Previously existing function {function_name} has empty list of code cells.')
             if merge:
                 # update signature in firt to-be-exported cell:
-                
-                first_cell=code_cells_for_function[this_function.code_cell_indexes[0]]
+                first_cell=code_cells_for_function[0]
                 first_cell.code_parts.signature=this_function.code_parts.signature
                 relevant_parts = list(first_cell.code_parts.keys())[:-1] # do not include return line
                 first_cell.code=''.join ([first_cell.code_parts[k] for k in relevant_parts])
                 # update code or previous last cell, to not include return line:
-                if len(this_function.code_cell_indexes)>1: # if there is only one code cell, this update has been done in the previous line
-                    last_cell = code_cells_for_function[this_function.code_cell_indexes[-1]]
+                if len(code_cells_for_function)>1: # if there is only one code cell, this update has been done in the previous line
+                    last_cell = code_cells_for_function[-1]
                     relevant_parts = list(last_cell.code_parts.keys())[:-1]
                     last_cell.code=''.join ([last_cell.code_parts[k] for k in relevant_parts])
                 # append new code cell to list, after udpating return line:
@@ -1896,21 +1889,17 @@ for arg, val in zip (args_with_defaults, default_values):
                 relevant_parts = list(new_code_cell.code_parts.keys())[1:] # do not include signature
                 new_code_cell.code=''.join ([new_code_cell.code_parts[k] for k in relevant_parts])
                 code_cells_for_function.append (new_code_cell)
-                this_function.code_cell_indexes.append(len(code_cells_for_function)-1)
             else:
-                assert len(this_function.code_cell_indexes)>0, "Existing function has an empty code_cell_indexes list."
-                code_cells_for_function[this_function.code_cell_indexes[0]].update(new_code_cell)
+                assert len(code_cells_for_function)>0, "Existing function has an empty code_cells_for_function list."
                 # invalidate remaining cells, if there was more than one about the same function
-                for code_idx in this_function.code_cell_indexes[1:]:
-                    code_cells_for_function[code_idx].valid=False
-                # issue a warning in this case
-                if len(this_function.code_cell_indexes)>1:
-                    warnings.warn ('Found previous cells about this function, will invalidate them.')
+                for code_cell in code_cells_for_function:
+                    code_cell.valid=False
+                code_cells_for_function.append (new_code_cell)
+                    
         else:
             if function_name in code_cells:
                 raise RuntimeError (f'Previously non-existing function {function_name} found in `code_cells` dictionary with keys: {list(code_cells)}')
             code_cells[function_name] = [new_code_cell]
-            this_function.code_cell_indexes=[0]
         
         return this_function
     
