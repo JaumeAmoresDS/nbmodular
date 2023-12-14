@@ -3,9 +3,26 @@ website:
     contents:
       - index.ipynb
       - cell2func.ipynb
+      - dest_test_export.ipynb
+      - dest_test_export_orig.ipynb
+      - dest_test_test_export.ipynb
+      - dest_test_test_export_orig.ipynb
+      - export.ipynb
+      - function_io.ipynb
       - nbdev_sync.ipynb
+      - second.ipynb
+      - tmp.ipynb
+      - section: dev_tutorials
+        contents:
+          - dev_tutorials/ast_examples.ipynb
+      - section: test_nbs
+        contents:
+          - test_nbs/dest_test_export.ipynb
+          - test_nbs/dest_test_test_export.ipynb
+          - test_nbs/test_export.ipynb
       - section: tutorials
         contents:
           - tutorials/debugging.ipynb
+          - tutorials/export.ipynb
           - tutorials/test_tutorial.ipynb
         href: tutorials/index.qmd
