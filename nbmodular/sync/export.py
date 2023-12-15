@@ -12,6 +12,7 @@ from pathlib import Path
 import logging
 
 from nbdev.processors import Processor, NBProcessor
+from nbdev.config import get_config
 from execnb.shell import CaptureShell
 from execnb.nbio import new_nb, mk_cell, read_nb, write_nb, NbCell
 
@@ -37,6 +38,13 @@ def obtain_function_name_and_test_flag (line, cell):
     return function_name, is_test
 
 # %% ../../nbs/export.ipynb 7
+def transform_test_source_for_docs (source_lines, idx, tab_size):
+    start = 2 if idx==0 else 1
+    transformed_lines=[]
+    for line in source_lines[start:]:
+        transformed_lines.append (line[tab_size:] if line.startswith (" "*tab_size) else line)
+    return '\n'.join (transformed_lines)
+
 class NBExporter(Processor):
     def __init__ (
         self, 
@@ -75,8 +83,14 @@ class NBExporter(Processor):
         self.test_function_names = {}
         self.cells = []
         self.test_cells = []
-        self.dest_nb_path = path.parent / f'dest_{file_name_without_extension}.ipynb'
-        self.test_dest_nb_path = path.parent / f'dest_test_{file_name_without_extension}.ipynb'
+        self.doc_cells = []
+        config = get_config ()
+        self.root_path=config.config_path()
+        self.nbs_path = config['nbs_path']
+        self.nbm_path = config['nbm_path']
+        self.dest_nb_path = Path(str(path).replace(self.nbm_path, self.nbs_path))
+        self.test_nb_path = dest_nb_path.parent / f'test_{file_name_without_extension}.ipynb'
+        self.tmp_nb_path = Path(str(path).replace(self.nbm_path, '.nbs'))
     
     def cell(self, cell):
         source_lines = cell.source.splitlines() if cell.cell_type=='code' else []
@@ -93,7 +107,7 @@ class NBExporter(Processor):
                 else:
                     function_names[function_name] = 0
                 idx = function_names[function_name]
-                print (f'{function_name}, {idx}, is test: {is_test}')
+                self.logger.debug (f'{function_name}, {idx}, is test: {is_test}')
                 code_cells = self.test_code_cells if is_test else self.code_cells
                 if function_name not in code_cells:
                     raise RuntimeError (f'Function {function_name} not found in code_cells dictionary with keys {code_cells.keys()}')
@@ -101,31 +115,32 @@ class NBExporter(Processor):
                 if len (code_cells) <= idx:
                     raise RuntimeError (f'Function {function_name} has {len(code_cells)} cells, which is lower than index {idx}.')
                 code_cell = code_cells[idx]
-                print ('code:')
-                print (code_cell.code, 'valid: ', code_cell.valid)
+                self.logger.debug ('code:')
+                self.logger.debug (f'{code_cell.code}valid: {code_cell.valid}')
                 if code_cell.valid:
                     source = code_cell.code
                     to_export = True
             elif line.startswith ('%%include') or line.startswith ('%%class'):
                 to_export = True
-            line = line.replace ('%%', '#@@')
-            source = line + '\n' + source
             if to_export:
-                source = '#|export\n' + source
-            #new_cell = {**cell}
-            #new_cell = NbCell (cell.idx_, cell)
-            #new_cell['source'] = source
-            cell['source'] = source
-        #else:
-        #    new_cell = cell
-        #self.cells.append (new_cell)
-        if is_test:
-            self.test_cells.append (cell)
-        else:
-            self.cells.append (cell)
+                line = line.replace ('%%', '#@@')
+                code_source = line + '\n' + source
+                code_source = '#|export\n' + code_source
+                doc_source = '#|export\n' + source # doc_source does not include first line with #@@
+                new_cell = NbCell (cell.idx_, cell)
+                new_cell['source'] = code_source
+                if is_test:
+                    self.test_cells.append (cell)
+                else:
+                    self.cells.append (cell)
+            else:
+                doc_source=source # doc_source does not include first line with %% (? to think about)
+            if is_test:
+                doc_source = transform_test_source_for_docs (source_lines, idx)
+            cell['source']=doc_source
+            self.doc_cells.append(cell)
+
     def end(self): 
-        #nb = new_nb (self.cells)
-        #write_nb (nb, self.dest_nb_path)
         self.nb.cells = self.cells
         write_nb (self.nb, self.dest_nb_path)
         self.nb.cells = self.test_cells
@@ -219,9 +234,6 @@ class NBImporter (Processor):
             source = line + '\n' + source
             if to_export:
                 source = '#|export\n' + source
-            #new_cell = {**cell}
-            #new_cell = NbCell (cell.idx_, cell)
-            #new_cell['source'] = source
             cell['source'] = source
         #else:
         #    new_cell = cell
