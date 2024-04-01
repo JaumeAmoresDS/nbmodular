@@ -55,6 +55,7 @@ class NBExporter(Processor):
         execute=True,
         logger=None,
         log_level='INFO',
+        tab_size=4,
     ):
         nb = read_nb(path) if nb is None else nb
         super().__init__ (nb)
@@ -64,13 +65,33 @@ class NBExporter(Processor):
         file_name_without_extension = path.name[:-len('.ipynb')]
         self.code_cells_path=Path(code_cells_path)
         code_cells_file_name = file_name_without_extension if code_cells_file_name is None else code_cells_file_name
-        path_to_code_cells_file = self.code_cells_path / f'{code_cells_file_name}.pk'
-        test_path_to_code_cells_file = self.code_cells_path / f'test_{code_cells_file_name}.pk'
+        path_to_code_cells_file = path.parent / self.code_cells_path / f'{code_cells_file_name}.pk'
+        test_path_to_code_cells_file = path.parent / self.code_cells_path / f'test_{code_cells_file_name}.pk'
         if not path_to_code_cells_file.exists() and not test_path_to_code_cells_file.exists():
             if path.exists() and execute:
                 self.logger.info (f'Executing notebook {path}')
                 caputure_shell = CaptureShell ()
                 caputure_shell.execute(path, 'tmp.ipynb')
+                if not path_to_code_cells_file.exists():
+                    self.logger.debug (f'{path_to_code_cells_file} not found')
+                    # path_to_code_cells_file may not exist if ipynbname doesnt work in 
+                    # this context, which makes the file name be `temporary` 
+                    # (see CellProcessor.__init__)
+                    path_to_code_cells_file = path_to_code_cells_file.parent / 'temporary.pk'
+                    self.logger.debug (f'Trying {path_to_code_cells_file}')
+                    if not path_to_code_cells_file.exists():
+                        self.logger.debug (f'Path {path_to_code_cells_file} not found')
+                        path_to_code_cells_file = Path('.nbmodular/temporary.pk')
+                        self.logger.debug (f'Trying {path_to_code_cells_file}')
+                    if not path_to_code_cells_file.exists():
+                        raise RuntimeError (f'Path to code cells not found after running the notebook.')
+                    test_path_to_code_cells_file = test_path_to_code_cells_file.parent / 'test_temporary.pk'
+                    if not test_path_to_code_cells_file.exists():
+                        self.logger.debug (f'Path {test_path_to_code_cells_file} not found')
+                        test_path_to_code_cells_file = Path('.nbmodular/test_temporary.pk')
+                        self.logger.debug (f'Trying {test_path_to_code_cells_file}')
+                    if not test_path_to_code_cells_file.exists():
+                        raise RuntimeError (f'Path to test code cells not found after running the notebook.')
             elif not execute:
                 raise RuntimeError (f'Exported pickle files not found {path_to_code_cells_file} and execute is False')
             else:
@@ -85,12 +106,15 @@ class NBExporter(Processor):
         self.test_cells = []
         self.doc_cells = []
         config = get_config ()
-        self.root_path=config.config_path()
+        self.root_path=config.config_path
         self.nbs_path = config['nbs_path']
         self.nbm_path = config['nbm_path']
-        self.dest_nb_path = Path(str(path).replace(self.nbm_path, self.nbs_path))
-        self.test_nb_path = dest_nb_path.parent / f'test_{file_name_without_extension}.ipynb'
+        self.dest_nb_path = Path(str(path).replace(str(self.nbm_path), str(self.nbs_path)))
+        self.test_dest_nb_path = self.dest_nb_path.parent / f'test_{file_name_without_extension}.ipynb'
         self.tmp_nb_path = Path(str(path).replace(self.nbm_path, '.nbs'))
+
+        # other
+        self.tab_size = tab_size
     
     def cell(self, cell):
         source_lines = cell.source.splitlines() if cell.cell_type=='code' else []
@@ -136,7 +160,7 @@ class NBExporter(Processor):
             else:
                 doc_source=source # doc_source does not include first line with %% (? to think about)
             if is_test:
-                doc_source = transform_test_source_for_docs (source_lines, idx)
+                doc_source = transform_test_source_for_docs (source_lines, idx, self.tab_size)
             cell['source']=doc_source
             self.doc_cells.append(cell)
 

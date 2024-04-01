@@ -790,6 +790,7 @@ class CellProcessor():
         log_level='INFO',
         restrict_inputs=False,
         code_cells_path='.nbmodular',
+        export_always=True,
         **kwargs,
     ):
         self.logger = logging.getLogger('CellProcessor')
@@ -863,7 +864,9 @@ class CellProcessor():
             self.lib_folder = self.get_lib_path ()
         except:
             found_notebook = False
+            #raise RuntimeError (f"nbs not found in path to notebook, {nb_path}")
         
+        #index = nb_path.parts.index(self.nbs_folder.name)
         if found_notebook:
             ##pdb.no_set_trace()
             try:
@@ -873,6 +876,7 @@ class CellProcessor():
             self.file_path = (self.nbs_folder.parent / self.lib_folder.name).joinpath (*nb_path.parts[index+1:])
             self.file_path = self.file_path.parent / self.file_path.name.replace ('.ipynb', '.py')
             self.file_path.parent.mkdir (parents=True, exist_ok=True)
+
             if index > -1:
                 self.test_file_path = (self.nbs_folder.parent / 'tests').joinpath (*nb_path.parts[index+1:-1])/ f'test_{self.file_path.name}'
             else:
@@ -958,7 +962,13 @@ class CellProcessor():
         self._added_io_imports = False
         self.variable_classifier = VariableClassifier ()
 
-        self.path_to_code_cells_file = self.code_cells_path / f'{self.file_name_without_extension}.pk'
+        if found_notebook:
+            self.path_to_code_cells_file = (self.nbs_folder.parent / self.code_cells_path).joinpath (*nb_path.parts[index+1:])
+            self.path_to_code_cells_file = self.path_to_code_cells_file.parent / self.path_to_code_cells_file.name.replace ('.ipynb', '.pk')
+            self.code_cells_path = self.path_to_code_cells_file.parent
+        else:
+            self.path_to_code_cells_file = self.code_cells_path / f'{self.file_name_without_extension}.pk'
+        self.export_always = export_always
         
         self.parser = argparse.ArgumentParser(description='Arguments to `function` magic cell.')
         self.parser.add_argument('-i', '--input', type=str, nargs='+', help='Strict input. No other input considered, regardless of any dependencies.')
