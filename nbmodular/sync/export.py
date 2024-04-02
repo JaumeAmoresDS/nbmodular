@@ -83,22 +83,26 @@ class NBExporter(Processor):
                         self.logger.debug (f'Path {path_to_code_cells_file} not found')
                         path_to_code_cells_file = Path('.nbmodular/temporary.pk')
                         self.logger.debug (f'Trying {path_to_code_cells_file}')
-                    if not path_to_code_cells_file.exists():
-                        raise RuntimeError (f'Path to code cells not found after running the notebook.')
+                    # we comment out the following because it may happen that 
+                    # there are no non-test cells in notebook to be exported
+                    #if not path_to_code_cells_file.exists():
+                    #    raise RuntimeError (f'Path to code cells not found after running the notebook.')
                     test_path_to_code_cells_file = test_path_to_code_cells_file.parent / 'test_temporary.pk'
                     if not test_path_to_code_cells_file.exists():
                         self.logger.debug (f'Path {test_path_to_code_cells_file} not found')
                         test_path_to_code_cells_file = Path('.nbmodular/test_temporary.pk')
                         self.logger.debug (f'Trying {test_path_to_code_cells_file}')
-                    if not test_path_to_code_cells_file.exists():
-                        raise RuntimeError (f'Path to test code cells not found after running the notebook.')
+                    # we comment out the following because it may happen that 
+                    # there are no test cells in notebook to be exported
+                    #if not test_path_to_code_cells_file.exists():
+                    #    raise RuntimeError (f'Path to test code cells not found after running the notebook.')
             elif not execute:
                 raise RuntimeError (f'Exported pickle files not found {path_to_code_cells_file} and execute is False')
             else:
                 raise RuntimeError (f'Neither the exported pickle files {path_to_code_cells_file} nor the notebook {path} were found.')
         
         self.code_cells = joblib.load (path_to_code_cells_file) if path_to_code_cells_file.exists() else {}
-        self.test_code_cells = joblib.load (test_path_to_code_cells_file) if path_to_code_cells_file.exists() else {}
+        self.test_code_cells = joblib.load (test_path_to_code_cells_file) if test_path_to_code_cells_file.exists() else {}
 
         self.function_names = {}
         self.test_function_names = {}

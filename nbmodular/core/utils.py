@@ -7,6 +7,7 @@ __all__ = ['set_log_level', 'get_repo_root_folder', 'cd_root']
 import logging
 import os
 import nbdev
+from pathlib import Path
 
 # %% ../../nbs/utils.ipynb 3
 def set_log_level (logger, log_level):
