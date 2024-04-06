@@ -2016,7 +2016,7 @@ for arg, val in zip (args_with_defaults, default_values):
         return nbdev.config.get_config()['lib_path']
                    
     def get_nbs_path (self):
-        return nbdev.config.get_config()['nbs_path']
+        return nbdev.config.get_config()['nbm_path']
     
     def pipeline_code (self, pipeline_name, pipeline_name_or_default='default_pipeline'):
         function_list = self.get_functions_from_pipeline (pipeline_name_or_default)
