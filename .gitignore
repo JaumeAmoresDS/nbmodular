@@ -193,3 +193,5 @@ nbs/test_nbs/locals/
 nbs/test_nbs/test_test_export.ipynb
 nbs/test_structured/
 results/
+.nbs/
+nbs/test_nbs

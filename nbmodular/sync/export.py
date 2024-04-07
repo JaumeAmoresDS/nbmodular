@@ -116,6 +116,7 @@ class NBExporter(Processor):
         self.dest_nb_path = Path(str(path).replace(str(self.nbm_path), str(self.nbs_path)))
         self.test_dest_nb_path = self.dest_nb_path.parent / f'test_{file_name_without_extension}.ipynb'
         self.tmp_nb_path = Path(str(path).replace(self.nbm_path, '.nbs'))
+        self.tmp_nb_path.parent.mkdir (parents=True, exist_ok=True)
 
         # other
         self.tab_size = tab_size
@@ -158,9 +159,9 @@ class NBExporter(Processor):
                 new_cell = NbCell (cell.idx_, cell)
                 new_cell['source'] = code_source
                 if is_test:
-                    self.test_cells.append (cell)
+                    self.test_cells.append (new_cell)
                 else:
-                    self.cells.append (cell)
+                    self.cells.append (new_cell)
             else:
                 doc_source=source # doc_source does not include first line with %% (? to think about)
             if is_test:
@@ -169,6 +170,7 @@ class NBExporter(Processor):
             self.doc_cells.append(cell)
 
     def end(self): 
+        write_nb (self.nb, self.tmp_nb_path)
         self.nb.cells = self.cells
         write_nb (self.nb, self.dest_nb_path)
         self.nb.cells = self.test_cells
