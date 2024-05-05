@@ -13,6 +13,7 @@ import logging
 
 from nbdev.processors import Processor, NBProcessor
 from nbdev.config import get_config
+from nbdev.export import nb_export
 from execnb.shell import CaptureShell
 from execnb.nbio import new_nb, mk_cell, read_nb, write_nb, NbCell
 
@@ -113,10 +114,24 @@ class NBExporter(Processor):
         self.root_path=config.config_path
         self.nbs_path = config['nbs_path']
         self.nbm_path = config['nbm_path']
+        self.lib_path = config['lib_path']
+
+        self.dest_nb_path = Path(str(path).replace(str(self.nbm_path), str(self.nbs_path)))
         self.dest_nb_path = Path(str(path).replace(str(self.nbm_path), str(self.nbs_path)))
         self.test_dest_nb_path = self.dest_nb_path.parent / f'test_{file_name_without_extension}.ipynb'
         self.tmp_nb_path = Path(str(path).replace(self.nbm_path, '.nbs'))
         self.tmp_nb_path.parent.mkdir (parents=True, exist_ok=True)
+
+
+        try:
+            index = path.parts.index(self.nbm_path)
+        except:
+            raise RuntimeError (f'{self.nbm_path.name} not found in {path}')
+        parent_parts = path.parent.parts[index+1:]
+        self.dest_module_path = '.'.join(parent_parts) + '.' + file_name_without_extension
+        self.test_dest_module_path = 'tests.' + '.'.join(parent_parts) + '.' + file_name_without_extension
+        self.default_exp_cell = mk_cell (f'#|default_exp {self.dest_module_path}')
+        self.default_test_exp_cell = mk_cell (f'#|default_exp {self.test_dest_module_path}')
 
         # other
         self.tab_size = tab_size
@@ -172,9 +187,14 @@ class NBExporter(Processor):
     def end(self): 
         write_nb (self.nb, self.tmp_nb_path)
         self.nb.cells = self.cells
-        write_nb (self.nb, self.dest_nb_path)
-        self.nb.cells = self.test_cells
-        write_nb (self.nb, self.test_dest_nb_path)
+        if len(self.cells) > 0:
+            self.nb.cells = [self.default_exp_cell] + self.cells
+            write_nb (self.nb, self.dest_nb_path)
+            nb_export (self.dest_nb_path)
+        if len(self.test_cells) > 0:
+            self.nb.cells = [self.default_test_exp_cell] + self.test_cells
+            write_nb (self.nb, self.test_dest_nb_path)
+            nb_export (self.test_dest_nb_path)
 
 
 # %% ../../nbs/export.ipynb 9
