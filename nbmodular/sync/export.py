@@ -195,6 +195,16 @@ class NBExporter(Processor):
             self.nb.cells = [self.default_test_exp_cell] + self.test_cells
             write_nb (self.nb, self.test_dest_nb_path)
             nb_export (self.test_dest_nb_path)
+        
+        # step 2 (beginning) in diagram
+        self.tmp_nb_path.rename (self.tmp_nb_path.parent / f"_{self.tmp_nb_path.name}")
+        
+        # step 3 in diagram
+        self.dest_nb_path.rename (self.tmp_nb_path.parent / self.dest_nb_path.name)
+        self.test_dest_nb_path.rename (self.tmp_nb_path.parent / self.test_dest_nb_path.name)
+
+        # step 2 (end) in diagram
+        (self.tmp_nb_path.parent / f"_{self.tmp_nb_path.name}").rename (self.dest_nb_path)
 
 
 # %% ../../nbs/export.ipynb 9
