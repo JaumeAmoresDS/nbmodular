@@ -14,6 +14,7 @@ import logging
 from nbdev.processors import Processor, NBProcessor
 from nbdev.config import get_config
 from nbdev.export import nb_export
+from nbdev.sync import _update_mod
 from execnb.shell import CaptureShell
 from execnb.nbio import new_nb, mk_cell, read_nb, write_nb, NbCell
 
@@ -46,6 +47,64 @@ def transform_test_source_for_docs (source_lines, idx, tab_size):
         transformed_lines.append (line[tab_size:] if line.startswith (" "*tab_size) else line)
     return '\n'.join (transformed_lines)
 
+def set_paths_nb_processor (
+    nb_processor,
+    path,
+):
+    nb_processor.path=Path(path)
+    nb_processor.file_name_without_extension = nb_processor.path.name[:-len('.ipynb')]
+
+    config = get_config ()
+    nb_processor.root_path=config.config_path
+    nb_processor.nbs_path = config['nbs_path']
+    nb_processor.nbm_path = config['nbm_path']
+    nb_processor.lib_path = config['lib_path']
+
+    # In diagram: nbs/nb.ipynb
+    nb_processor.dest_nb_path = Path(
+        str(nb_processor.path).replace(
+            str(nb_processor.nbm_path), 
+            str(nb_processor.nbs_path)
+        )
+    )
+    # In diagram: nbs/test_nb.ipynb
+    nb_processor.test_dest_nb_path = nb_processor.dest_nb_path.parent / f'test_{nb_processor.file_name_without_extension}.ipynb'
+    # In diagram: .nbs/nb.ipynb
+    nb_processor.tmp_nb_path = Path(str(nb_processor.path).replace(nb_processor.nbm_path, '.nbs'))
+    nb_processor.tmp_nb_path.parent.mkdir (parents=True, exist_ok=True)
+
+    # step 2 (beginning) in diagram
+    # In diagram: .nbs/_nb.ipynb
+    nb_processor.duplicate_tmp_path = nb_processor.tmp_nb_path.parent / f"_{nb_processor.tmp_nb_path.name}"
+
+    # step 3 in diagram
+    # In diagram: .nbs/nb.ipynb
+    nb_processor.tmp_dest_nb_path = nb_processor.tmp_nb_path.parent / nb_processor.dest_nb_path.name
+    # In diagram: .nbs/test_nb.ipynb
+    nb_processor.tmp_test_dest_nb_path = nb_processor.tmp_nb_path.parent / nb_processor.test_dest_nb_path.name
+
+    # python module paths
+    try:
+        index = nb_processor.path.parts.index(nb_processor.nbm_path)
+    except:
+        raise RuntimeError (f'{nb_processor.nbm_path.name} not found in {nb_processor.path}')
+    parent_parts = nb_processor.path.parent.parts[index+1:]
+    # module paths
+    nb_processor.dest_python_path = (
+        nb_processor.lib_path.name + '/' +
+        '/'.join(parent_parts) + '/' +
+        nb_processor.file_name_without_extension + '.py'
+    )
+    nb_processor.test_dest_python_path = (
+        nb_processor.lib_path.name + '/tests/' + 
+        '/'.join(parent_parts) + '/' +
+        nb_processor.file_name_without_extension + '.py'
+    
+    # to be used in default_exp cell (see NBExporter)
+    nb_processor.dest_module_path = '.'.join(parent_parts) + '.' + nb_processor.file_name_without_extension
+    nb_processor.test_dest_module_path = 'tests.' + '.'.join(parent_parts) + '.' + nb_processor.file_name_without_extension
+
+    
 class NBExporter(Processor):
     def __init__ (
         self, 
@@ -62,17 +121,16 @@ class NBExporter(Processor):
         super().__init__ (nb)
         self.logger = logging.getLogger('nb_exporter') if logger is None else logger
         set_log_level (self.logger, log_level)
-        path=Path(path)
-        file_name_without_extension = path.name[:-len('.ipynb')]
+        set_paths_nb_processor (self, path)
         self.code_cells_path=Path(code_cells_path)
-        code_cells_file_name = file_name_without_extension if code_cells_file_name is None else code_cells_file_name
-        path_to_code_cells_file = path.parent / self.code_cells_path / f'{code_cells_file_name}.pk'
-        test_path_to_code_cells_file = path.parent / self.code_cells_path / f'test_{code_cells_file_name}.pk'
+        code_cells_file_name = self.file_name_without_extension if code_cells_file_name is None else code_cells_file_name
+        path_to_code_cells_file = self.path.parent / self.code_cells_path / f'{code_cells_file_name}.pk'
+        test_path_to_code_cells_file = self.path.parent / self.code_cells_path / f'test_{code_cells_file_name}.pk'
         if not path_to_code_cells_file.exists() and not test_path_to_code_cells_file.exists():
-            if path.exists() and execute:
-                self.logger.info (f'Executing notebook {path}')
+            if self.path.exists() and execute:
+                self.logger.info (f'Executing notebook {self.path}')
                 caputure_shell = CaptureShell ()
-                caputure_shell.execute(path, 'tmp.ipynb')
+                caputure_shell.execute(self.path, 'tmp.ipynb')
                 if not path_to_code_cells_file.exists():
                     self.logger.debug (f'{path_to_code_cells_file} not found')
                     # path_to_code_cells_file may not exist if ipynbname doesnt work in 
@@ -100,7 +158,7 @@ class NBExporter(Processor):
             elif not execute:
                 raise RuntimeError (f'Exported pickle files not found {path_to_code_cells_file} and execute is False')
             else:
-                raise RuntimeError (f'Neither the exported pickle files {path_to_code_cells_file} nor the notebook {path} were found.')
+                raise RuntimeError (f'Neither the exported pickle files {path_to_code_cells_file} nor the notebook {self.path} were found.')
         
         self.code_cells = joblib.load (path_to_code_cells_file) if path_to_code_cells_file.exists() else {}
         self.test_code_cells = joblib.load (test_path_to_code_cells_file) if test_path_to_code_cells_file.exists() else {}
@@ -110,26 +168,7 @@ class NBExporter(Processor):
         self.cells = []
         self.test_cells = []
         self.doc_cells = []
-        config = get_config ()
-        self.root_path=config.config_path
-        self.nbs_path = config['nbs_path']
-        self.nbm_path = config['nbm_path']
-        self.lib_path = config['lib_path']
-
-        self.dest_nb_path = Path(str(path).replace(str(self.nbm_path), str(self.nbs_path)))
-        self.dest_nb_path = Path(str(path).replace(str(self.nbm_path), str(self.nbs_path)))
-        self.test_dest_nb_path = self.dest_nb_path.parent / f'test_{file_name_without_extension}.ipynb'
-        self.tmp_nb_path = Path(str(path).replace(self.nbm_path, '.nbs'))
-        self.tmp_nb_path.parent.mkdir (parents=True, exist_ok=True)
-
-
-        try:
-            index = path.parts.index(self.nbm_path)
-        except:
-            raise RuntimeError (f'{self.nbm_path.name} not found in {path}')
-        parent_parts = path.parent.parts[index+1:]
-        self.dest_module_path = '.'.join(parent_parts) + '.' + file_name_without_extension
-        self.test_dest_module_path = 'tests.' + '.'.join(parent_parts) + '.' + file_name_without_extension
+        
         self.default_exp_cell = mk_cell (f'#|default_exp {self.dest_module_path}')
         self.default_test_exp_cell = mk_cell (f'#|default_exp {self.test_dest_module_path}')
 
@@ -197,14 +236,14 @@ class NBExporter(Processor):
             nb_export (self.test_dest_nb_path)
         
         # step 2 (beginning) in diagram
-        self.tmp_nb_path.rename (self.tmp_nb_path.parent / f"_{self.tmp_nb_path.name}")
+        self.tmp_nb_path.rename (self.duplicate_tmp_path)
         
         # step 3 in diagram
-        self.dest_nb_path.rename (self.tmp_nb_path.parent / self.dest_nb_path.name)
-        self.test_dest_nb_path.rename (self.tmp_nb_path.parent / self.test_dest_nb_path.name)
+        self.dest_nb_path.rename (self.tmp_dest_nb_path)
+        self.test_dest_nb_path.rename (self.tmp_test_dest_nb_path)
 
         # step 2 (end) in diagram
-        (self.tmp_nb_path.parent / f"_{self.tmp_nb_path.name}").rename (self.dest_nb_path)
+        self.duplicate_tmp_path.rename (self.dest_nb_path)
 
 
 # %% ../../nbs/export.ipynb 9
@@ -237,28 +276,22 @@ class NBImporter (Processor):
     def __init__ (
         self, 
         path,
-        test_path,
-        nb=None,
-        test_nb=None,
-        code_cells_file_name=None,
-        code_cells_path='.nbmodular',
-        execute=True,
         logger=None,
         log_level='INFO',
     ):
-        self.nb = read_nb(path) if nb is None else nb
-        self.test_nb = read_nb(test_path) if test_nb is None else test_nb
-        super().__init__ (self.nb)
-        self.logger = logging.getLogger('nb_importer') if logger is None else logger
+        self.logger = logging.getLogger('nb_exporter') if logger is None else logger
         set_log_level (self.logger, log_level)
-        path=Path(path)
-        test_path=Path(test_path)
+        set_paths_nb_processor (self, path)
 
-        self.cells = []
-        self.test_cells = []
-        file_name_without_extension = path.name[:-len('.ipynb')]
-        self.dest_nb_path = path.parent / f'orig_{file_name_without_extension}.ipynb'
-        self.test_dest_nb_path = path.parent / f'orig_test_{file_name_without_extension}.ipynb'
+        # step 5 in diagram:
+        # .nbs/nb.ipynb => nbs/nb.ipynb
+        self.tmp_dest_nb_path.rename (self.dest_nb_path)
+        # .nbs/test_nb.ipynb => nbs/test_nb.ipynb
+        self.tmp_test_dest_nb_path.rename (self.test_dest_nb_path)
+
+        # step 5 in diagram: nbdev_update
+        _update_mod (self.dest_python_path, lib_dir=self.lib_path.parent)
+        _update_mod (self.test_dest_python_path, lib_dir=self.lib_path.parent)
     
     def cell(self, cell):
         source_lines = cell.source.splitlines() if cell.cell_type=='code' else []
