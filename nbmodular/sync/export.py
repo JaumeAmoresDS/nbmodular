@@ -2,7 +2,7 @@
 
 # %% auto 0
 __all__ = ['obtain_function_name_and_test_flag', 'transform_test_source_for_docs', 'set_paths_nb_processor', 'NBExporter',
-           'process_cell_for_nbm_update', 'nbm_update', 'nbm_export']
+           'nbm_export', 'nbm_update', 'process_cell_for_nbm_update']
 
 # %% ../../nbs/export.ipynb 2
 import shlex
@@ -24,7 +24,7 @@ from execnb.nbio import new_nb, mk_cell, read_nb, write_nb, NbCell
 
 from ..core.utils import set_log_level
 
-# %% ../../nbs/export.ipynb 5
+# %% ../../nbs/export.ipynb 4
 def obtain_function_name_and_test_flag (line, cell):
     root = ast.parse (cell)
     name=[x.name for x in ast.walk(root) if isinstance (x, ast.FunctionDef)]
@@ -43,7 +43,7 @@ def obtain_function_name_and_test_flag (line, cell):
     
     return function_name, is_test
 
-# %% ../../nbs/export.ipynb 7
+# %% ../../nbs/export.ipynb 6
 def transform_test_source_for_docs (source_lines, idx, tab_size):
     start = 2 if idx==0 else 1
     transformed_lines=[]
@@ -266,35 +266,21 @@ class NBExporter(Processor):
         self.duplicate_tmp_path.rename (self.dest_nb_path)
 
 
-# %% ../../nbs/export.ipynb 9
-def process_cell_for_nbm_update (cell: NbCell):
-    source_lines = cell.source.splitlines() if cell.cell_type=='code' else []
-    found_directive = False
-    found_magic = False
-    for line_number, line in enumerate(source_lines):
-        line = line.strip()
-        if len(line) > 0:
-            if found_directive:
-                if line.startswith('#@@'):
-                    line = line[3:]
-                    words = line.split()
-                    if len(words) > 0 and words[0] not in ["function", "method", "include", "class"]:
-                        warnings.warn (f'Found #@@ with a word after that, and this word is not in ["function", "method", "include", "class"]')
-                    line = f"{'%%'}{line}"
-                    found_magic = True
-                    break
-            elif line.startswith('#|'):
-                found_directive = True
-            else:
-                if found_directive:
-                    raise ValueError ("Line with #@@, corresponding to magic line in notebook, not found after having found line with directive #|")
-                else:
-                    raise ValueError ("Directive line not found at beginning of cell")
-    if not found_magic:
-        raise ValueError ("Magic line not found at beginning of cell")
-    cell.source = "\n".join ([line] + source_lines [line_number+1:])
-    
-        
+# %% ../../nbs/export.ipynb 8
+def nbm_export (
+    path,
+    **kwargs,
+):
+    path=Path(path)
+    nb = read_nb(path)
+    processor = NBExporter (
+        path,
+        nb=nb,
+        **kwargs,
+    )
+    NBProcessor (path, processor, rm_directives=False, nb=nb).process()
+
+# %% ../../nbs/export.ipynb 10
 def nbm_update (
     path,
     code_cells_path='.nbmodular',
@@ -343,16 +329,30 @@ def nbm_update (
             test_idx += 1
         nb_processor.cells.append (cell)
 
-    
-def nbm_export (
-    path,
-    **kwargs,
-):
-    path=Path(path)
-    nb = read_nb(path)
-    processor = NBExporter (
-        path,
-        nb=nb,
-        **kwargs,
-    )
-    NBProcessor (path, processor, rm_directives=False, nb=nb).process()
+# %% ../../nbs/export.ipynb 12
+def process_cell_for_nbm_update (cell: NbCell):
+    source_lines = cell.source.splitlines() if cell.cell_type=='code' else []
+    found_directive = False
+    found_magic = False
+    for line_number, line in enumerate(source_lines):
+        line = line.strip()
+        if len(line) > 0:
+            if found_directive:
+                if line.startswith('#@@'):
+                    line = line[3:]
+                    words = line.split()
+                    if len(words) > 0 and words[0] not in ["function", "method", "include", "class"]:
+                        warnings.warn (f'Found #@@ with a word after that, and this word is not in ["function", "method", "include", "class"]')
+                    line = f"{'%%'}{line}"
+                    found_magic = True
+                    break
+            elif line.startswith('#|'):
+                found_directive = True
+            else:
+                if found_directive:
+                    raise ValueError ("Line with #@@, corresponding to magic line in notebook, not found after having found line with directive #|")
+                else:
+                    raise ValueError ("Directive line not found at beginning of cell")
+    if not found_magic:
+        raise ValueError ("Magic line not found at beginning of cell")
+    cell.source = "\n".join ([line] + source_lines [line_number+1:])
