@@ -11,6 +11,8 @@ __all__ = ['get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_du
 
 # %% ../../nbs/cell2func.ipynb 3
 import pdb
+from typing import List
+from xxlimited import Str
 import ipdb
 from curses.ascii import isxdigit
 from textwrap import indent
@@ -784,6 +786,9 @@ class CellProcessor():
     """
     Processes the cell's code according to the magic command.
     """
+
+    magic_commands_list = ["function", "include", "method", "class"]
+
     def __init__(
         self, 
         tab_size=4, 
@@ -1251,7 +1256,7 @@ class CellProcessor():
             self.add_class (cell, **kwargs)
         else:
             self.function (function_name, cell, call=call, original_kwargs=kwargs.copy(), **kwargs)
-
+    
     def create_self (self, cell):
         root = ast.parse (cell)
         name=[x.name for x in ast.walk(root) if isinstance (x, ast.ClassDef)]
