@@ -2,7 +2,7 @@
 
 # %% auto 0
 __all__ = ['obtain_function_name_and_test_flag', 'transform_test_source_for_docs', 'set_paths_nb_processor', 'NBExporter',
-           'nbm_export', 'nbm_update', 'process_cell_for_nbm_update']
+           'nbm_export', 'nbm_update', 'process_cell_for_nbm_update', 'NbMagicProcessor', 'NbMagicExporter']
 
 # %% ../../nbs/export.ipynb 2
 import shlex
