@@ -395,7 +395,7 @@ class NbMagicProcessor (Processor):
                     is_class=command=="class"
                 )
 
-# %% ../../nbs/export.ipynb 29
+# %% ../../nbs/export.ipynb 26
 class NbMagicExporter(Processor):
     def __init__ (
         self, 
