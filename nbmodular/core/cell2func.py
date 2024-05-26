@@ -1037,26 +1037,37 @@ class CellProcessor:
             help="Output to be excluded.",
         )
         self.parser.add_argument(
-            "-m", "--merge", action="store_true", help="merge with previous function"
+            "-m",
+            "--merge",
+            action="store_true",
+            default=None,
+            help="merge with previous function",
         )
         self.parser.add_argument(
-            "-s", "--show", action="store_true", help="show function code"
+            "-s", "--show", action="store_true", default=None, help="show function code"
         )
         self.parser.add_argument(
-            "-l", "--load", action="store_true", help="load variables"
+            "-l", "--load", action="store_true", default=None, help="load variables"
         )
-        self.parser.add_argument("--save", action="store_true", help="save variables")
         self.parser.add_argument(
-            "--io-code", action="store_true", help="add I/O code to function"
+            "--save", action="store_true", default=None, help="save variables"
+        )
+        self.parser.add_argument(
+            "--io-code",
+            action="store_true",
+            default=None,
+            help="add I/O code to function",
         )
         self.parser.add_argument(
             "--save-arg",
             action="store_true",
+            default=None,
             help="have save=True as default arg value in function",
         )
         self.parser.add_argument(
             "--load-arg",
             action="store_true",
+            default=None,
             help="have load=True as default arg value in function",
         )
         self.parser.add_argument(
@@ -1068,6 +1079,7 @@ class CellProcessor:
         self.parser.add_argument(
             "--io-locals",
             action="store_true",
+            default=None,
             help="save/load local variables of function",
         )
         self.parser.add_argument(
@@ -1102,26 +1114,33 @@ class CellProcessor:
             help='Arguments passed to load function, like so: "param1=value1, param2=value2"',
         )
         self.parser.add_argument(
-            "--run", action="store_true", help="execute the contents of the cell"
+            "--run",
+            action="store_true",
+            default=None,
+            help="execute the contents of the cell",
         )
         self.parser.add_argument(
             "--copy-locals",
             action="store_true",
+            default=None,
             help="Make a deep copy of dictionary of local variables, to be able to restore their values after running cell.",
         )
         self.parser.add_argument(
             "--override",
             action="store_true",
+            default=None,
             help="load / save / no-run values override any global flags",
         )
         self.parser.add_argument(
             "--returns-dict",
             action="store_true",
+            default=None,
             help="function results are gathered in dictionary",
         )
         self.parser.add_argument(
             "--returns-bunch",
             action="store_true",
+            default=None,
             help="function results are gathered in Bunch",
         )
         self.parser.add_argument(
@@ -1133,33 +1152,42 @@ class CellProcessor:
         self.parser.add_argument(
             "--pack-all",
             action="store_true",
+            default=None,
             help="pack all variables in bunch, including those not recognized as variables created or modified in function",
         )
         self.parser.add_argument(
             "--only-posterior",
             action="store_true",
+            default=None,
             help="return only created / modified variables that are used in posterior functions",
         )
         self.parser.add_argument(
             "--return-all",
             action="store_true",
+            default=None,
             help="return all created / modified variables even if they are not used in posterior functions",
         )
         self.parser.add_argument(
-            "-t", "--test", action="store_true", help="test function / imports"
+            "-t",
+            "--test",
+            action="store_true",
+            default=None,
+            help="test function / imports",
         )
         self.parser.add_argument(
-            "-d", "--data", action="store_true", help="data function"
+            "-d", "--data", action="store_true", default=None, help="data function"
         )
         self.parser.add_argument(
             "-p",
             "--permanent",
             action="store_true",
+            default=None,
             help="do not change the contents of the function",
         )
         self.parser.add_argument(
             "--fixed-io",
             action="store_true",
+            default=None,
             help="do not change the inputs and outputs when %%function is applied on a defined function, e.g., %%function\ndef my_function...",
         )
         self.parser.add_argument(
@@ -1171,15 +1199,20 @@ class CellProcessor:
         self.parser.add_argument(
             "--history",
             action="store_true",
+            default=None,
             help="resets everything, including history",
         )
         self.parser.add_argument(
             "--previous-values",
             action="store_true",
+            default=None,
             help="deletes both current and previous values for each function",
         )
         self.parser.add_argument(
-            "--method", action="store_true", help="Convert to class method."
+            "--method",
+            action="store_true",
+            default=None,
+            help="Convert to class method.",
         )
         self.parser.add_argument(
             "--pipe-name",
@@ -1188,7 +1221,10 @@ class CellProcessor:
             help="name of pipeline - if default, default_pipe_name is used. This is, initially, the name of the python module.",
         )
         self.parser.add_argument(
-            "--pipe", action="store_true", help="Insert function into pipeline."
+            "--pipe",
+            action="store_true",
+            default=None,
+            help="Insert function into pipeline.",
         )
 
         for action_dest in [
