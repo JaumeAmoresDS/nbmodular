@@ -1371,7 +1371,7 @@ class CellProcessor:
             help='Arguments passed to load function, like so: "param1=value1, param2=value2"',
         )
         self.parser.add_argument(
-            "--run", action="store_true", help="do not execute the contents of the cell"
+            "--run", action="store_true", help="execute the contents of the cell"
         )
         self.parser.add_argument(
             "-n",
