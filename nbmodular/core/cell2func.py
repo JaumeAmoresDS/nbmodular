@@ -49,6 +49,7 @@ import nbdev
 from . import function_io
 from .utils import set_log_level
 
+
 # %% ../../nbs/cell2func.ipynb 4
 def bunch_io(func):
     def bunch_wrapper(*args, **kwargs):
@@ -78,6 +79,7 @@ def bunch_io(func):
         return bunch
 
     return bunch_wrapper
+
 
 # %% ../../nbs/cell2func.ipynb 7
 import pdb
@@ -112,6 +114,7 @@ def get_non_callable_ipython(variables_to_inspect, locals_, self=None):
                 self[non_callable_variables].append(name)
         self[variables_to_inspect] = self[non_callable_variables].copy()
 
+
 # %% ../../nbs/cell2func.ipynb 9
 def get_non_callable(variables):
     non_callable = []
@@ -124,6 +127,7 @@ def get_non_callable(variables):
             non_callable.append(name)
     return non_callable
 
+
 # %% ../../nbs/cell2func.ipynb 11
 def get_ast(code):
     print(ast.dump(ast.parse(code), indent=2))
@@ -135,6 +139,7 @@ def remove_duplicates_from_list(list_with_potential_duplicates):
         if x not in list_without_duplicates:
             list_without_duplicates.append(x)
     return list_without_duplicates
+
 
 # %% ../../nbs/cell2func.ipynb 13
 class VariableClassifier(NodeVisitor):
@@ -157,9 +162,11 @@ class VariableClassifier(NodeVisitor):
                     self.previous_variables.append(node.id)
         super().generic_visit(node)
 
+
 # %% ../../nbs/cell2func.ipynb 15
 def add_dict_values(d: dict):
     return reduce(lambda x, y: ("+", x[1] + y[1]), d.items())[1]
+
 
 # %% ../../nbs/cell2func.ipynb 17
 class FunctionProcessor(Bunch):
@@ -222,7 +229,7 @@ class FunctionProcessor(Bunch):
         kwarguments=None,
         return_values=None,
         display=False,
-        not_run=False,
+        run=True,
     ) -> None:
         """
         Updates the original code found in the cell.
@@ -232,7 +239,7 @@ class FunctionProcessor(Bunch):
         """
         if self.io_code:
             self._add_io()
-        if self.permanent and not not_run:
+        if self.permanent and run:
             get_ipython().run_cell(self.code)
             return
         if self.data and not self.test:
@@ -580,7 +587,7 @@ keys = joblib.load ('function_processor_keys.pk')
         store_values=True,
         first_call=True,
         function_in_previous_cells=None,
-        not_run=False,
+        run=True,
     ):
         """
         Runs the code in the function, and collects local variables.
@@ -612,7 +619,7 @@ keys = joblib.load ('function_processor_keys.pk')
                     for k in self.previous_values
                     if k not in function_in_previous_cells.current_values
                 }
-            if not not_run:
+            if run:
                 self.store_values(
                     "current_values", code=code + "\n", store_values=store_values
                 )
@@ -911,6 +918,7 @@ for k, v in variables_to_insert.items():
             field="previous_values", code=restore_previous_values_code
         )
 
+
 # %% ../../nbs/cell2func.ipynb 20
 def update_cell_code(cell, defined=False):
     original_code = ""
@@ -930,6 +938,7 @@ def update_cell_code(cell, defined=False):
     cell = "if True:\n" + original_code if defined else original_code
 
     return cell
+
 
 # %% ../../nbs/cell2func.ipynb 22
 def add_function_to_list(function, function_list, idx=None, position=None):
@@ -952,6 +961,7 @@ def add_function_to_list(function, function_list, idx=None, position=None):
         for idx, function in enumerate(function_list):
             function.idx = idx
     return function_list
+
 
 # %% ../../nbs/cell2func.ipynb 25
 def get_args_and_defaults(list_args, list_defaults):
@@ -995,6 +1005,7 @@ def get_args_and_defaults(list_args, list_defaults):
 
     return args_without_defaults, args_with_defaults, default_values
 
+
 # %% ../../nbs/cell2func.ipynb 27
 def get_args_and_defaults_from_ast(root):
     args_without_defaults, args_with_defaults1, default_values1 = get_args_and_defaults(
@@ -1018,13 +1029,6 @@ def get_args_and_defaults_from_function_in_cell():
     root = ast.parse(cell)
     return get_args_and_defaults_from_ast(root)
 
-
-def _set_pars_attr(pars, attr):
-    if not getattr(pars, attr) and not getattr(pars, f"not_{attr}"):
-        setattr(pars, f"not_{attr}", None)
-        setattr(pars, attr, None)
-    elif getattr(pars, attr) and getattr(pars, f"not_{attr}"):
-        raise ValueError(f"{attr} and not-{attr} cannot be passed at the same time")
 
 # %% ../../nbs/cell2func.ipynb 29
 class CellProcessor:
@@ -1472,11 +1476,13 @@ class CellProcessor:
             help="Insert function into pipeline.",
         )
 
-        for action_dest in [
+        # take list of actions explicitly added above
+        self.list_of_parser_actions = [
             x.dest
             for x in self.parser._optionals._actions
             if x.__class__.__name__ == "_StoreTrueAction"
-        ]:
+        ]
+        for action_dest in self.list_of_parser_actions:
             self.parser.add_argument(
                 f"--not-{action_dest}",
                 action="store_false",
@@ -1976,20 +1982,14 @@ for arg, val in zip (args_with_defaults, default_values):
         if defined and permanent:
             this_function.code = cell
         this_function.parse_variables()
-        self.set_function_io_args(this_function, test=test, **kwargs)
+        self.set_function_action_and_io_args(this_function, test=test, **kwargs)
 
         return this_function
 
-    def set_function_attr(self, this_function, attr, value, test, negate=False):
+    def set_function_attr(self, this_function, attr, value, test):
         test_string = "test_" if test else ""
         overriden_value = getattr(self, f"overriden_{test_string}{attr}")
         default_value = getattr(self, f"default_{test_string}{attr}")
-        if negate:
-            overriden_value = (
-                not overriden_value if overriden_value is not None else None
-            )
-            default_value = not default_value
-            attr = f"not_{attr}"
         value = (
             overriden_value
             if overriden_value is not None
@@ -1997,38 +1997,18 @@ for arg, val in zip (args_with_defaults, default_values):
         )
         setattr(this_function, attr, value)
 
-    def set_function_io_args(
+    def set_function_action_and_io_args(
         self,
         this_function,
-        load=None,
-        save=None,
-        io_type=None,
-        io_code=None,
-        io_locals=None,
-        io_folder=None,
         io_root_path=None,
         io_file=None,
-        save_args=None,
-        load_args=None,
-        load_arg=None,
-        save_arg=None,
-        not_run=None,
-        not_pipe=None,
         test=False,
         **kwargs,
     ):
-        self.set_function_attr(this_function, "load", load, test)
-        self.set_function_attr(this_function, "save", save, test)
-        self.set_function_attr(this_function, "io_type", io_type, test)
-        self.set_function_attr(this_function, "io_code", io_code, test)
-        self.set_function_attr(this_function, "io_locals", io_locals, test)
-        self.set_function_attr(this_function, "io_folder", io_folder, test)
-        self.set_function_attr(this_function, "load_args", load_args, test)
-        self.set_function_attr(this_function, "save_args", save_args, test)
-        self.set_function_attr(this_function, "load_arg", load_arg, test)
-        self.set_function_attr(this_function, "save_arg", save_arg, test)
-        self.set_function_attr(this_function, "run", not_run, test, negate=True)
-        self.set_function_attr(this_function, "pipe", not_pipe, test, negate=True)
+        for action_dest in self.list_of_parser_actions:
+            self.set_function_attr(
+                this_function, action_dest, kwargs.get(action_dest), test
+            )
 
         this_function.load_args = (
             eval(f"dict({this_function.load_args})")
@@ -2168,7 +2148,7 @@ for arg, val in zip (args_with_defaults, default_values):
         if self.current_function.load:
             found = self.load_data(**kwargs)
             if found:
-                self.current_function.not_run = True
+                self.current_function.run = False
 
         is_test_function = self.current_function.test and not self.current_function.data
         function_in_previous_cells = (
@@ -2179,7 +2159,7 @@ for arg, val in zip (args_with_defaults, default_values):
             store_values=store_values,
             first_call=first_call,
             function_in_previous_cells=function_in_previous_cells,
-            not_run=self.current_function.not_run,
+            run=self.current_function.run,
         )
 
         self.current_function = self.update_pipeline(
@@ -2192,7 +2172,7 @@ for arg, val in zip (args_with_defaults, default_values):
             unknown_output=unknown_output,
             make_function=make_function,
             update_previous_functions=update_previous_functions,
-            not_run=self.current_function.not_run,
+            run=self.current_function.run,
             store_values=store_values,
             first_call=first_call,
         )
@@ -2223,12 +2203,12 @@ for arg, val in zip (args_with_defaults, default_values):
         else:
             self.all_variables |= set(self.current_function.all_variables)
 
-        if not self.current_function.not_run:
+        if self.current_function.run:
             self.current_function._update_function_info_object()
         else:
             self.current_function._create_function_info_object_with_only_parsed_variables()
 
-        if self.current_function.save and not self.current_function.not_run:
+        if self.current_function.save and self.current_function.run:
             self.save_data(**kwargs)
 
         return self.current_function
@@ -2244,7 +2224,7 @@ for arg, val in zip (args_with_defaults, default_values):
         unknown_output=True,
         make_function=True,
         update_previous_functions=True,
-        not_run=False,
+        run=True,
         store_values=True,
         first_call=True,
         show=False,
@@ -2331,7 +2311,7 @@ for arg, val in zip (args_with_defaults, default_values):
                 is_test_function=False,
                 store_values=store_values,
                 first_call=first_call,
-                not_run=not_run,
+                run=run,
             )
 
         if current_function.test and not current_function.data:
@@ -2520,7 +2500,7 @@ for arg, val in zip (args_with_defaults, default_values):
         get_ipython().run_cell(self.imports)
         get_ipython().run_cell(self.test_imports)
 
-        if not this_function.not_pipe:
+        if this_function.pipe:
             this_function.pipeline_name_or_default = pipe_name
             self.register_pipeline(pipeline_name_or_default=pipe_name)
         else:
@@ -2649,15 +2629,6 @@ for arg, val in zip (args_with_defaults, default_values):
 
     def _parse_args(self, argv):
         pars = self.parser.parse_args(argv)
-        _set_pars_attr(pars, "load")
-        _set_pars_attr(pars, "save")
-        _set_pars_attr(pars, "io_code")
-        _set_pars_attr(pars, "save_arg")
-        _set_pars_attr(pars, "load_arg")
-        _set_pars_attr(pars, "io_locals")
-        _set_pars_attr(pars, "run")
-        _set_pars_attr(pars, "pipe")
-
         kwargs = vars(pars)
         return kwargs, pars
 
@@ -2943,6 +2914,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
     def save_data(self, **kwargs):
         self.run_io(io_action="save", **kwargs)
 
+
 # %% ../../nbs/cell2func.ipynb 34
 @magics_class
 class CellProcessorMagic(Magics):
@@ -3128,6 +3100,7 @@ class CellProcessorMagic(Magics):
         attr, value = values
         self.processor.set_value(attr, value)
 
+
 # %% ../../nbs/cell2func.ipynb 36
 def load_ipython_extension(ipython):
     """
@@ -3135,6 +3108,7 @@ def load_ipython_extension(ipython):
     """
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
+
 
 # %% ../../nbs/cell2func.ipynb 40
 def retrieve_function_values_through_disk(filename="variable_values.pk"):
@@ -3150,6 +3124,7 @@ def retrieve_function_values_through_disk(filename="variable_values.pk"):
         if acceptable_variable(variable_values, k)
     }
     return variable_values
+
 
 # %% ../../nbs/cell2func.ipynb 42
 def retrieve_function_values_through_memory(field):
@@ -3182,6 +3157,7 @@ def retrieve_function_values_through_memory(field):
         variable_values["retrieve_function_values_through_memory"] = True
         return variable_values
     return None
+
 
 # %% ../../nbs/cell2func.ipynb 44
 def copy_values_and_run_code_in_nb(self, field="shared_variables", code=""):
@@ -3217,6 +3193,7 @@ os.remove ('variable_values.pk')
     if "retrieve_function_values_through_memory" not in self:
         get_ipython().run_cell(code_to_run2)
 
+
 # %% ../../nbs/cell2func.ipynb 45
 def copy_values_in_nb(self, field="shared_variables"):
     copy_values_code = """
@@ -3228,12 +3205,14 @@ for k, v in variables_to_insert.items():
 """
     copy_values_and_run_code_in_nb(self, field=field, code=copy_values_code)
 
+
 # %% ../../nbs/cell2func.ipynb 46
 def transfer_variables_to_nb(**kwargs):
     communicator = Bunch()
     communicator.shared_variables = kwargs
     communicator.tab_size = 4
     copy_values_in_nb(communicator)
+
 
 # %% ../../nbs/cell2func.ipynb 52
 def retrieve_nb_locals_through_disk(variable_values, filename="variable_values.pk"):
@@ -3248,6 +3227,7 @@ def retrieve_nb_locals_through_disk(variable_values, filename="variable_values.p
         if acceptable_variable(variable_values, k)
     }
     joblib.dump(variable_values, filename)
+
 
 # %% ../../nbs/cell2func.ipynb 54
 def retrieve_nb_locals_through_memory(field, variable_values):
@@ -3276,9 +3256,11 @@ def retrieve_nb_locals_through_memory(field, variable_values):
         self[field] = variable_values.copy()
         # del variable_values['created_current_values']
 
+
 # %% ../../nbs/cell2func.ipynb 56
 def remove_name_from_nb(name):
     get_ipython().run_cell(f'exec("del {name}")')
+
 
 # %% ../../nbs/cell2func.ipynb 58
 def acceptable_variable(variable_values, k):
@@ -3289,6 +3271,7 @@ def acceptable_variable(variable_values, k):
         not in ["module", "FunctionProcessor", "CellProcessor"]
         and k not in ["variable_values", "In", "Out"]
     )
+
 
 # %% ../../nbs/cell2func.ipynb 60
 def store_variables(
