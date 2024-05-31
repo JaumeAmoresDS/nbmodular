@@ -114,7 +114,7 @@ def set_paths_nb_processor (
     )
     # to be used in default_exp cell (see NBExporter)
     nb_processor.dest_module_path = ".".join(parent_parts) + "." + nb_processor.file_name_without_extension
-    nb_processor.test_dest_module_path = "tests." + ".".join(parent_parts) + "." + nb_processor.file_name_without_extension
+    nb_processor.test_dest_module_path = "tests." + ".".join(parent_parts) + "." + f"test_{nb_processor.file_name_without_extension}"
 
 # %% ../../nbs/export.ipynb 10
 class NBExporter(Processor):
@@ -395,7 +395,7 @@ class NbMagicProcessor (Processor):
                     is_class=command=="class"
                 )
 
-# %% ../../nbs/export.ipynb 26
+# %% ../../nbs/export.ipynb 24
 class NbMagicExporter(Processor):
     def __init__ (
         self, 
@@ -459,7 +459,7 @@ class NbMagicExporter(Processor):
                     function_names[function_name] = 0
                 idx = function_names[function_name]
                 self.logger.debug (f"{function_name}, {idx}, is test: {is_test}")
-                code_cells = self.nb_magic_processor.test_code_cells if is_test else self.nb_magic_processor.code_cells
+                code_cells = self.nb_magic_processor.cell_processor.test_code_cells if is_test else self.nb_magic_processor.cell_processor.code_cells
                 if function_name not in code_cells:
                     raise RuntimeError (f"Function {function_name} not found in code_cells dictionary with keys {code_cells.keys()}")
                 code_cells = code_cells[function_name]
