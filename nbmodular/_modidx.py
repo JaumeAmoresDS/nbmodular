@@ -380,4 +380,6 @@ d = { 'settings': { 'branch': 'main',
                                        'nbmodular.sync.export.transform_test_source_for_docs': ( 'export.html#transform_test_source_for_docs',
                                                                                                  'nbmodular/sync/export.py')},
             'nbmodular.test_nbs.nb': {'nbmodular.test_nbs.nb.first': ('test_nbs/nb.html#first', 'nbmodular/test_nbs/nb.py')},
+            'nbmodular.tests.test_nbs.test_nb': { 'nbmodular.tests.test_nbs.test_nb.second': ( 'test_nbs/test_nb.html#second',
+                                                                                               'nbmodular/tests/test_nbs/test_nb.py')},
             'nbmodular.tutorials.export': {}}}

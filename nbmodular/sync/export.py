@@ -2,7 +2,7 @@
 
 # %% auto 0
 __all__ = ['obtain_function_name_and_test_flag', 'transform_test_source_for_docs', 'set_paths_nb_processor', 'NBExporter',
-           'nbm_export', 'nbm_update', 'process_cell_for_nbm_update', 'NbMagicProcessor', 'NbMagicExporter']
+           'nbm_export', 'NbMagicProcessor', 'NbMagicExporter', 'process_cell_for_nbm_update', 'nbm_update']
 
 # %% ../../nbs/export.ipynb 2
 # Standard
@@ -286,85 +286,6 @@ def nbm_export (
     NBProcessor (path, processor, rm_directives=False, nb=nb).process()
 
 # %% ../../nbs/export.ipynb 14
-def nbm_update (
-    path,
-    code_cells_path=".nbmodular",
-    logger=None,
-    log_level="INFO",
-):
-    nb_processor = Bunch ()
-    nb_processor.code_cells_path=Path(code_cells_path)
-
-    nb_processor.logger = logging.getLogger("nb_importer") if logger is None else logger
-    set_log_level (nb_processor.logger, log_level)
-    set_paths_nb_processor (nb_processor, path)
-
-    # prior to step 5 in diagram:
-    # nbs/nb.ipynb => nbs/_nb.ipynb
-    nb_processor.dest_nb_path.rename (nb_processor.duplicate_dest_nb_path)
-
-    # step 5 in diagram:
-    # .nbs/nb.ipynb => nbs/nb.ipynb
-    nb_processor.tmp_dest_nb_path.rename (nb_processor.dest_nb_path)
-    # .nbs/test_nb.ipynb => nbs/test_nb.ipynb
-    nb_processor.tmp_test_dest_nb_path.rename (nb_processor.test_dest_nb_path)
-
-    # step 5 in diagram: nbdev_update
-    _update_mod (nb_processor.dest_python_path, lib_dir=nb_processor.lib_path.parent)
-    _update_mod (nb_processor.test_dest_python_path, lib_dir=nb_processor.lib_path.parent)
-
-    # obtain cell types and read them from notebooks
-    nb_processor.cell_types = joblib.load (nb_processor.code_cells_path / "cell_types.pk")
-    original_nb = read_nb(path)
-    dest_nb = read_nb(nb_processor.dest_nb_path)
-    test_dest_nb = read_nb(nb_processor.test_dest_nb_path)
-    nb_processor.cells = []
-    original_idx, code_idx, test_idx = 0, 0, 0
-    for cell_type in nb_processor.cell_types:
-        if cell_type == "original":
-            cell = original_nb.cells[original_idx]
-            original_idx += 1
-        elif cell_type == "code":
-            if code_idx > 0:
-                cell = dest_nb.cells[code_idx]
-            code_idx += 1
-        elif cell_type == "test":
-            if test_idx > 0:
-                cell = test_dest_nb.cells[test_idx]
-            test_idx += 1
-        if cell_type in ["original", "code"]: 
-            cell = process_cell_for_nbm_update (cell)
-        nb_processor.cells.append (cell)
-
-# %% ../../nbs/export.ipynb 16
-def process_cell_for_nbm_update (cell: NbCell):
-    source_lines = cell.source.splitlines() if cell.cell_type=="code" else []
-    found_directive = False
-    found_magic = False
-    for line_number, line in enumerate(source_lines):
-        line = line.strip()
-        if len(line) > 0:
-            if found_directive:
-                if line.startswith("#@@"):
-                    line = line[3:]
-                    words = line.split()
-                    if len(words) > 0 and words[0] not in ["function", "method", "include", "class"]:
-                        warnings.warn (f"Found #@@ with a word after that, and this word is not in ['function', 'method', 'include', 'class']")
-                    line = f"{'%%'}{line}"
-                    found_magic = True
-                    break
-            elif line.startswith("#|"):
-                found_directive = True
-            else:
-                if found_directive:
-                    raise ValueError ("Line with #@@, corresponding to magic line in notebook, not found after having found line with directive #|")
-                else:
-                    raise ValueError ("Directive line not found at beginning of cell")
-    if not found_magic:
-        raise ValueError ("Magic line not found at beginning of cell")
-    cell.source = "\n".join ([line] + source_lines [line_number+1:])
-
-# %% ../../nbs/export.ipynb 18
 class NbMagicProcessor (Processor):
     def __init__ (
         self, 
@@ -395,7 +316,7 @@ class NbMagicProcessor (Processor):
                     is_class=command=="class"
                 )
 
-# %% ../../nbs/export.ipynb 24
+# %% ../../nbs/export.ipynb 20
 class NbMagicExporter(Processor):
     def __init__ (
         self, 
@@ -519,3 +440,85 @@ class NbMagicExporter(Processor):
 
         # step 2 (end) in diagram
         self.duplicate_tmp_path.rename (self.dest_nb_path)
+
+# %% ../../nbs/export.ipynb 29
+def process_cell_for_nbm_update (cell: NbCell):
+    source_lines = cell.source.splitlines() if cell.cell_type=="code" else []
+    found_directive = False
+    found_magic = False
+    for line_number, line in enumerate(source_lines):
+        line = line.strip()
+        if len(line) > 0:
+            if found_directive:
+                if line.startswith("#@@"):
+                    line = line[3:]
+                    words = line.split()
+                    if len(words) > 0 and words[0] not in ["function", "method", "include", "class"]:
+                        warnings.warn (f"Found #@@ with a word after that, and this word is not in ['function', 'method', 'include', 'class']")
+                    line = f"{'%%'}{line}"
+                    found_magic = True
+                    break
+            elif line.startswith("#|"):
+                found_directive = True
+            else:
+                if found_directive:
+                    raise ValueError ("Line with #@@, corresponding to magic line in notebook, not found after having found line with directive #|")
+                else:
+                    raise ValueError ("Directive line not found at beginning of cell")
+    if not found_magic:
+        raise ValueError ("Magic line not found at beginning of cell")
+    cell.source = "\n".join ([line] + source_lines [line_number+1:])
+
+# %% ../../nbs/export.ipynb 31
+def nbm_update (
+    path,
+    code_cells_path=".nbmodular",
+    logger=None,
+    log_level="INFO",
+):
+    nb_processor = Bunch ()
+    nb_processor.code_cells_path=Path(code_cells_path)
+
+    nb_processor.logger = logging.getLogger("nb_importer") if logger is None else logger
+    set_log_level (nb_processor.logger, log_level)
+    set_paths_nb_processor (nb_processor, path)
+
+    # prior to step 5 in diagram:
+    # nbs/nb.ipynb => nbs/_nb.ipynb
+    nb_processor.dest_nb_path.rename (nb_processor.duplicate_dest_nb_path)
+
+    # step 5 in diagram:
+    # .nbs/nb.ipynb => nbs/nb.ipynb
+    nb_processor.tmp_dest_nb_path.rename (nb_processor.dest_nb_path)
+    # .nbs/test_nb.ipynb => nbs/test_nb.ipynb
+    nb_processor.tmp_test_dest_nb_path.rename (nb_processor.test_dest_nb_path)
+
+    # step 5 in diagram: nbdev_update
+    _update_mod (nb_processor.dest_python_path, lib_dir=nb_processor.lib_path.parent)
+    _update_mod (nb_processor.test_dest_python_path, lib_dir=nb_processor.lib_path.parent)
+
+    # obtain cell types and read them from notebooks
+    nb_processor.cell_types = joblib.load (nb_processor.code_cells_path / "cell_types.pk")
+    original_nb = read_nb(path)
+    dest_nb = read_nb(nb_processor.dest_nb_path)
+    test_dest_nb = read_nb(nb_processor.test_dest_nb_path)
+    nb_processor.cells = []
+    original_idx, code_idx, test_idx = 0, 0, 0
+    for cell_type in nb_processor.cell_types:
+        if cell_type == "original":
+            cell = original_nb.cells[original_idx]
+            original_idx += 1
+        elif cell_type == "code":
+            if code_idx > 0:
+                cell = dest_nb.cells[code_idx]
+            code_idx += 1
+        elif cell_type == "test":
+            if test_idx > 0:
+                cell = test_dest_nb.cells[test_idx]
+            test_idx += 1
+        if cell_type in ["original", "code"]: 
+            cell = process_cell_for_nbm_update (cell)
+        nb_processor.cells.append (cell)
+
+    original_nb.cells = nb_processor.cells
+    write_nb (original_nb, path)
