@@ -272,7 +272,7 @@ class NbMagicExporter(Processor):
         # step 2 (end) in diagram
         self.duplicate_tmp_path.rename (self.dest_nb_path)
 
-# %% ../../nbs/export.ipynb 29
+# %% ../../nbs/export.ipynb 18
 def nbm_export (
     path,
     **kwargs,
