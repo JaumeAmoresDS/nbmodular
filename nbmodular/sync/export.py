@@ -110,7 +110,7 @@ def set_paths_nb_processor (
     nb_processor.test_dest_python_path = (
         nb_processor.lib_path.name + "/tests/" + 
         "/".join(parent_parts) + "/" +
-        nb_processor.file_name_without_extension + ".py"
+        "test_" + nb_processor.file_name_without_extension + ".py"
     )
     # to be used in default_exp cell (see NBExporter)
     nb_processor.dest_module_path = ".".join(parent_parts) + "." + nb_processor.file_name_without_extension
@@ -441,7 +441,7 @@ class NbMagicExporter(Processor):
         # step 2 (end) in diagram
         self.duplicate_tmp_path.rename (self.dest_nb_path)
 
-# %% ../../nbs/export.ipynb 29
+# %% ../../nbs/export.ipynb 33
 def process_cell_for_nbm_update (cell: NbCell):
     source_lines = cell.source.splitlines() if cell.cell_type=="code" else []
     found_directive = False
@@ -450,8 +450,8 @@ def process_cell_for_nbm_update (cell: NbCell):
         line = line.strip()
         if len(line) > 0:
             if found_directive:
-                if line.startswith("#@@"):
-                    line = line[3:]
+                if line.startswith("#@@") or line.startswith("# @@"):
+                    line = line[3:] if line.startswith("#@@") else line[4:]
                     words = line.split()
                     if len(words) > 0 and words[0] not in ["function", "method", "include", "class"]:
                         warnings.warn (f"Found #@@ with a word after that, and this word is not in ['function', 'method', 'include', 'class']")
@@ -469,7 +469,7 @@ def process_cell_for_nbm_update (cell: NbCell):
         raise ValueError ("Magic line not found at beginning of cell")
     cell.source = "\n".join ([line] + source_lines [line_number+1:])
 
-# %% ../../nbs/export.ipynb 31
+# %% ../../nbs/export.ipynb 35
 def nbm_update (
     path,
     code_cells_path=".nbmodular",
@@ -503,22 +503,21 @@ def nbm_update (
     dest_nb = read_nb(nb_processor.dest_nb_path)
     test_dest_nb = read_nb(nb_processor.test_dest_nb_path)
     nb_processor.cells = []
-    original_idx, code_idx, test_idx = 0, 0, 0
-    for cell_type in nb_processor.cell_types:
+    code_idx, test_idx = 1, 1
+    for original_idx, cell_type in enumerate(nb_processor.cell_types):
+        cell = None
         if cell_type == "original":
             cell = original_nb.cells[original_idx]
-            original_idx += 1
         elif cell_type == "code":
-            if code_idx > 0:
-                cell = dest_nb.cells[code_idx]
+            cell = dest_nb.cells[code_idx]
             code_idx += 1
         elif cell_type == "test":
-            if test_idx > 0:
-                cell = test_dest_nb.cells[test_idx]
+            cell = test_dest_nb.cells[test_idx]
             test_idx += 1
-        if cell_type in ["original", "code"]: 
-            cell = process_cell_for_nbm_update (cell)
-        nb_processor.cells.append (cell)
+        if cell is not None:
+            if cell_type in ["code", "test"]:
+                process_cell_for_nbm_update (cell)
+            nb_processor.cells.append (cell)
 
     original_nb.cells = nb_processor.cells
     write_nb (original_nb, path)
