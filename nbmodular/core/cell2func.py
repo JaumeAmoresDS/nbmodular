@@ -7,11 +7,11 @@ __all__ = ['bunch_io', 'get_non_callable_ipython', 'get_non_callable', 'get_ast'
            'CellProcessor', 'CellProcessorMagic', 'load_ipython_extension', 'retrieve_function_values_through_disk',
            'retrieve_function_values_through_memory', 'copy_values_and_run_code_in_nb', 'copy_values_in_nb',
            'transfer_variables_to_nb', 'retrieve_nb_locals_through_disk', 'retrieve_nb_locals_through_memory',
-           'remove_name_from_nb', 'acceptable_variable', 'store_variables']
+           'remove_name_from_nb', 'acceptable_variable', 'store_variables', 'run_cell_and_cache']
 
 # %% ../../nbs/cell2func.ipynb 2
 import pdb
-from typing import List
+from typing import List, Optional
 from xxlimited import Str
 import ipdb
 from curses.ascii import isxdigit
@@ -3258,3 +3258,43 @@ def store_variables(
 
     if isinstance(self, FunctionProcessor):
         self["current_values"] = current_values
+
+# %% ../../nbs/cell2func.ipynb 62
+def run_cell_and_cache (
+    cell: str, 
+    load_disk: bool=False,
+    save_disk: bool=False,
+    output_path: Optional[Path]=None,
+    load_memory: bool=False,
+    save_memory: bool=False,
+    memory: Optional[dict]=None,
+    memory_key: Optional[str]=None,
+    error_if_not_loaded: bool=False,
+) -> None:
+    if (load_disk or save_disk) and output_path is None:
+        raise ValueError ("output_path cannot be None if load_disk or save_disk are True.")
+    if (load_memory or save_memory) and (memory is None or memory_key is None):
+        raise ValueError ("neither memory nor memory_key can be None if load_memory or save_memory are True.")
+    obtained_output=False
+    if load_memory and memory.get(memory_key) is not None:
+        output = memory[memory_key]
+        obtained_output=True
+    elif load_disk and output_path.exists():
+        output = joblib.load (output_path)
+        obtained_output=True
+    if not obtained_output:
+        if error_if_not_loaded:
+            raise RuntimeError ("Previous output not found.")
+        if save_memory or save_disk:
+            get_ipython().run_cell_magic ("capture", "output", cell)
+            output = eval ("output")
+            obtained_output = True
+        else:
+            output = get_ipython().run_cell (cell)
+    if save_memory:
+        memory[memory_key] = output
+    if save_disk and not (load_disk and output_path.exists()):
+        joblib.dump (output, output_path)
+    if obtained_output:
+        output.show()
+    return output
