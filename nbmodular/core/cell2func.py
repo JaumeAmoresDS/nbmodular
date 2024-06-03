@@ -1347,12 +1347,6 @@ class CellProcessor:
             help="Make a deep copy of dictionary of local variables, to be able to restore their values after running cell.",
         )
         self.parser.add_argument(
-            "--override",
-            action="store_true",
-            default=None,
-            help="load / save / no-run values override any global flags",
-        )
-        self.parser.add_argument(
             "--returns-dict",
             action="store_true",
             default=None,
@@ -1449,13 +1443,13 @@ class CellProcessor:
         )
 
         # Take list of actions explicitly added above with add_argument.
-        # From this list, include only those where we also added an attribute 
+        # From this list, include only those where we also added an attribute
         # `default_<parameter_name>`
         self.list_of_parser_actions = [
             x.dest
             for x in self.parser._optionals._actions
             if x.__class__.__name__ == "_StoreTrueAction"
-            and hasattr(self, f"default_{x.dest}") 
+            and hasattr(self, f"default_{x.dest}")
         ]
         for action_dest in self.list_of_parser_actions:
             self.parser.add_argument(
