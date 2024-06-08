@@ -198,7 +198,7 @@ def run_cell_and_cache (
             raise RuntimeError ("Previous output not found.")
         if save_memory or save_disk:
             get_ipython().run_cell_magic ("capture", "output", cell)
-            output = eval ("output")
+            output=eval("output")
             obtained_output = True
         else:
             output = get_ipython().run_cell (cell)
@@ -528,17 +528,21 @@ class FunctionProcessor(Bunch):
     def run_cell_and_cache (
         self, 
         code: str,
+        only_run_no_capture: bool=False,
     ) -> None:
-        run_cell_and_cache (
-            code,
-            load_disk=self.load_capture_disk,
-            save_disk=self.save_capture_disk,
-            load_memory=self.load_capture_memory,
-            save_memory=self.save_capture_memory,
-            memory=self,
-            memory_key="capture",
-            output_path=self.cell_processor.cell_captures_path_to_folder / self.name,
-        )
+        if only_run_no_capture:
+            get_ipython().run_cell (code)
+        else:
+            run_cell_and_cache (
+                code,
+                load_disk=self.load_capture_disk,
+                save_disk=self.save_capture_disk,
+                load_memory=self.load_capture_memory,
+                save_memory=self.save_capture_memory,
+                memory=self,
+                memory_key="capture",
+                output_path=self.cell_processor.cell_captures_path_to_folder / (self.name + ".pk"),
+            )
 
     def run_code_and_store_its_local_values(
         self,
@@ -549,18 +553,24 @@ class FunctionProcessor(Bunch):
     ):
         """Runs code and stores local variables in field `field`of self"""
         code_to_run1 = (
-            code
-            + f'from nbmodular.core.cell2func import retrieve_nb_locals_through_memory\nretrieve_nb_locals_through_memory ("{field}", locals ())'
+f"""
+from nbmodular.core.cell2func import retrieve_nb_locals_through_memory
+retrieve_nb_locals_through_memory ("{field}", locals ())
+"""
         )
         code_to_run2 = (
-            code
-            + f"from nbmodular.core.cell2func import retrieve_nb_locals_through_disk\nretrieve_nb_locals_through_disk (locals ())"
+"""
+from nbmodular.core.cell2func import retrieve_nb_locals_through_disk
+retrieve_nb_locals_through_disk (locals ())
+"""
         )
-        self.run_cell_and_cache (code_to_run1)
+        if code!="":
+            self.run_cell_and_cache (code)
+        self.run_cell_and_cache (code_to_run1, only_run_no_capture=True)
         
         if "created_current_values" not in self[field]:
             self.logger.debug("storing local variables in disk")
-            self.run_cell_and_cache (code_to_run2)
+            self.run_cell_and_cache (code_to_run2, only_run_no_capture=True)
             self[field] = joblib.load("variable_values.pk")
             os.remove("variable_values.pk")
         else:
@@ -986,7 +996,7 @@ for k, v in variables_to_insert.items():
         )
 
 
-# %% ../../nbs/cell2func.ipynb 47
+# %% ../../nbs/cell2func.ipynb 51
 def update_cell_code(cell, defined=False):
     original_code = ""
     for line in cell.splitlines():
@@ -1007,7 +1017,7 @@ def update_cell_code(cell, defined=False):
     return cell
 
 
-# %% ../../nbs/cell2func.ipynb 49
+# %% ../../nbs/cell2func.ipynb 53
 def add_function_to_list(function, function_list, idx=None, position=None):
     if idx is None:
         function_list.append(function)
@@ -1030,7 +1040,7 @@ def add_function_to_list(function, function_list, idx=None, position=None):
     return function_list
 
 
-# %% ../../nbs/cell2func.ipynb 52
+# %% ../../nbs/cell2func.ipynb 56
 def get_args_and_defaults(list_args, list_defaults):
     if len(list_defaults) == 0:
         args_without_defaults = [arg.arg for arg in list_args]
@@ -1073,7 +1083,7 @@ def get_args_and_defaults(list_args, list_defaults):
     return args_without_defaults, args_with_defaults, default_values
 
 
-# %% ../../nbs/cell2func.ipynb 54
+# %% ../../nbs/cell2func.ipynb 58
 def get_args_and_defaults_from_ast(root):
     args_without_defaults, args_with_defaults1, default_values1 = get_args_and_defaults(
         root.body[0].args.posonlyargs + root.body[0].args.args,
@@ -1097,12 +1107,12 @@ def get_args_and_defaults_from_function_in_cell():
     return get_args_and_defaults_from_ast(root)
 
 
-# %% ../../nbs/cell2func.ipynb 56
+# %% ../../nbs/cell2func.ipynb 60
 def derive_paths (
     original_path: Path,
     folder: str,
-	lib_folder: str,
-	file_name: str,
+    lib_folder: str,
+    file_name: str,
     cell_processor: "CellProcessor",
     code_cells_path: Path=Path(".nbmodular"),
 ):
@@ -1134,10 +1144,15 @@ def derive_paths (
         cell_processor.file_path = original_path.parent / file_name
         cell_processor.test_file_path = original_path.parent / f"test_{file_name}"
         cell_processor.cell_captures_path_to_folder = original_path.parent / original_path.stem
-        cell_processor.path_to_code_cells_file = (code_cells_path / f"{file_name_without_extension}.pk"
-)
+        cell_processor.path_to_code_cells_file = code_cells_path / f"{file_name_without_extension}.pk"
+    
+    cell_processor.file_path.parent.mkdir (parents=True, exist_ok=True)
+    cell_processor.test_file_path.parent.mkdir (parents=True, exist_ok=True)
+    (cell_processor.cell_captures_path_to_folder / "").mkdir (parents=True, exist_ok=True)
+    cell_processor.path_to_code_cells_file.parent.mkdir (parents=True, exist_ok=True)
 
-# %% ../../nbs/cell2func.ipynb 60
+
+# %% ../../nbs/cell2func.ipynb 64
 class CellProcessor:
     """
     Processes the cell's code according to the magic command.
@@ -2079,10 +2094,14 @@ for arg, val in zip (args_with_defaults, default_values):
 
         return this_function
 
-    def set_function_attr(self, this_function, attr, value, test):
+    def get_function_attr (self, attr, value, test):
         test_string = "test_" if test else ""
         default_value = getattr(self, f"default_{test_string}{attr}")
         value = default_value if value is None else value
+        return value
+
+    def set_function_attr(self, this_function, attr, value, test):
+        value = self.get_function_attr (attr, value, test)
         setattr(this_function, attr, value)
 
     def set_function_action_and_io_args(
@@ -2152,6 +2171,12 @@ for arg, val in zip (args_with_defaults, default_values):
                 self.imports += "from pathlib import Path\n"
                 self.imports += "from nbmodular.core import function_io\n"
             self._added_io_imports = True
+
+    def get_function_kwargs(self, kwargs: dict, test: bool = False) -> dict:
+        return {
+            k: self.get_function_attr(k, kwargs[k], test)
+            for k in set(kwargs).intersection(self.list_of_parser_actions)
+        }
 
     def create_function_and_run_code(
         self,
@@ -2738,6 +2763,8 @@ for arg, val in zip (args_with_defaults, default_values):
             kwargs, pars = self._parse_args([])
         kwargs.update(signature)
 
+        kwargs = self.get_function_kwargs (kwargs, test=kwargs.get("test", False))
+
         return function_name, kwargs
 
     def write_imports(self, cell, test=False, **kwargs):
@@ -2989,7 +3016,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
     def save_data(self, **kwargs):
         self.run_io(io_action="save", **kwargs)
 
-# %% ../../nbs/cell2func.ipynb 65
+# %% ../../nbs/cell2func.ipynb 71
 @magics_class
 class CellProcessorMagic(Magics):
     """
@@ -3175,7 +3202,7 @@ class CellProcessorMagic(Magics):
         self.processor.set_value(attr, value)
 
 
-# %% ../../nbs/cell2func.ipynb 67
+# %% ../../nbs/cell2func.ipynb 73
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -3184,7 +3211,7 @@ def load_ipython_extension(ipython):
     ipython.register_magics(magics)
 
 
-# %% ../../nbs/cell2func.ipynb 71
+# %% ../../nbs/cell2func.ipynb 77
 def retrieve_function_values_through_disk(filename="variable_values.pk"):
     """
     Store `variables` in disk
@@ -3200,7 +3227,7 @@ def retrieve_function_values_through_disk(filename="variable_values.pk"):
     return variable_values
 
 
-# %% ../../nbs/cell2func.ipynb 73
+# %% ../../nbs/cell2func.ipynb 79
 def retrieve_function_values_through_memory(field):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -3233,7 +3260,7 @@ def retrieve_function_values_through_memory(field):
     return None
 
 
-# %% ../../nbs/cell2func.ipynb 75
+# %% ../../nbs/cell2func.ipynb 81
 def copy_values_and_run_code_in_nb(self, field="shared_variables", code=""):
     """
     Makes desired variables available in notebook context.
@@ -3268,7 +3295,7 @@ os.remove ('variable_values.pk')
         get_ipython().run_cell(code_to_run2)
 
 
-# %% ../../nbs/cell2func.ipynb 76
+# %% ../../nbs/cell2func.ipynb 82
 def copy_values_in_nb(self, field="shared_variables"):
     copy_values_code = """
 for k, v in variables_to_insert.items():
@@ -3280,7 +3307,7 @@ for k, v in variables_to_insert.items():
     copy_values_and_run_code_in_nb(self, field=field, code=copy_values_code)
 
 
-# %% ../../nbs/cell2func.ipynb 77
+# %% ../../nbs/cell2func.ipynb 83
 def transfer_variables_to_nb(**kwargs):
     communicator = Bunch()
     communicator.shared_variables = kwargs
@@ -3288,7 +3315,7 @@ def transfer_variables_to_nb(**kwargs):
     copy_values_in_nb(communicator)
 
 
-# %% ../../nbs/cell2func.ipynb 83
+# %% ../../nbs/cell2func.ipynb 89
 def retrieve_nb_locals_through_disk(variable_values, filename="variable_values.pk"):
     """
     Store `variables` in disk
@@ -3303,7 +3330,7 @@ def retrieve_nb_locals_through_disk(variable_values, filename="variable_values.p
     joblib.dump(variable_values, filename)
 
 
-# %% ../../nbs/cell2func.ipynb 85
+# %% ../../nbs/cell2func.ipynb 91
 def retrieve_nb_locals_through_memory(field, variable_values):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -3331,12 +3358,12 @@ def retrieve_nb_locals_through_memory(field, variable_values):
         # del variable_values['created_current_values']
 
 
-# %% ../../nbs/cell2func.ipynb 87
+# %% ../../nbs/cell2func.ipynb 93
 def remove_name_from_nb(name):
     get_ipython().run_cell(f'exec("del {name}")')
 
 
-# %% ../../nbs/cell2func.ipynb 89
+# %% ../../nbs/cell2func.ipynb 95
 def acceptable_variable(variable_values, k):
     return (
         not k.startswith("_")
@@ -3347,7 +3374,7 @@ def acceptable_variable(variable_values, k):
     )
 
 
-# %% ../../nbs/cell2func.ipynb 91
+# %% ../../nbs/cell2func.ipynb 97
 def store_variables(
     path_variables,
     locals_,
