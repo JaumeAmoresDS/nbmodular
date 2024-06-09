@@ -1,14 +1,34 @@
-
-
 # %% auto 0
-__all__ = ['bunch_io', 'get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_duplicates_from_list',
-           'VariableClassifier', 'add_dict_values', 'run_cell_and_cache', 'FunctionProcessor', 'update_cell_code',
-           'add_function_to_list', 'get_args_and_defaults', 'get_args_and_defaults_from_ast',
-           'get_args_and_defaults_from_function_in_cell', 'derive_paths', 'CellProcessor', 'CellProcessorMagic',
-           'load_ipython_extension', 'retrieve_function_values_through_disk', 'retrieve_function_values_through_memory',
-           'copy_values_and_run_code_in_nb', 'copy_values_in_nb', 'transfer_variables_to_nb',
-           'retrieve_nb_locals_through_disk', 'retrieve_nb_locals_through_memory', 'remove_name_from_nb',
-           'acceptable_variable', 'store_variables']
+__all__ = [
+    "bunch_io",
+    "get_non_callable_ipython",
+    "get_non_callable",
+    "get_ast",
+    "remove_duplicates_from_list",
+    "VariableClassifier",
+    "add_dict_values",
+    "run_cell_and_cache",
+    "FunctionProcessor",
+    "update_cell_code",
+    "add_function_to_list",
+    "get_args_and_defaults",
+    "get_args_and_defaults_from_ast",
+    "get_args_and_defaults_from_function_in_cell",
+    "derive_paths",
+    "CellProcessor",
+    "CellProcessorMagic",
+    "load_ipython_extension",
+    "retrieve_function_values_through_disk",
+    "retrieve_function_values_through_memory",
+    "copy_values_and_run_code_in_nb",
+    "copy_values_in_nb",
+    "transfer_variables_to_nb",
+    "retrieve_nb_locals_through_disk",
+    "retrieve_nb_locals_through_memory",
+    "remove_name_from_nb",
+    "acceptable_variable",
+    "store_variables",
+]
 
 # %% ../../nbs/cell2func.ipynb 2
 import pdb
@@ -42,6 +62,7 @@ from IPython.core.magic import (
     line_cell_magic,
 )
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
+from IPython.utils.capture import capture_output
 import ipynbname
 from sklearn.utils import Bunch
 from fastcore.all import argnames
@@ -209,8 +230,8 @@ def run_cell_and_cache(
         if error_if_not_loaded:
             raise RuntimeError("Previous output not found.")
         if save_memory or save_disk:
-            get_ipython().run_cell_magic("capture", "output", cell)
-            output = eval("output")
+            with capture_output(False, False, False) as output:
+                get_ipython().run_cell(cell)
             obtained_output = True
         else:
             output = get_ipython().run_cell(cell)
