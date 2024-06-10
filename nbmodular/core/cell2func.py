@@ -47,7 +47,6 @@ import ipynbname
 from sklearn.utils import Bunch
 from fastcore.all import argnames
 import nbdev
-from sqlalchemy import func
 
 from . import function_io
 from .utils import set_log_level
