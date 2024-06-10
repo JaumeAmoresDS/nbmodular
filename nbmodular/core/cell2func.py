@@ -2,16 +2,17 @@
 
 # %% auto 0
 __all__ = ['bunch_io', 'get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_duplicates_from_list',
-           'VariableClassifier', 'add_dict_values', 'FunctionProcessor', 'update_cell_code', 'add_function_to_list',
-           'get_args_and_defaults', 'get_args_and_defaults_from_ast', 'get_args_and_defaults_from_function_in_cell',
-           'CellProcessor', 'CellProcessorMagic', 'load_ipython_extension', 'retrieve_function_values_through_disk',
-           'retrieve_function_values_through_memory', 'copy_values_and_run_code_in_nb', 'copy_values_in_nb',
-           'transfer_variables_to_nb', 'retrieve_nb_locals_through_disk', 'retrieve_nb_locals_through_memory',
-           'remove_name_from_nb', 'acceptable_variable', 'store_variables']
+           'VariableClassifier', 'add_dict_values', 'run_cell_and_cache', 'FunctionProcessor', 'update_cell_code',
+           'add_function_to_list', 'get_args_and_defaults', 'get_args_and_defaults_from_ast',
+           'get_args_and_defaults_from_function_in_cell', 'derive_paths', 'CellProcessor', 'CellProcessorMagic',
+           'load_ipython_extension', 'retrieve_function_values_through_disk', 'retrieve_function_values_through_memory',
+           'copy_values_and_run_code_in_nb', 'copy_values_in_nb', 'transfer_variables_to_nb',
+           'retrieve_nb_locals_through_disk', 'retrieve_nb_locals_through_memory', 'remove_name_from_nb',
+           'acceptable_variable', 'store_variables']
 
 # %% ../../nbs/cell2func.ipynb 2
 import pdb
-from typing import List
+from typing import List, Optional, cast
 from xxlimited import Str
 import ipdb
 from curses.ascii import isxdigit
@@ -41,16 +42,18 @@ from IPython.core.magic import (
     line_cell_magic,
 )
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
+from IPython.utils.capture import capture_output
 import ipynbname
 from sklearn.utils import Bunch
 from fastcore.all import argnames
 import nbdev
+from sqlalchemy import func
 
 from . import function_io
 from .utils import set_log_level
 
 
-# %% ../../nbs/cell2func.ipynb 4
+# %% ../../nbs/cell2func.ipynb 6
 def bunch_io(func):
     def bunch_wrapper(*args, **kwargs):
         if (len(args) > 1) or ((len(args) == 1) and not isinstance(args[0], Bunch)):
@@ -81,7 +84,7 @@ def bunch_io(func):
     return bunch_wrapper
 
 
-# %% ../../nbs/cell2func.ipynb 7
+# %% ../../nbs/cell2func.ipynb 9
 import pdb
 
 
@@ -115,7 +118,7 @@ def get_non_callable_ipython(variables_to_inspect, locals_, self=None):
         self[variables_to_inspect] = self[non_callable_variables].copy()
 
 
-# %% ../../nbs/cell2func.ipynb 9
+# %% ../../nbs/cell2func.ipynb 11
 def get_non_callable(variables):
     non_callable = []
     for name in variables:
@@ -128,7 +131,7 @@ def get_non_callable(variables):
     return non_callable
 
 
-# %% ../../nbs/cell2func.ipynb 11
+# %% ../../nbs/cell2func.ipynb 13
 def get_ast(code):
     print(ast.dump(ast.parse(code), indent=2))
 
@@ -141,7 +144,7 @@ def remove_duplicates_from_list(list_with_potential_duplicates):
     return list_without_duplicates
 
 
-# %% ../../nbs/cell2func.ipynb 13
+# %% ../../nbs/cell2func.ipynb 15
 class VariableClassifier(NodeVisitor):
     def __init__(self, *args, **kwargs):
         self.created_variables = []
@@ -163,12 +166,59 @@ class VariableClassifier(NodeVisitor):
         super().generic_visit(node)
 
 
-# %% ../../nbs/cell2func.ipynb 15
+# %% ../../nbs/cell2func.ipynb 17
 def add_dict_values(d: dict):
     return reduce(lambda x, y: ("+", x[1] + y[1]), d.items())[1]
 
 
-# %% ../../nbs/cell2func.ipynb 17
+# %% ../../nbs/cell2func.ipynb 19
+def run_cell_and_cache(
+    cell: str,
+    load_disk: bool = False,
+    save_disk: bool = False,
+    output_path: Optional[Path] = None,
+    load_memory: bool = False,
+    save_memory: bool = False,
+    memory: Optional[dict] = None,
+    memory_key: Optional[str] = None,
+    error_if_not_loaded: bool = False,
+) -> None:
+    if (load_disk or save_disk) and output_path is None:
+        raise ValueError(
+            "output_path cannot be None if load_disk or save_disk are True."
+        )
+    output_path = cast(Path, output_path)
+    if (load_memory or save_memory) and (memory is None or memory_key is None):
+        raise ValueError(
+            "neither memory nor memory_key can be None if load_memory or save_memory are True."
+        )
+    obtained_output = False
+    if load_memory and memory.get(memory_key) is not None:
+        output = memory[memory_key]
+        obtained_output = True
+    elif load_disk and output_path.exists():
+        output = joblib.load(output_path)
+        obtained_output = True
+    if not obtained_output:
+        if error_if_not_loaded:
+            raise RuntimeError("Previous output not found.")
+        if save_memory or save_disk:
+            with capture_output(True, True, True) as output:
+                get_ipython().run_cell(cell)
+            obtained_output = True
+        else:
+            output = get_ipython().run_cell(cell)
+    if save_memory:
+        memory[memory_key] = output
+    if save_disk and not (load_disk and output_path.exists()):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(output, output_path)
+    if obtained_output:
+        output.show()
+    return output
+
+
+# %% ../../nbs/cell2func.ipynb 44
 class FunctionProcessor(Bunch):
     """
     Function processor.
@@ -213,7 +263,9 @@ class FunctionProcessor(Bunch):
         import inspect
 
         get_ipython().run_cell(cell)
-        function = self.store_values(return_variables=[self.name])
+        function = self.run_code_and_store_its_local_values(
+            return_variables=[self.name]
+        )
         return inspect.signature(function)
 
     def _add_io(
@@ -482,26 +534,49 @@ class FunctionProcessor(Bunch):
             k for k in self.argument_variables if k not in self.all_variables
         ]
 
-    def store_values(
+    def run_cell_and_cache(
+        self,
+        code: str,
+        only_run_no_capture: bool = False,
+    ) -> None:
+        if only_run_no_capture:
+            get_ipython().run_cell(code)
+        else:
+            run_cell_and_cache(
+                code,
+                load_disk=self.load_capture_disk,
+                save_disk=self.save_capture_disk,
+                load_memory=self.load_capture_memory,
+                save_memory=self.save_capture_memory,
+                memory=self,
+                memory_key="capture",
+                output_path=self.cell_processor.cell_captures_path_to_folder
+                / (self.name + ".pk"),
+            )
+
+    def run_code_and_store_its_local_values(
         self,
         field="shared_variables",
         code="",
         store_values=True,
         return_variables=None,
     ):
-        """Stores local variables in field `field`of self"""
-        code_to_run1 = (
-            code
-            + f'from nbmodular.core.cell2func import retrieve_nb_locals_through_memory\nretrieve_nb_locals_through_memory ("{field}", locals ())'
-        )
-        code_to_run2 = (
-            code
-            + f"from nbmodular.core.cell2func import retrieve_nb_locals_through_disk\nretrieve_nb_locals_through_disk (locals ())"
-        )
-        get_ipython().run_cell(code_to_run1)
+        """Runs code and stores local variables in field `field`of self"""
+        code_to_run1 = f"""
+from nbmodular.core.cell2func import retrieve_nb_locals_through_memory
+retrieve_nb_locals_through_memory ("{field}", locals ())
+"""
+        code_to_run2 = """
+from nbmodular.core.cell2func import retrieve_nb_locals_through_disk
+retrieve_nb_locals_through_disk (locals ())
+"""
+        if code != "":
+            self.run_cell_and_cache(code)
+        self.run_cell_and_cache(code_to_run1, only_run_no_capture=True)
+
         if "created_current_values" not in self[field]:
             self.logger.debug("storing local variables in disk")
-            get_ipython().run_cell(code_to_run2)
+            self.run_cell_and_cache(code_to_run2, only_run_no_capture=True)
             self[field] = joblib.load("variable_values.pk")
             os.remove("variable_values.pk")
         else:
@@ -605,11 +680,23 @@ keys = joblib.load ('function_processor_keys.pk')
         if code is None:
             code = self.original_code
 
+        # In order to avoid pickling errors, we need
+        # to replace the field self.cell_processor with
+        # something pickable, e.g., a Bunch, and restore the original
+        # field after pickling.
+        cell_processor = self.cell_processor
+        self.cell_processor = Bunch(
+            cell_captures_path_to_folder=cell_processor.cell_captures_path_to_folder
+        )
         joblib.dump(dict(self), "function_processor.pk")
+        self.cell_processor = self.cell_processor
+
         if not is_test_function:
             # pdb.no_set_trace()
             if first_call:
-                self.store_values("previous_values", code="", store_values=store_values)
+                self.run_code_and_store_its_local_values(
+                    "previous_values", code="", store_values=store_values
+                )
                 if self.copy_locals:
                     self.previous_values = copy.deepcopy(self.previous_values)
             if function_in_previous_cells is not None:
@@ -620,7 +707,7 @@ keys = joblib.load ('function_processor_keys.pk')
                     if k not in function_in_previous_cells.current_values
                 }
             if run:
-                self.store_values(
+                self.run_code_and_store_its_local_values(
                     "current_values", code=code + "\n", store_values=store_values
                 )
             else:
@@ -919,7 +1006,7 @@ for k, v in variables_to_insert.items():
         )
 
 
-# %% ../../nbs/cell2func.ipynb 20
+# %% ../../nbs/cell2func.ipynb 51
 def update_cell_code(cell, defined=False):
     original_code = ""
     for line in cell.splitlines():
@@ -940,7 +1027,7 @@ def update_cell_code(cell, defined=False):
     return cell
 
 
-# %% ../../nbs/cell2func.ipynb 22
+# %% ../../nbs/cell2func.ipynb 53
 def add_function_to_list(function, function_list, idx=None, position=None):
     if idx is None:
         function_list.append(function)
@@ -963,7 +1050,7 @@ def add_function_to_list(function, function_list, idx=None, position=None):
     return function_list
 
 
-# %% ../../nbs/cell2func.ipynb 25
+# %% ../../nbs/cell2func.ipynb 56
 def get_args_and_defaults(list_args, list_defaults):
     if len(list_defaults) == 0:
         args_without_defaults = [arg.arg for arg in list_args]
@@ -1006,7 +1093,7 @@ def get_args_and_defaults(list_args, list_defaults):
     return args_without_defaults, args_with_defaults, default_values
 
 
-# %% ../../nbs/cell2func.ipynb 27
+# %% ../../nbs/cell2func.ipynb 58
 def get_args_and_defaults_from_ast(root):
     args_without_defaults, args_with_defaults1, default_values1 = get_args_and_defaults(
         root.body[0].args.posonlyargs + root.body[0].args.args,
@@ -1030,7 +1117,64 @@ def get_args_and_defaults_from_function_in_cell():
     return get_args_and_defaults_from_ast(root)
 
 
-# %% ../../nbs/cell2func.ipynb 29
+# %% ../../nbs/cell2func.ipynb 60
+def derive_paths(
+    original_path: Path,
+    folder: str,
+    lib_folder: str,
+    file_name: str,
+    cell_processor: "CellProcessor",
+    code_cells_path: Path = Path(".nbmodular"),
+):
+    file_name_without_extension = Path(file_name).stem
+    try:
+        index = original_path.parts.index(folder)
+        before_nbs_folder = original_path.parts[:index]
+        after_nbs_folder = original_path.parts[index + 1 :]
+    except:
+        index = -1
+    if index > -1:
+        before_nbs_folder = cast(tuple, before_nbs_folder)
+        after_nbs_folder = cast(tuple, after_nbs_folder)
+
+        parts = before_nbs_folder + (lib_folder,) + after_nbs_folder
+        cell_processor.file_path = Path().joinpath(*parts).parent / file_name
+
+        parts = before_nbs_folder + ("tests",) + after_nbs_folder
+        cell_processor.test_file_path = (
+            Path().joinpath(*parts).parent / f"test_{file_name}"
+        )
+
+        parts = before_nbs_folder + (".cell_captures",) + after_nbs_folder
+        cell_processor.cell_captures_path_to_folder = (
+            Path().joinpath(*parts).parent / file_name_without_extension
+        )
+
+        parts = before_nbs_folder + (str(code_cells_path),) + after_nbs_folder
+        cell_processor.path_to_code_cells_file = (
+            Path().joinpath(*parts).parent / f"{file_name_without_extension}.pk"
+        )
+        cell_processor.code_cells_path = cell_processor.path_to_code_cells_file.parent
+
+    else:
+        cell_processor.file_path = original_path.parent / file_name
+        cell_processor.test_file_path = original_path.parent / f"test_{file_name}"
+        cell_processor.cell_captures_path_to_folder = (
+            original_path.parent / original_path.stem
+        )
+        cell_processor.path_to_code_cells_file = (
+            code_cells_path / f"{file_name_without_extension}.pk"
+        )
+
+    cell_processor.file_path.parent.mkdir(parents=True, exist_ok=True)
+    cell_processor.test_file_path.parent.mkdir(parents=True, exist_ok=True)
+    (cell_processor.cell_captures_path_to_folder / "").mkdir(
+        parents=True, exist_ok=True
+    )
+    cell_processor.path_to_code_cells_file.parent.mkdir(parents=True, exist_ok=True)
+
+
+# %% ../../nbs/cell2func.ipynb 64
 class CellProcessor:
     """
     Processes the cell's code according to the magic command.
@@ -1089,66 +1233,52 @@ class CellProcessor:
         self.test_imports = ""
 
         self.tab_size = tab_size
+        found_notebook = True
         try:
-            self.file_name = ipynbname.name().replace(".ipynb", ".py")
-            try:
-                x = int(self.file_name[0])
-                self.file_name = f"n{self.file_name}"
-            except ValueError:
-                pass
-            nb_path = ipynbname.path()
-            found_notebook = True
+            self.nb_path = ipynbname.path()
         except FileNotFoundError:
-            self.file_name = "temporary.py"
-            nb_path = Path(".").absolute()
-            found_notebook = False
-            warning_message = (
-                "Name of notebook could not be automatically detected. "
-                "We will be using `temporary.py` as the name of the python module "
-                "where the code from the current notebook will be exported to. "
-                "In order to change this name, run the magic command "
-                '%set file_name "<name_of_python_module>.py".'
-            )
-            warnings.warn(warning_message)
-            # self.logger.warning (warning_message)
+            if "__vsc_ipynb_file__" in globals():
+                self.nb_path = Path(globals()["__vsc_ipynb_file__"])
+            else:
+                self.nb_path = Path.cwd() / "temporary.ipynb"
 
-        self.file_name_without_extension = self.file_name.split(".")[0]
+                found_notebook = False
+                warning_message = (
+                    "Name of notebook could not be automatically detected. "
+                    "We will be using `temporary.py` as the name of the python module "
+                    "where the code from the current notebook will be exported to. "
+                    "In order to change this name, run the magic command "
+                    '%set file_name "<name_of_python_module>.py".'
+                )
+                warnings.warn(warning_message)
+                # self.logger.warning (warning_message)
+
+        self.file_name_without_extension = self.nb_path.stem
+        self.file_name = self.file_name_without_extension + ".py"
+
+        # Make the notebook always start with alphabetic character,
+        # for those cases when it starts with number, e.g.
+        # 10_my_notebook.ipynb => n10_my_notebook.py
+        try:
+            _ = int(self.file_name[0])
+            self.file_name = f"n{self.file_name}"
+        except ValueError:
+            pass
 
         try:
-            self.nbs_folder = self.get_nbs_path()
+            self.nbs_folder = self.get_nbm_path()
             self.lib_folder = self.get_lib_path()
         except:
-            found_notebook = False
-            # raise RuntimeError (f"nbs not found in path to notebook, {nb_path}")
+            self.nbs_folder = "nbs"
+            self.lib_folder = "my_lib"
 
-        # index = nb_path.parts.index(self.nbs_folder.name)
-        if found_notebook:
-            ##pdb.no_set_trace()
-            try:
-                index = nb_path.parts.index(self.nbs_folder.name)
-            except:
-                index = -1
-            self.file_path = (self.nbs_folder.parent / self.lib_folder.name).joinpath(
-                *nb_path.parts[index + 1 :]
-            )
-            self.file_path = self.file_path.parent / self.file_path.name.replace(
-                ".ipynb", ".py"
-            )
-            self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        derive_paths(
+            self.nb_path, self.nbs_folder, self.lib_folder, self.file_name, self
+        )
 
-            if index > -1:
-                self.test_file_path = (self.nbs_folder.parent / "tests").joinpath(
-                    *nb_path.parts[index + 1 : -1]
-                ) / f"test_{self.file_path.name}"
-            else:
-                self.test_file_path = (
-                    self.file_path.parent / f"test_{self.file_path.name}"
-                )
-            self.test_file_path.parent.mkdir(parents=True, exist_ok=True)
-        else:
-            file_name = self.file_name.replace(".ipynb", ".py")
-            self.file_path = nb_path / file_name
-            self.test_file_path = nb_path / f"test_{file_name}"
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        self.test_file_path.parent.mkdir(parents=True, exist_ok=True)
+        (self.cell_captures_path_to_folder / "").mkdir(parents=True, exist_ok=True)  # type: ignore
 
         self.call_history = []
 
@@ -1192,24 +1322,23 @@ class CellProcessor:
         self.default_pipe = True
         self.default_test_pipe = False
 
+        self.default_load_capture_disk = False
+        self.default_save_capture_disk = False
+        self.default_load_capture_memory = False
+        self.default_save_capture_memory = False
+        self.default_test_load_capture_disk = False
+        self.default_test_save_capture_disk = False
+        self.default_test_load_capture_memory = False
+        self.default_test_save_capture_memory = False
+
+        self.default_write = False
+        self.default_test_write = False
+
         self.default_pipe_name = f"{self.file_name_without_extension}_pipeline"
 
         self._added_io_imports = False
         self.variable_classifier = VariableClassifier()
 
-        if found_notebook:
-            self.path_to_code_cells_file = (
-                self.nbs_folder.parent / self.code_cells_path
-            ).joinpath(*nb_path.parts[index + 1 :])
-            self.path_to_code_cells_file = (
-                self.path_to_code_cells_file.parent
-                / self.path_to_code_cells_file.name.replace(".ipynb", ".pk")
-            )
-            self.code_cells_path = self.path_to_code_cells_file.parent
-        else:
-            self.path_to_code_cells_file = (
-                self.code_cells_path / f"{self.file_name_without_extension}.pk"
-            )
         self.export_always = export_always
 
         self.parser = argparse.ArgumentParser(
@@ -1441,7 +1570,36 @@ class CellProcessor:
             default=None,
             help="Insert function into pipeline.",
         )
-
+        self.parser.add_argument(
+            "--load-capture-disk",
+            action="store_true",
+            default=None,
+            help="Load the cell ouput's capture, which has been previously stored in disk.",
+        )
+        self.parser.add_argument(
+            "--save-capture-disk",
+            action="store_true",
+            default=None,
+            help="Save the cell ouput's capture to disk.",
+        )
+        self.parser.add_argument(
+            "--load-capture-memory",
+            action="store_true",
+            default=None,
+            help="Load the cell ouput's capture, which has been previously stored in memory.",
+        )
+        self.parser.add_argument(
+            "--save-capture-memory",
+            action="store_true",
+            default=None,
+            help="Save the cell ouput's capture in memory.",
+        )
+        self.parser.add_argument(
+            "--write",
+            action="store_true",
+            default=None,
+            help="Write the function to python module, as a result of running cell.",
+        )
         # Take list of actions explicitly added above with add_argument.
         # From this list, include only those where we also added an attribute
         # `default_<parameter_name>`
@@ -1477,7 +1635,9 @@ class CellProcessor:
 
     def set_file_path(self, file_path):
         self.file_path = Path(file_path)
-        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        derive_paths(
+            self.file_path, self.lib_folder, self.lib_folder, self.file_path.name, self
+        )
         self.set_file_name(self.file_path.name)
 
     def get_pipeline_name(self, pipeline_name_or_default="default_pipeline"):
@@ -1496,21 +1656,26 @@ class CellProcessor:
         )
         previous_default_pipe_name = self.default_pipe_name
         self.file_name = file_name
-        self.file_name_without_extension = self.file_name.split(".")[0]
+        self.file_path = self.file_path.parent / self.file_name
+        self.file_name_without_extension = self.file_path.stem
+        self.test_file_path = self.test_file_path.parent / f"test_{self.file_name}"
+        self.path_to_code_cells_file = (
+            self.code_cells_path / f"{self.file_name_without_extension}.pk"
+        )
+
         self.default_io_folder = self.file_name_without_extension
         if change_default_pipe_name:
             self.default_pipe_name = f"{self.file_name_without_extension}_pipeline"
             if self.default_pipe_name != previous_default_pipe_name:
                 get_ipython().run_cell(
-                    f"exec ('{self.default_pipe_name}={previous_default_pipe_name}')"
+                    f"""
+try:
+    exec ('{self.default_pipe_name}={previous_default_pipe_name}')
+    exec ('del {previous_default_pipe_name}')
+except NameError:
+    pass
+"""
                 )
-                get_ipython().run_cell(f"exec ('del {previous_default_pipe_name}')")
-
-        self.test_file_path = self.test_file_path.parent / f"test_{self.file_name}"
-        self.file_path = self.file_path.parent / self.file_name
-        self.path_to_code_cells_file = (
-            self.code_cells_path / f"{self.file_name_without_extension}.pk"
-        )
 
     def set_log_level(self, log_level):
         set_log_level(self.logger, log_level)
@@ -1947,6 +2112,7 @@ for arg, val in zip (args_with_defaults, default_values):
             cell_idx=cell_idx,
             method=method,
             logger=self.logger,
+            cell_processor=self,
         )
         if defined and permanent:
             this_function.code = cell
@@ -1955,10 +2121,14 @@ for arg, val in zip (args_with_defaults, default_values):
 
         return this_function
 
-    def set_function_attr(self, this_function, attr, value, test):
+    def get_function_attr(self, attr, value, test):
         test_string = "test_" if test else ""
         default_value = getattr(self, f"default_{test_string}{attr}")
         value = default_value if value is None else value
+        return value
+
+    def set_function_attr(self, this_function, attr, value, test):
+        value = self.get_function_attr(attr, value, test)
         setattr(this_function, attr, value)
 
     def set_function_action_and_io_args(
@@ -2029,6 +2199,12 @@ for arg, val in zip (args_with_defaults, default_values):
                 self.imports += "from nbmodular.core import function_io\n"
             self._added_io_imports = True
 
+    def get_function_kwargs(self, kwargs: dict, test: bool = False) -> dict:
+        return {
+            k: self.get_function_attr(k, kwargs[k], test)
+            for k in set(kwargs).intersection(self.list_of_parser_actions)
+        }
+
     def create_function_and_run_code(
         self,
         func,
@@ -2090,6 +2266,7 @@ for arg, val in zip (args_with_defaults, default_values):
             idx = self.current_function.idx = len(function_list)
         else:
             self.current_function.previous_values = function_list[idx].previous_values
+            self.current_function.capture = function_list[idx].capture
             self.current_function.idx = function_list[idx].idx
 
         # get variables specific about this function
@@ -2614,6 +2791,8 @@ for arg, val in zip (args_with_defaults, default_values):
             kwargs, pars = self._parse_args([])
         kwargs.update(signature)
 
+        kwargs = self.get_function_kwargs(kwargs, test=kwargs.get("test", False))
+
         return function_name, kwargs
 
     def write_imports(self, cell, test=False, **kwargs):
@@ -2666,10 +2845,13 @@ for arg, val in zip (args_with_defaults, default_values):
             return function_info[function_name]
 
     def get_lib_path(self):
-        return nbdev.config.get_config()["lib_path"]
+        return nbdev.config.get_config()["lib_path"].name
+
+    def get_nbm_path(self):
+        return nbdev.config.get_config()["nbm_path"]
 
     def get_nbs_path(self):
-        return nbdev.config.get_config()["nbm_path"]
+        return nbdev.config.get_config()["nbs_path"].name
 
     def pipeline_code(self, pipeline_name, pipeline_name_or_default="default_pipeline"):
         function_list = self.get_functions_from_pipeline(pipeline_name_or_default)
@@ -2863,7 +3045,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
         self.run_io(io_action="save", **kwargs)
 
 
-# %% ../../nbs/cell2func.ipynb 34
+# %% ../../nbs/cell2func.ipynb 73
 @magics_class
 class CellProcessorMagic(Magics):
     """
@@ -3049,7 +3231,7 @@ class CellProcessorMagic(Magics):
         self.processor.set_value(attr, value)
 
 
-# %% ../../nbs/cell2func.ipynb 36
+# %% ../../nbs/cell2func.ipynb 75
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -3058,7 +3240,7 @@ def load_ipython_extension(ipython):
     ipython.register_magics(magics)
 
 
-# %% ../../nbs/cell2func.ipynb 40
+# %% ../../nbs/cell2func.ipynb 79
 def retrieve_function_values_through_disk(filename="variable_values.pk"):
     """
     Store `variables` in disk
@@ -3074,7 +3256,7 @@ def retrieve_function_values_through_disk(filename="variable_values.pk"):
     return variable_values
 
 
-# %% ../../nbs/cell2func.ipynb 42
+# %% ../../nbs/cell2func.ipynb 81
 def retrieve_function_values_through_memory(field):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -3107,7 +3289,7 @@ def retrieve_function_values_through_memory(field):
     return None
 
 
-# %% ../../nbs/cell2func.ipynb 44
+# %% ../../nbs/cell2func.ipynb 83
 def copy_values_and_run_code_in_nb(self, field="shared_variables", code=""):
     """
     Makes desired variables available in notebook context.
@@ -3142,7 +3324,7 @@ os.remove ('variable_values.pk')
         get_ipython().run_cell(code_to_run2)
 
 
-# %% ../../nbs/cell2func.ipynb 45
+# %% ../../nbs/cell2func.ipynb 84
 def copy_values_in_nb(self, field="shared_variables"):
     copy_values_code = """
 for k, v in variables_to_insert.items():
@@ -3154,7 +3336,7 @@ for k, v in variables_to_insert.items():
     copy_values_and_run_code_in_nb(self, field=field, code=copy_values_code)
 
 
-# %% ../../nbs/cell2func.ipynb 46
+# %% ../../nbs/cell2func.ipynb 85
 def transfer_variables_to_nb(**kwargs):
     communicator = Bunch()
     communicator.shared_variables = kwargs
@@ -3162,7 +3344,7 @@ def transfer_variables_to_nb(**kwargs):
     copy_values_in_nb(communicator)
 
 
-# %% ../../nbs/cell2func.ipynb 52
+# %% ../../nbs/cell2func.ipynb 91
 def retrieve_nb_locals_through_disk(variable_values, filename="variable_values.pk"):
     """
     Store `variables` in disk
@@ -3177,7 +3359,7 @@ def retrieve_nb_locals_through_disk(variable_values, filename="variable_values.p
     joblib.dump(variable_values, filename)
 
 
-# %% ../../nbs/cell2func.ipynb 54
+# %% ../../nbs/cell2func.ipynb 93
 def retrieve_nb_locals_through_memory(field, variable_values):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -3205,12 +3387,12 @@ def retrieve_nb_locals_through_memory(field, variable_values):
         # del variable_values['created_current_values']
 
 
-# %% ../../nbs/cell2func.ipynb 56
+# %% ../../nbs/cell2func.ipynb 95
 def remove_name_from_nb(name):
     get_ipython().run_cell(f'exec("del {name}")')
 
 
-# %% ../../nbs/cell2func.ipynb 58
+# %% ../../nbs/cell2func.ipynb 97
 def acceptable_variable(variable_values, k):
     return (
         not k.startswith("_")
@@ -3221,7 +3403,7 @@ def acceptable_variable(variable_values, k):
     )
 
 
-# %% ../../nbs/cell2func.ipynb 60
+# %% ../../nbs/cell2func.ipynb 99
 def store_variables(
     path_variables,
     locals_,

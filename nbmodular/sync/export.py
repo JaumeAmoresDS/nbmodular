@@ -28,7 +28,7 @@ from execnb.nbio import new_nb, mk_cell, read_nb, write_nb, NbCell
 from ..core.utils import set_log_level
 from ..core.cell2func import CellProcessor
 
-# %% ../../nbs/export.ipynb 4
+# %% ../../nbs/export.ipynb 5
 def obtain_function_name_and_test_flag (line, cell):
     root = ast.parse (cell)
     name=[x.name for x in ast.walk(root) if isinstance (x, ast.FunctionDef)]
@@ -47,7 +47,7 @@ def obtain_function_name_and_test_flag (line, cell):
     
     return function_name, is_test
 
-# %% ../../nbs/export.ipynb 6
+# %% ../../nbs/export.ipynb 7
 def transform_test_source_for_docs (source_lines, idx, tab_size):
     start = 2 if idx==0 else 1
     transformed_lines=[]
@@ -55,7 +55,7 @@ def transform_test_source_for_docs (source_lines, idx, tab_size):
         transformed_lines.append (line[tab_size:] if line.startswith (" "*tab_size) else line)
     return "\n".join (transformed_lines)
 
-# %% ../../nbs/export.ipynb 8
+# %% ../../nbs/export.ipynb 9
 def set_paths_nb_processor (
     nb_processor,
     path,
@@ -116,7 +116,7 @@ def set_paths_nb_processor (
     nb_processor.dest_module_path = ".".join(parent_parts) + "." + nb_processor.file_name_without_extension
     nb_processor.test_dest_module_path = "tests." + ".".join(parent_parts) + "." + f"test_{nb_processor.file_name_without_extension}"
 
-# %% ../../nbs/export.ipynb 10
+# %% ../../nbs/export.ipynb 11
 class NbMagicProcessor (Processor):
     def __init__ (
         self, 
@@ -147,7 +147,7 @@ class NbMagicProcessor (Processor):
                     is_class=command=="class"
                 )
 
-# %% ../../nbs/export.ipynb 16
+# %% ../../nbs/export.ipynb 17
 class NbMagicExporter(Processor):
     def __init__ (
         self, 
@@ -272,7 +272,7 @@ class NbMagicExporter(Processor):
         # step 2 (end) in diagram
         self.duplicate_tmp_path.rename (self.dest_nb_path)
 
-# %% ../../nbs/export.ipynb 18
+# %% ../../nbs/export.ipynb 19
 def nbm_export (
     path,
     **kwargs,
@@ -286,7 +286,7 @@ def nbm_export (
     )
     NBProcessor (path, processor, rm_directives=False, nb=nb).process()
 
-# %% ../../nbs/export.ipynb 31
+# %% ../../nbs/export.ipynb 32
 def process_cell_for_nbm_update (cell: NbCell):
     source_lines = cell.source.splitlines() if cell.cell_type=="code" else []
     found_directive = False
@@ -314,7 +314,7 @@ def process_cell_for_nbm_update (cell: NbCell):
         raise ValueError ("Magic line not found at beginning of cell")
     cell.source = "\n".join ([line] + source_lines [line_number+1:])
 
-# %% ../../nbs/export.ipynb 33
+# %% ../../nbs/export.ipynb 34
 def nbm_update (
     path,
     code_cells_path=".nbmodular",
