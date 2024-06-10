@@ -1,34 +1,14 @@
+
+
 # %% auto 0
-__all__ = [
-    "bunch_io",
-    "get_non_callable_ipython",
-    "get_non_callable",
-    "get_ast",
-    "remove_duplicates_from_list",
-    "VariableClassifier",
-    "add_dict_values",
-    "run_cell_and_cache",
-    "FunctionProcessor",
-    "update_cell_code",
-    "add_function_to_list",
-    "get_args_and_defaults",
-    "get_args_and_defaults_from_ast",
-    "get_args_and_defaults_from_function_in_cell",
-    "derive_paths",
-    "CellProcessor",
-    "CellProcessorMagic",
-    "load_ipython_extension",
-    "retrieve_function_values_through_disk",
-    "retrieve_function_values_through_memory",
-    "copy_values_and_run_code_in_nb",
-    "copy_values_in_nb",
-    "transfer_variables_to_nb",
-    "retrieve_nb_locals_through_disk",
-    "retrieve_nb_locals_through_memory",
-    "remove_name_from_nb",
-    "acceptable_variable",
-    "store_variables",
-]
+__all__ = ['bunch_io', 'get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_duplicates_from_list',
+           'VariableClassifier', 'add_dict_values', 'run_cell_and_cache', 'FunctionProcessor', 'update_cell_code',
+           'add_function_to_list', 'get_args_and_defaults', 'get_args_and_defaults_from_ast',
+           'get_args_and_defaults_from_function_in_cell', 'derive_paths', 'CellProcessor', 'CellProcessorMagic',
+           'load_ipython_extension', 'retrieve_function_values_through_disk', 'retrieve_function_values_through_memory',
+           'copy_values_and_run_code_in_nb', 'copy_values_in_nb', 'transfer_variables_to_nb',
+           'retrieve_nb_locals_through_disk', 'retrieve_nb_locals_through_memory', 'remove_name_from_nb',
+           'acceptable_variable', 'store_variables']
 
 # %% ../../nbs/cell2func.ipynb 2
 import pdb
@@ -192,9 +172,6 @@ def add_dict_values(d: dict):
 
 
 # %% ../../nbs/cell2func.ipynb 19
-from typing import Callable
-
-
 def run_cell_and_cache(
     cell: str,
     load_disk: bool = False,
@@ -205,11 +182,7 @@ def run_cell_and_cache(
     memory: Optional[dict] = None,
     memory_key: Optional[str] = None,
     error_if_not_loaded: bool = False,
-    new_function: Optional[Callable] = None,
 ) -> None:
-    if new_function is not None:
-        output = new_function(cell)
-        return output
     if (load_disk or save_disk) and output_path is None:
         raise ValueError(
             "output_path cannot be None if load_disk or save_disk are True."
@@ -230,7 +203,7 @@ def run_cell_and_cache(
         if error_if_not_loaded:
             raise RuntimeError("Previous output not found.")
         if save_memory or save_disk:
-            with capture_output(False, False, False) as output:
+            with capture_output(True, True, True) as output:
                 get_ipython().run_cell(cell)
             obtained_output = True
         else:
@@ -2293,6 +2266,7 @@ for arg, val in zip (args_with_defaults, default_values):
             idx = self.current_function.idx = len(function_list)
         else:
             self.current_function.previous_values = function_list[idx].previous_values
+            self.current_function.capture = function_list[idx].capture
             self.current_function.idx = function_list[idx].idx
 
         # get variables specific about this function
@@ -3071,7 +3045,7 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
         self.run_io(io_action="save", **kwargs)
 
 
-# %% ../../nbs/cell2func.ipynb 71
+# %% ../../nbs/cell2func.ipynb 73
 @magics_class
 class CellProcessorMagic(Magics):
     """
@@ -3257,7 +3231,7 @@ class CellProcessorMagic(Magics):
         self.processor.set_value(attr, value)
 
 
-# %% ../../nbs/cell2func.ipynb 73
+# %% ../../nbs/cell2func.ipynb 75
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -3266,7 +3240,7 @@ def load_ipython_extension(ipython):
     ipython.register_magics(magics)
 
 
-# %% ../../nbs/cell2func.ipynb 77
+# %% ../../nbs/cell2func.ipynb 79
 def retrieve_function_values_through_disk(filename="variable_values.pk"):
     """
     Store `variables` in disk
@@ -3282,7 +3256,7 @@ def retrieve_function_values_through_disk(filename="variable_values.pk"):
     return variable_values
 
 
-# %% ../../nbs/cell2func.ipynb 79
+# %% ../../nbs/cell2func.ipynb 81
 def retrieve_function_values_through_memory(field):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -3315,7 +3289,7 @@ def retrieve_function_values_through_memory(field):
     return None
 
 
-# %% ../../nbs/cell2func.ipynb 81
+# %% ../../nbs/cell2func.ipynb 83
 def copy_values_and_run_code_in_nb(self, field="shared_variables", code=""):
     """
     Makes desired variables available in notebook context.
@@ -3350,7 +3324,7 @@ os.remove ('variable_values.pk')
         get_ipython().run_cell(code_to_run2)
 
 
-# %% ../../nbs/cell2func.ipynb 82
+# %% ../../nbs/cell2func.ipynb 84
 def copy_values_in_nb(self, field="shared_variables"):
     copy_values_code = """
 for k, v in variables_to_insert.items():
@@ -3362,7 +3336,7 @@ for k, v in variables_to_insert.items():
     copy_values_and_run_code_in_nb(self, field=field, code=copy_values_code)
 
 
-# %% ../../nbs/cell2func.ipynb 83
+# %% ../../nbs/cell2func.ipynb 85
 def transfer_variables_to_nb(**kwargs):
     communicator = Bunch()
     communicator.shared_variables = kwargs
@@ -3370,7 +3344,7 @@ def transfer_variables_to_nb(**kwargs):
     copy_values_in_nb(communicator)
 
 
-# %% ../../nbs/cell2func.ipynb 89
+# %% ../../nbs/cell2func.ipynb 91
 def retrieve_nb_locals_through_disk(variable_values, filename="variable_values.pk"):
     """
     Store `variables` in disk
@@ -3385,7 +3359,7 @@ def retrieve_nb_locals_through_disk(variable_values, filename="variable_values.p
     joblib.dump(variable_values, filename)
 
 
-# %% ../../nbs/cell2func.ipynb 91
+# %% ../../nbs/cell2func.ipynb 93
 def retrieve_nb_locals_through_memory(field, variable_values):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -3413,12 +3387,12 @@ def retrieve_nb_locals_through_memory(field, variable_values):
         # del variable_values['created_current_values']
 
 
-# %% ../../nbs/cell2func.ipynb 93
+# %% ../../nbs/cell2func.ipynb 95
 def remove_name_from_nb(name):
     get_ipython().run_cell(f'exec("del {name}")')
 
 
-# %% ../../nbs/cell2func.ipynb 95
+# %% ../../nbs/cell2func.ipynb 97
 def acceptable_variable(variable_values, k):
     return (
         not k.startswith("_")
@@ -3429,7 +3403,7 @@ def acceptable_variable(variable_values, k):
     )
 
 
-# %% ../../nbs/cell2func.ipynb 97
+# %% ../../nbs/cell2func.ipynb 99
 def store_variables(
     path_variables,
     locals_,
