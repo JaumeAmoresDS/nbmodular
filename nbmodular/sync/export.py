@@ -6,8 +6,14 @@ __all__ = [
     "NbMagicProcessor",
     "NbMagicExporter",
     "nbm_export",
+    "nbm_export_all_paths",
+    "parse_argv_and_run_nbm_export_all_paths",
+    "nbm_export_cli",
     "process_cell_for_nbm_update",
     "nbm_update",
+    "nbm_update_all_paths",
+    "parse_argv_and_run_nbm_update_all_paths",
+    "nbm_update_cli",
 ]
 
 # %% ../../nbs/export.ipynb 2
@@ -26,7 +32,6 @@ import sys
 # 3rd party
 from sklearn.utils import Bunch
 from nbdev.processors import Processor, NBProcessor
-from nbdev.config import get_config
 from nbdev.export import nb_export
 from nbdev.sync import _update_mod, _mod_files
 from nbdev.doclinks import nbglob
@@ -35,7 +40,7 @@ from execnb.nbio import new_nb, mk_cell, read_nb, write_nb, NbCell
 from fastcore.all import globtastic
 
 # nbmodular
-from ..core.utils import set_log_level
+from ..core.utils import set_log_level, get_config
 from ..core.cell2func import CellProcessor
 
 
@@ -70,7 +75,7 @@ def transform_test_source_for_docs(source_lines, idx, tab_size):
     return "\n".join(transformed_lines)
 
 
-# %% ../../nbs/export.ipynb 9
+# %% ../../nbs/export.ipynb 11
 def set_paths_nb_processor(
     nb_processor,
     path,
@@ -78,6 +83,9 @@ def set_paths_nb_processor(
     nb_processor.path = Path(path)
     nb_processor.file_name_without_extension = nb_processor.path.name[: -len(".ipynb")]
 
+    import ipdb
+
+    ipdb.set_trace()
     config = get_config()
     nb_processor.root_path = config.config_path
     nb_processor.nbs_path = config["nbs_path"]
@@ -160,7 +168,7 @@ def set_paths_nb_processor(
     )
 
 
-# %% ../../nbs/export.ipynb 11
+# %% ../../nbs/export.ipynb 13
 class NbMagicProcessor(Processor):
     def __init__(
         self,
@@ -174,7 +182,7 @@ class NbMagicProcessor(Processor):
         self.logger = logging.getLogger("nb_exporter") if logger is None else logger
         set_log_level(self.logger, log_level)
         self.logger.info(f"Analyzing code from notebook {path}")
-        self.cell_processor = CellProcessor()
+        self.cell_processor = CellProcessor(path=path)
         self.cell_processor.set_run_tests(False)
 
     def cell(self, cell):
@@ -192,7 +200,7 @@ class NbMagicProcessor(Processor):
                 )
 
 
-# %% ../../nbs/export.ipynb 17
+# %% ../../nbs/export.ipynb 19
 class NbMagicExporter(Processor):
     def __init__(
         self,
@@ -337,7 +345,7 @@ class NbMagicExporter(Processor):
         self.duplicate_tmp_path.rename(self.dest_nb_path)
 
 
-# %% ../../nbs/export.ipynb 19
+# %% ../../nbs/export.ipynb 21
 def nbm_export(
     path,
     **kwargs,
@@ -352,20 +360,27 @@ def nbm_export(
     NBProcessor(path, processor, rm_directives=False, nb=nb).process()
 
 
-def nbm_export_all_paths():
-    parser = argparse.ArgumentParser(
-        description="Export notebooks to their corresponding python modules."
-    )
-
-    parser.add_argument("path", type=str, default=None, help="Path to notebook")
-    args = parser.parse_args(sys.argv)
-
-    files = nbglob(path=args.path, as_path=True).sorted("name")
+# %% ../../nbs/export.ipynb 34
+def nbm_export_all_paths(path):
+    files = nbglob(path=path, as_path=True).sorted("name")
     for f in files:
         nbm_export(f)
 
 
-# %% ../../nbs/export.ipynb 32
+def parse_argv_and_run_nbm_export_all_paths(argv: List[str]):
+    parser = argparse.ArgumentParser(
+        description="Export notebooks to their corresponding python modules."
+    )
+    parser.add_argument("--path", type=str, default=None, help="Path to notebook")
+    args = parser.parse_args(argv)
+    nbm_export_all_paths(args.path)
+
+
+def nbm_export_cli():
+    parse_argv_and_run_nbm_export_all_paths(sys.argv)
+
+
+# %% ../../nbs/export.ipynb 41
 def process_cell_for_nbm_update(cell: NbCell):
     source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
     found_directive = False
@@ -403,7 +418,7 @@ def process_cell_for_nbm_update(cell: NbCell):
     cell.source = "\n".join([line] + source_lines[line_number + 1 :])
 
 
-# %% ../../nbs/export.ipynb 34
+# %% ../../nbs/export.ipynb 43
 def nbm_update(
     path,
     code_cells_path=".nbmodular",
@@ -461,14 +476,8 @@ def nbm_update(
     write_nb(original_nb, path)
 
 
-def nbm_update_all_paths():
-    parser = argparse.ArgumentParser(
-        description="Udpdate python modules from their corresponding notebooks."
-    )
-
-    parser.add_argument("path", type=str, default=None, help="Path to python module")
-    args = parser.parse_args(sys.argv)
-
+# %% ../../nbs/export.ipynb 49
+def nbm_update_all_paths(args):
     files = nbglob(path=args.path, as_path=True).sorted("name")
     cfg = get_config()
     path = Path(args.path or cfg.lib_path)
@@ -477,3 +486,17 @@ def nbm_update_all_paths():
         lambda x: str(Path(x).absolute().relative_to(lib_dir) in _mod_files())
     )
     files.map(nbm_update, lib_dir=lib_dir)
+
+
+def parse_argv_and_run_nbm_update_all_paths(argv: List[str]):
+    parser = argparse.ArgumentParser(
+        description="Udpdate python modules from their corresponding notebooks."
+    )
+
+    parser.add_argument("path", type=str, default=None, help="Path to python module")
+    args = parser.parse_args(argv)
+    nbm_update_all_paths(args.path)
+
+
+def nbm_update_cli():
+    parse_argv_and_run_nbm_update_all_paths(sys.argv)
