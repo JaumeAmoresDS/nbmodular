@@ -1,14 +1,34 @@
-
-
 # %% auto 0
-__all__ = ['bunch_io', 'get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_duplicates_from_list',
-           'VariableClassifier', 'add_dict_values', 'run_cell_and_cache', 'FunctionProcessor', 'update_cell_code',
-           'add_function_to_list', 'get_args_and_defaults', 'get_args_and_defaults_from_ast',
-           'get_args_and_defaults_from_function_in_cell', 'derive_paths', 'CellProcessor', 'CellProcessorMagic',
-           'load_ipython_extension', 'retrieve_function_values_through_disk', 'retrieve_function_values_through_memory',
-           'copy_values_and_run_code_in_nb', 'copy_values_in_nb', 'transfer_variables_to_nb',
-           'retrieve_nb_locals_through_disk', 'retrieve_nb_locals_through_memory', 'remove_name_from_nb',
-           'acceptable_variable', 'store_variables']
+__all__ = [
+    "bunch_io",
+    "get_non_callable_ipython",
+    "get_non_callable",
+    "get_ast",
+    "remove_duplicates_from_list",
+    "VariableClassifier",
+    "add_dict_values",
+    "run_cell_and_cache",
+    "FunctionProcessor",
+    "update_cell_code",
+    "add_function_to_list",
+    "get_args_and_defaults",
+    "get_args_and_defaults_from_ast",
+    "get_args_and_defaults_from_function_in_cell",
+    "derive_paths",
+    "CellProcessor",
+    "CellProcessorMagic",
+    "load_ipython_extension",
+    "retrieve_function_values_through_disk",
+    "retrieve_function_values_through_memory",
+    "copy_values_and_run_code_in_nb",
+    "copy_values_in_nb",
+    "transfer_variables_to_nb",
+    "retrieve_nb_locals_through_disk",
+    "retrieve_nb_locals_through_memory",
+    "remove_name_from_nb",
+    "acceptable_variable",
+    "store_variables",
+]
 
 # %% ../../nbs/cell2func.ipynb 2
 import pdb
@@ -49,7 +69,7 @@ from fastcore.all import argnames
 import nbdev
 
 from . import function_io
-from .utils import set_log_level
+from .utils import set_log_level, get_config
 
 
 # %% ../../nbs/cell2func.ipynb 6
@@ -1188,6 +1208,7 @@ class CellProcessor:
         restrict_inputs=False,
         code_cells_path=".nbmodular",
         export_always=True,
+        path: Optional[str] = None,
         **kwargs,
     ):
         self.logger = logging.getLogger("CellProcessor")
@@ -1234,7 +1255,10 @@ class CellProcessor:
         self.tab_size = tab_size
         found_notebook = True
         try:
-            self.nb_path = ipynbname.path()
+            if path is not None:
+                self.nb_path = Path(path)
+            else:
+                self.nb_path = ipynbname.path()
         except FileNotFoundError:
             if "__vsc_ipynb_file__" in globals():
                 self.nb_path = Path(globals()["__vsc_ipynb_file__"])
@@ -1264,6 +1288,7 @@ class CellProcessor:
         except ValueError:
             pass
 
+        self.config = get_config()
         try:
             self.nbs_folder = self.get_nbm_path()
             self.lib_folder = self.get_lib_path()
@@ -2199,10 +2224,13 @@ for arg, val in zip (args_with_defaults, default_values):
             self._added_io_imports = True
 
     def get_function_kwargs(self, kwargs: dict, test: bool = False) -> dict:
-        return {
+        kwargs_with_defaults = {
             k: self.get_function_attr(k, kwargs[k], test)
             for k in set(kwargs).intersection(self.list_of_parser_actions)
         }
+        kwargs = kwargs.copy()
+        kwargs.update(kwargs_with_defaults)
+        return kwargs
 
     def create_function_and_run_code(
         self,
@@ -2844,13 +2872,13 @@ for arg, val in zip (args_with_defaults, default_values):
             return function_info[function_name]
 
     def get_lib_path(self):
-        return nbdev.config.get_config()["lib_path"].name
+        return self.config["lib_path"]
 
     def get_nbm_path(self):
-        return nbdev.config.get_config()["nbm_path"]
+        return self.config["nbm_path"]
 
     def get_nbs_path(self):
-        return nbdev.config.get_config()["nbs_path"].name
+        return self.config["nbs_path"]
 
     def pipeline_code(self, pipeline_name, pipeline_name_or_default="default_pipeline"):
         function_list = self.get_functions_from_pipeline(pipeline_name_or_default)
