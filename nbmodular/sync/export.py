@@ -30,9 +30,12 @@ from execnb.nbio import new_nb, mk_cell, read_nb, write_nb, NbCell
 from fastcore.all import globtastic
 
 # nbmodular
-from ..core.utils import set_log_level, get_config
+from nbmodular.core.utils import (
+    set_log_level,
+    get_config,
+    create_and_cd_to_new_root_folder,
+)
 from ..core.cell2func import CellProcessor
-
 
 # %% ../../nbs/export.ipynb 5
 def obtain_function_name_and_test_flag(line, cell):
@@ -87,8 +90,8 @@ def set_paths_nb_processor(
     nb_processor.path = Path(path)
     nb_processor.file_name_without_extension = nb_processor.path.name[: -len(".ipynb")]
 
-    #import ipdb
-    #ipdb.set_trace()
+    # import ipdb
+    # ipdb.set_trace()
     config = get_config()
     nb_processor.root_path = config.config_path.parent
     nb_processor.nbs_path = config["nbs_path"]
@@ -96,7 +99,10 @@ def set_paths_nb_processor(
     nb_processor.lib_path = config["lib_path"]
 
     # In diagram: nbs/nb.ipynb
-    nb_processor.dest_nb_path = replace_folder_in_path (nb_processor.path, nb_processor.nbm_path, nb_processor.nbs_path)
+    nb_processor.dest_nb_path = replace_folder_in_path(
+        nb_processor.path, nb_processor.nbm_path, nb_processor.nbs_path
+    )
+    nb_processor.dest_nb_path.parent.mkdir(parents=True, exist_ok=True)
 
     # In diagram: nbs/test_nb.ipynb
     nb_processor.test_dest_nb_path = (
@@ -104,7 +110,9 @@ def set_paths_nb_processor(
         / f"test_{nb_processor.file_name_without_extension}.ipynb"
     )
     # In diagram: .nbs/nb.ipynb
-    nb_processor.tmp_nb_path = replace_folder_in_path (nb_processor.path, nb_processor.nbm_path, ".nbs")
+    nb_processor.tmp_nb_path = replace_folder_in_path(
+        nb_processor.path, nb_processor.nbm_path, ".nbs"
+    )
     nb_processor.tmp_nb_path.parent.mkdir(parents=True, exist_ok=True)
 
     # step 2 (beginning) in diagram
@@ -132,12 +140,10 @@ def set_paths_nb_processor(
     if nb_processor.nbm_path in nb_processor.path.parent.parts:
         index = nb_processor.path.parent.parts.index(nb_processor.nbm_path)
     else:
-        raise RuntimeError(
-            f"{nb_processor.nbm_path} not found in {nb_processor.path}"
-        )
+        raise RuntimeError(f"{nb_processor.nbm_path} not found in {nb_processor.path}")
     parent_parts = nb_processor.path.parent.parts[index + 1 :]
     # module paths
-    nb_processor.dest_python_path = (
+    nb_processor.dest_python_path = nb_processor.root_path / (
         nb_processor.lib_path
         + "/"
         + "/".join(parent_parts)
@@ -145,7 +151,8 @@ def set_paths_nb_processor(
         + nb_processor.file_name_without_extension
         + ".py"
     )
-    nb_processor.test_dest_python_path = (
+    nb_processor.dest_python_path.parent.mkdir(parents=True, exist_ok=True)
+    nb_processor.test_dest_python_path = nb_processor.root_path / (
         nb_processor.lib_path
         + "/tests/"
         + "/".join(parent_parts)
@@ -154,6 +161,7 @@ def set_paths_nb_processor(
         + nb_processor.file_name_without_extension
         + ".py"
     )
+    nb_processor.test_dest_python_path.parent.mkdir(parents=True, exist_ok=True)
     # to be used in default_exp cell (see NBExporter)
     nb_processor.dest_module_path = (
         ".".join(parent_parts) + "." + nb_processor.file_name_without_extension
@@ -164,7 +172,6 @@ def set_paths_nb_processor(
         + "."
         + f"test_{nb_processor.file_name_without_extension}"
     )
-
 
 # %% ../../nbs/export.ipynb 20
 class NbMagicProcessor(Processor):
@@ -375,7 +382,7 @@ def parse_argv_and_run_nbm_export_all_paths (argv: List[str]):
 def nbm_export_cli ():
     parse_argv_and_run_nbm_export_all_paths (sys.argv)
 
-# %% ../../nbs/export.ipynb 51
+# %% ../../nbs/export.ipynb 54
 def process_cell_for_nbm_update(cell: NbCell):
     source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
     found_directive = False
@@ -413,7 +420,7 @@ def process_cell_for_nbm_update(cell: NbCell):
     cell.source = "\n".join([line] + source_lines[line_number + 1 :])
 
 
-# %% ../../nbs/export.ipynb 53
+# %% ../../nbs/export.ipynb 56
 def nbm_update(
     path,
     code_cells_path=".nbmodular",
@@ -470,7 +477,7 @@ def nbm_update(
     original_nb.cells = nb_processor.cells
     write_nb(original_nb, path)
 
-# %% ../../nbs/export.ipynb 59
+# %% ../../nbs/export.ipynb 62
 def nbm_update_all_paths (args):
     files = nbglob(path=args.path, as_path=True).sorted("name")
     cfg = get_config()

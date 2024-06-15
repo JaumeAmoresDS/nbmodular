@@ -2,12 +2,13 @@
 
 # %% auto 0
 __all__ = ['set_log_level', 'get_repo_root_folder', 'cd_root', 'make_nb_from_cell_list', 'markdown_cell', 'code_cell',
-           'prepare_tests', 'get_config']
+           'prepare_tests', 'create_and_cd_to_new_root_folder', 'get_config']
 
 # %% ../../nbs/utils.ipynb 2
 # standard
 import logging
 import os
+import shutil
 from pathlib import Path
 from typing import List
 from configparser import ConfigParser
@@ -16,12 +17,14 @@ from configparser import ConfigParser
 import nbdev
 from sklearn.utils import Bunch
 
+
 # %% ../../nbs/utils.ipynb 4
 def set_log_level(logger, log_level):
     logger.setLevel(log_level)
     ch = logging.StreamHandler()
     ch.setLevel(log_level)
     logger.addHandler(ch)
+
 
 # %% ../../nbs/utils.ipynb 6
 def get_repo_root_folder(
@@ -45,15 +48,18 @@ def get_repo_root_folder(
     repo_root_folder = Path(".").resolve()
     return repo_root_folder
 
+
 # %% ../../nbs/utils.ipynb 7
 def _cd_root_nbdev_impl():
     config = nbdev.config.get_config()
     os.chdir(config.config_path)
 
+
 # %% ../../nbs/utils.ipynb 8
 def cd_root():
     repo_root_path = get_repo_root_folder()
     os.chdir(repo_root_path)
+
 
 # %% ../../nbs/utils.ipynb 12
 def make_nb_from_cell_list(cell_list: List[Bunch]):
@@ -93,14 +99,49 @@ def code_cell(text: str):
     cell.source = "\n".join(cell.source)
     return cell
 
+
 # %% ../../nbs/utils.ipynb 20
-def prepare_tests ():
+def prepare_tests():
     pass
 
+
 # %% ../../nbs/utils.ipynb 22
-def get_config (path: str="settings.ini"):
-    config = ConfigParser(delimiters=['='])
-    config.read(path, encoding='utf-8')
-    cfg = config['DEFAULT']
-    cfg.config_path=Path (path).resolve()
+def create_and_cd_to_new_root_folder(
+    root_folder: str | Path, config_path: str | Path = "settings.ini"
+) -> Path:
+    """Creates `root_folder`, cds to it, and makes it act as *new root* (see below).
+
+    In order to make it the new root, it copies the file `settings.ini`, which
+    allows cd_root () find it and cd to it, and also allows some modules to load
+    the global root's config from it.
+
+    It assumes that
+
+    Parameters
+    ----------
+    root_folder : str or Path
+        Path to new root.
+    config_path : str or Path, optional
+        path to roo'ts config file, by default "settings.ini"
+
+    Returns
+    -------
+    Path
+        Absolute path to root_folder, as Path object.
+    """
+    config_path = Path(config_path)
+    root_folder = Path(root_folder).absolute()
+    root_folder.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(config_path, root_folder / config_path.name)
+    os.chdir(root_folder)
+
+    return root_folder
+
+
+# %% ../../nbs/utils.ipynb 24
+def get_config(path: str = "settings.ini"):
+    config = ConfigParser(delimiters=["="])
+    config.read(path, encoding="utf-8")
+    cfg = config["DEFAULT"]
+    cfg.config_path = Path(path).resolve()
     return cfg
