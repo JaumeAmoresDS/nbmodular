@@ -1,14 +1,34 @@
-
-
 # %% auto 0
-__all__ = ['bunch_io', 'get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_duplicates_from_list',
-           'VariableClassifier', 'add_dict_values', 'run_cell_and_cache', 'FunctionProcessor', 'update_cell_code',
-           'add_function_to_list', 'get_args_and_defaults', 'get_args_and_defaults_from_ast',
-           'get_args_and_defaults_from_function_in_cell', 'derive_paths', 'CellProcessor', 'CellProcessorMagic',
-           'load_ipython_extension', 'retrieve_function_values_through_disk', 'retrieve_function_values_through_memory',
-           'copy_values_and_run_code_in_nb', 'copy_values_in_nb', 'transfer_variables_to_nb',
-           'retrieve_nb_locals_through_disk', 'retrieve_nb_locals_through_memory', 'remove_name_from_nb',
-           'acceptable_variable', 'store_variables']
+__all__ = [
+    "bunch_io",
+    "get_non_callable_ipython",
+    "get_non_callable",
+    "get_ast",
+    "remove_duplicates_from_list",
+    "VariableClassifier",
+    "add_dict_values",
+    "run_cell_and_cache",
+    "FunctionProcessor",
+    "update_cell_code",
+    "add_function_to_list",
+    "get_args_and_defaults",
+    "get_args_and_defaults_from_ast",
+    "get_args_and_defaults_from_function_in_cell",
+    "derive_paths",
+    "CellProcessor",
+    "CellProcessorMagic",
+    "load_ipython_extension",
+    "retrieve_function_values_through_disk",
+    "retrieve_function_values_through_memory",
+    "copy_values_and_run_code_in_nb",
+    "copy_values_in_nb",
+    "transfer_variables_to_nb",
+    "retrieve_nb_locals_through_disk",
+    "retrieve_nb_locals_through_memory",
+    "remove_name_from_nb",
+    "acceptable_variable",
+    "store_variables",
+]
 
 # %% ../../nbs/cell2func.ipynb 2
 import pdb
@@ -2237,8 +2257,10 @@ for arg, val in zip (args_with_defaults, default_values):
             restrict_inputs = self.restrict_inputs
         store_values = not not_store
         # pdb.no_set_trace()
-        if test:
-            func = "test_" + func
+        if test and not func.startswith("test_"):
+            warnings.warn(
+                f"Function {func} has flag --test on, but doesn't start with 'test_'."
+            )
 
         self.current_function = self.create_function(
             cell,
