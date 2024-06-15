@@ -1,20 +1,10 @@
+
+
 # %% auto 0
-__all__ = [
-    "obtain_function_name_and_test_flag",
-    "transform_test_source_for_docs",
-    "set_paths_nb_processor",
-    "NbMagicProcessor",
-    "NbMagicExporter",
-    "nbm_export",
-    "nbm_export_all_paths",
-    "parse_argv_and_run_nbm_export_all_paths",
-    "nbm_export_cli",
-    "process_cell_for_nbm_update",
-    "nbm_update",
-    "nbm_update_all_paths",
-    "parse_argv_and_run_nbm_update_all_paths",
-    "nbm_update_cli",
-]
+__all__ = ['obtain_function_name_and_test_flag', 'transform_test_source_for_docs', 'replace_folder_in_path',
+           'set_paths_nb_processor', 'NbMagicProcessor', 'NbMagicExporter', 'nbm_export', 'nbm_export_all_paths',
+           'parse_argv_and_run_nbm_export_all_paths', 'nbm_export_cli', 'process_cell_for_nbm_update', 'nbm_update',
+           'nbm_update_all_paths', 'parse_argv_and_run_nbm_update_all_paths', 'nbm_update_cli']
 
 # %% ../../nbs/export.ipynb 2
 # Standard
@@ -48,7 +38,7 @@ from ..core.cell2func import CellProcessor
 def obtain_function_name_and_test_flag(line, cell):
     root = ast.parse(cell)
     name = [x.name for x in ast.walk(root) if isinstance(x, ast.FunctionDef)]
-    argv = shlex.split(line, posix=(os.name == "posix"))
+    argv = shlex.split(line, posix=(os.name == "posix"))[1:]
     is_test = "--test" in argv
 
     if len(name) > 0:
@@ -64,7 +54,7 @@ def obtain_function_name_and_test_flag(line, cell):
     return function_name, is_test
 
 
-# %% ../../nbs/export.ipynb 7
+# %% ../../nbs/export.ipynb 9
 def transform_test_source_for_docs(source_lines, idx, tab_size):
     start = 2 if idx == 0 else 1
     transformed_lines = []
@@ -75,7 +65,21 @@ def transform_test_source_for_docs(source_lines, idx, tab_size):
     return "\n".join(transformed_lines)
 
 
-# %% ../../nbs/export.ipynb 11
+# %% ../../nbs/export.ipynb 12
+def replace_folder_in_path (
+    path: Path,
+    original_folder: str,
+    new_folder: str,
+):
+    if original_folder in path.parent.parts:
+        index = path.parent.parts.index(original_folder)        
+        parts = path.parent.parts[:index] + (new_folder,) + path.parent.parts[index + 1 :]
+        new_path = Path().joinpath(*parts) / path.name
+    else:
+        new_path = path
+    return new_path
+
+# %% ../../nbs/export.ipynb 16
 def set_paths_nb_processor(
     nb_processor,
     path,
@@ -83,30 +87,24 @@ def set_paths_nb_processor(
     nb_processor.path = Path(path)
     nb_processor.file_name_without_extension = nb_processor.path.name[: -len(".ipynb")]
 
-    import ipdb
-
-    ipdb.set_trace()
+    #import ipdb
+    #ipdb.set_trace()
     config = get_config()
-    nb_processor.root_path = config.config_path
+    nb_processor.root_path = config.config_path.parent
     nb_processor.nbs_path = config["nbs_path"]
     nb_processor.nbm_path = config["nbm_path"]
     nb_processor.lib_path = config["lib_path"]
 
     # In diagram: nbs/nb.ipynb
-    nb_processor.dest_nb_path = Path(
-        str(nb_processor.path).replace(
-            str(nb_processor.nbm_path), str(nb_processor.nbs_path)
-        )
-    )
+    nb_processor.dest_nb_path = replace_folder_in_path (nb_processor.path, nb_processor.nbm_path, nb_processor.nbs_path)
+
     # In diagram: nbs/test_nb.ipynb
     nb_processor.test_dest_nb_path = (
         nb_processor.dest_nb_path.parent
         / f"test_{nb_processor.file_name_without_extension}.ipynb"
     )
     # In diagram: .nbs/nb.ipynb
-    nb_processor.tmp_nb_path = Path(
-        str(nb_processor.path).replace(nb_processor.nbm_path, ".nbs")
-    )
+    nb_processor.tmp_nb_path = replace_folder_in_path (nb_processor.path, nb_processor.nbm_path, ".nbs")
     nb_processor.tmp_nb_path.parent.mkdir(parents=True, exist_ok=True)
 
     # step 2 (beginning) in diagram
@@ -131,16 +129,16 @@ def set_paths_nb_processor(
     )
 
     # python module paths
-    try:
-        index = nb_processor.path.parts.index(nb_processor.nbm_path)
-    except:
+    if nb_processor.nbm_path in nb_processor.path.parent.parts:
+        index = nb_processor.path.parent.parts.index(nb_processor.nbm_path)
+    else:
         raise RuntimeError(
-            f"{nb_processor.nbm_path.name} not found in {nb_processor.path}"
+            f"{nb_processor.nbm_path} not found in {nb_processor.path}"
         )
     parent_parts = nb_processor.path.parent.parts[index + 1 :]
     # module paths
     nb_processor.dest_python_path = (
-        nb_processor.lib_path.name
+        nb_processor.lib_path
         + "/"
         + "/".join(parent_parts)
         + "/"
@@ -148,7 +146,7 @@ def set_paths_nb_processor(
         + ".py"
     )
     nb_processor.test_dest_python_path = (
-        nb_processor.lib_path.name
+        nb_processor.lib_path
         + "/tests/"
         + "/".join(parent_parts)
         + "/"
@@ -168,7 +166,7 @@ def set_paths_nb_processor(
     )
 
 
-# %% ../../nbs/export.ipynb 13
+# %% ../../nbs/export.ipynb 20
 class NbMagicProcessor(Processor):
     def __init__(
         self,
@@ -200,7 +198,7 @@ class NbMagicProcessor(Processor):
                 )
 
 
-# %% ../../nbs/export.ipynb 19
+# %% ../../nbs/export.ipynb 26
 class NbMagicExporter(Processor):
     def __init__(
         self,
@@ -345,7 +343,7 @@ class NbMagicExporter(Processor):
         self.duplicate_tmp_path.rename(self.dest_nb_path)
 
 
-# %% ../../nbs/export.ipynb 21
+# %% ../../nbs/export.ipynb 29
 def nbm_export(
     path,
     **kwargs,
@@ -360,27 +358,24 @@ def nbm_export(
     NBProcessor(path, processor, rm_directives=False, nb=nb).process()
 
 
-# %% ../../nbs/export.ipynb 34
-def nbm_export_all_paths(path):
+# %% ../../nbs/export.ipynb 43
+def nbm_export_all_paths (path):
     files = nbglob(path=path, as_path=True).sorted("name")
     for f in files:
         nbm_export(f)
 
-
-def parse_argv_and_run_nbm_export_all_paths(argv: List[str]):
+def parse_argv_and_run_nbm_export_all_paths (argv: List[str]):
     parser = argparse.ArgumentParser(
         description="Export notebooks to their corresponding python modules."
     )
     parser.add_argument("--path", type=str, default=None, help="Path to notebook")
     args = parser.parse_args(argv)
-    nbm_export_all_paths(args.path)
+    nbm_export_all_paths (args.path)
 
+def nbm_export_cli ():
+    parse_argv_and_run_nbm_export_all_paths (sys.argv)
 
-def nbm_export_cli():
-    parse_argv_and_run_nbm_export_all_paths(sys.argv)
-
-
-# %% ../../nbs/export.ipynb 41
+# %% ../../nbs/export.ipynb 51
 def process_cell_for_nbm_update(cell: NbCell):
     source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
     found_directive = False
@@ -418,7 +413,7 @@ def process_cell_for_nbm_update(cell: NbCell):
     cell.source = "\n".join([line] + source_lines[line_number + 1 :])
 
 
-# %% ../../nbs/export.ipynb 43
+# %% ../../nbs/export.ipynb 53
 def nbm_update(
     path,
     code_cells_path=".nbmodular",
@@ -475,9 +470,8 @@ def nbm_update(
     original_nb.cells = nb_processor.cells
     write_nb(original_nb, path)
 
-
-# %% ../../nbs/export.ipynb 49
-def nbm_update_all_paths(args):
+# %% ../../nbs/export.ipynb 59
+def nbm_update_all_paths (args):
     files = nbglob(path=args.path, as_path=True).sorted("name")
     cfg = get_config()
     path = Path(args.path or cfg.lib_path)
@@ -487,16 +481,14 @@ def nbm_update_all_paths(args):
     )
     files.map(nbm_update, lib_dir=lib_dir)
 
-
-def parse_argv_and_run_nbm_update_all_paths(argv: List[str]):
+def parse_argv_and_run_nbm_update_all_paths (argv: List[str]):
     parser = argparse.ArgumentParser(
         description="Udpdate python modules from their corresponding notebooks."
     )
 
     parser.add_argument("path", type=str, default=None, help="Path to python module")
     args = parser.parse_args(argv)
-    nbm_update_all_paths(args.path)
+    nbm_update_all_paths (args.path)
 
-
-def nbm_update_cli():
-    parse_argv_and_run_nbm_update_all_paths(sys.argv)
+def nbm_update_cli ():
+    parse_argv_and_run_nbm_update_all_paths (sys.argv)
