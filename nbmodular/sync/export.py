@@ -57,22 +57,20 @@ def obtain_function_name_and_test_flag(line, cell):
     return function_name, is_test
 
 # %% ../../nbs/export.ipynb 9
-def transform_test_source_for_docs(
-    source_lines: List[str], idx: int, tab_size: int
-) -> str:
+def transform_test_source_for_docs(source: str, idx: int, tab_size: int) -> str:
     """Transforms cell code in order to be exported to test notebook.
 
-    The resulting test code doesn't have the function's signature, and has one 
+    The resulting test code doesn't have the function's signature, and has one
     less level of indentation.
 
     Parameters
     ----------
-    source_lines : List[str]
-        Original source lines.
+    source_lines : str
+        Original source code, in a single string.
     idx : int
-        Index in the function's array of cells. The function can span across 
-        multiple cells in the notebook, the first cell containing the function's 
-        signature and possibly the initial part of the body, and the remaining cells 
+        Index in the function's array of cells. The function can span across
+        multiple cells in the notebook, the first cell containing the function's
+        signature and possibly the initial part of the body, and the remaining cells
         containing the remaining parts of the body.
     tab_size : int
         Number of spaces used for indentation.
@@ -82,7 +80,8 @@ def transform_test_source_for_docs(
     str
         Resulting test code, without signature, and with one less level of indentation.
     """
-    start = 2 if idx == 0 else 1
+    start = 1 if idx == 0 else 0
+    source_lines = source.splitlines()
     transformed_lines = []
     for line in source_lines[start:]:
         transformed_lines.append(
@@ -340,7 +339,7 @@ class NbMagicExporter(Processor):
                 doc_source = source  # doc_source does not include first line with %% (? to think about)
             if is_test:
                 doc_source = transform_test_source_for_docs(
-                    source_lines, idx, self.tab_size
+                    code_cell.code, idx, self.tab_size
                 )
             cell["source"] = doc_source
             self.doc_cells.append(cell)
@@ -353,14 +352,15 @@ class NbMagicExporter(Processor):
 
         write_nb(self.nb, self.tmp_nb_path)
         self.nb.cells = self.cells
+        lib_path = Path(self.lib_path).absolute()
         if len(self.cells) > 0:
             self.nb.cells = [self.default_exp_cell] + self.cells
             write_nb(self.nb, self.dest_nb_path)
-            nb_export(self.dest_nb_path)
+            nb_export(self.dest_nb_path, lib_path=lib_path)
         if len(self.test_cells) > 0:
             self.nb.cells = [self.default_test_exp_cell] + self.test_cells
             write_nb(self.nb, self.test_dest_nb_path)
-            nb_export(self.test_dest_nb_path)
+            nb_export(self.test_dest_nb_path, lib_path=lib_path)
 
         # step 2 (beginning) in diagram
         self.tmp_nb_path.rename(self.duplicate_tmp_path)
@@ -405,7 +405,7 @@ def parse_argv_and_run_nbm_export_all_paths(argv: List[str]):
 def nbm_export_cli():
     parse_argv_and_run_nbm_export_all_paths(sys.argv)
 
-# %% ../../nbs/export.ipynb 63
+# %% ../../nbs/export.ipynb 61
 def process_cell_for_nbm_update(cell: NbCell):
     source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
     found_directive = False
@@ -442,7 +442,7 @@ def process_cell_for_nbm_update(cell: NbCell):
         raise ValueError("Magic line not found at beginning of cell")
     cell.source = "\n".join([line] + source_lines[line_number + 1 :])
 
-# %% ../../nbs/export.ipynb 65
+# %% ../../nbs/export.ipynb 63
 def nbm_update(
     path,
     code_cells_path=".nbmodular",
@@ -499,7 +499,7 @@ def nbm_update(
     original_nb.cells = nb_processor.cells
     write_nb(original_nb, path)
 
-# %% ../../nbs/export.ipynb 75
+# %% ../../nbs/export.ipynb 73
 def nbm_update_all_paths(args):
     files = nbglob(path=args.path, as_path=True).sorted("name")
     cfg = get_config()
