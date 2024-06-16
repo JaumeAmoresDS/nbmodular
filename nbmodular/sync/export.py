@@ -56,9 +56,32 @@ def obtain_function_name_and_test_flag(line, cell):
 
     return function_name, is_test
 
-
 # %% ../../nbs/export.ipynb 9
-def transform_test_source_for_docs(source_lines, idx, tab_size):
+def transform_test_source_for_docs(
+    source_lines: List[str], idx: int, tab_size: int
+) -> str:
+    """Transforms cell code in order to be exported to test notebook.
+
+    The resulting test code doesn't have the function's signature, and has one 
+    less level of indentation.
+
+    Parameters
+    ----------
+    source_lines : List[str]
+        Original source lines.
+    idx : int
+        Index in the function's array of cells. The function can span across 
+        multiple cells in the notebook, the first cell containing the function's 
+        signature and possibly the initial part of the body, and the remaining cells 
+        containing the remaining parts of the body.
+    tab_size : int
+        Number of spaces used for indentation.
+
+    Returns
+    -------
+    str
+        Resulting test code, without signature, and with one less level of indentation.
+    """
     start = 2 if idx == 0 else 1
     transformed_lines = []
     for line in source_lines[start:]:
@@ -67,22 +90,23 @@ def transform_test_source_for_docs(source_lines, idx, tab_size):
         )
     return "\n".join(transformed_lines)
 
-
-# %% ../../nbs/export.ipynb 12
-def replace_folder_in_path (
+# %% ../../nbs/export.ipynb 14
+def replace_folder_in_path(
     path: Path,
     original_folder: str,
     new_folder: str,
 ):
     if original_folder in path.parent.parts:
-        index = path.parent.parts.index(original_folder)        
-        parts = path.parent.parts[:index] + (new_folder,) + path.parent.parts[index + 1 :]
+        index = path.parent.parts.index(original_folder)
+        parts = (
+            path.parent.parts[:index] + (new_folder,) + path.parent.parts[index + 1 :]
+        )
         new_path = Path().joinpath(*parts) / path.name
     else:
         new_path = path
     return new_path
 
-# %% ../../nbs/export.ipynb 16
+# %% ../../nbs/export.ipynb 18
 def set_paths_nb_processor(
     nb_processor,
     path,
@@ -173,7 +197,7 @@ def set_paths_nb_processor(
         + f"test_{nb_processor.file_name_without_extension}"
     )
 
-# %% ../../nbs/export.ipynb 20
+# %% ../../nbs/export.ipynb 27
 class NbMagicProcessor(Processor):
     def __init__(
         self,
@@ -204,8 +228,7 @@ class NbMagicProcessor(Processor):
                     is_class=command == "class",
                 )
 
-
-# %% ../../nbs/export.ipynb 26
+# %% ../../nbs/export.ipynb 36
 class NbMagicExporter(Processor):
     def __init__(
         self,
@@ -349,8 +372,7 @@ class NbMagicExporter(Processor):
         # step 2 (end) in diagram
         self.duplicate_tmp_path.rename(self.dest_nb_path)
 
-
-# %% ../../nbs/export.ipynb 29
+# %% ../../nbs/export.ipynb 38
 def nbm_export(
     path,
     **kwargs,
@@ -364,25 +386,26 @@ def nbm_export(
     )
     NBProcessor(path, processor, rm_directives=False, nb=nb).process()
 
-
-# %% ../../nbs/export.ipynb 43
-def nbm_export_all_paths (path):
+# %% ../../nbs/export.ipynb 51
+def nbm_export_all_paths(path):
     files = nbglob(path=path, as_path=True).sorted("name")
     for f in files:
         nbm_export(f)
 
-def parse_argv_and_run_nbm_export_all_paths (argv: List[str]):
+
+def parse_argv_and_run_nbm_export_all_paths(argv: List[str]):
     parser = argparse.ArgumentParser(
         description="Export notebooks to their corresponding python modules."
     )
     parser.add_argument("--path", type=str, default=None, help="Path to notebook")
     args = parser.parse_args(argv)
-    nbm_export_all_paths (args.path)
+    nbm_export_all_paths(args.path)
 
-def nbm_export_cli ():
-    parse_argv_and_run_nbm_export_all_paths (sys.argv)
 
-# %% ../../nbs/export.ipynb 54
+def nbm_export_cli():
+    parse_argv_and_run_nbm_export_all_paths(sys.argv)
+
+# %% ../../nbs/export.ipynb 63
 def process_cell_for_nbm_update(cell: NbCell):
     source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
     found_directive = False
@@ -419,8 +442,7 @@ def process_cell_for_nbm_update(cell: NbCell):
         raise ValueError("Magic line not found at beginning of cell")
     cell.source = "\n".join([line] + source_lines[line_number + 1 :])
 
-
-# %% ../../nbs/export.ipynb 56
+# %% ../../nbs/export.ipynb 65
 def nbm_update(
     path,
     code_cells_path=".nbmodular",
@@ -477,8 +499,8 @@ def nbm_update(
     original_nb.cells = nb_processor.cells
     write_nb(original_nb, path)
 
-# %% ../../nbs/export.ipynb 62
-def nbm_update_all_paths (args):
+# %% ../../nbs/export.ipynb 75
+def nbm_update_all_paths(args):
     files = nbglob(path=args.path, as_path=True).sorted("name")
     cfg = get_config()
     path = Path(args.path or cfg.lib_path)
@@ -488,14 +510,16 @@ def nbm_update_all_paths (args):
     )
     files.map(nbm_update, lib_dir=lib_dir)
 
-def parse_argv_and_run_nbm_update_all_paths (argv: List[str]):
+
+def parse_argv_and_run_nbm_update_all_paths(argv: List[str]):
     parser = argparse.ArgumentParser(
         description="Udpdate python modules from their corresponding notebooks."
     )
 
     parser.add_argument("path", type=str, default=None, help="Path to python module")
     args = parser.parse_args(argv)
-    nbm_update_all_paths (args.path)
+    nbm_update_all_paths(args.path)
 
-def nbm_update_cli ():
-    parse_argv_and_run_nbm_update_all_paths (sys.argv)
+
+def nbm_update_cli():
+    parse_argv_and_run_nbm_update_all_paths(sys.argv)
