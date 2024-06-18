@@ -42,7 +42,7 @@ from nbmodular.core.utils import cd_root
 # > Example notebooks used for testing
 
 # %% [markdown]
-# ### Example 1
+# ### Simple example 1
 
 # %%
 # | export
@@ -61,7 +61,7 @@ print (a)
 """
 
 # %% [markdown]
-# ### Example 2
+# ### Simple example 2
 
 # %%
 nb2 = """
@@ -78,6 +78,25 @@ a=2+2
 print (a)
 """
 
+# %% [markdown]
+# ### Mixed Cells Example
+
+# %%
+# | export
+mixed_nb1 = """
+[code]
+%%function
+def first():
+    pass
+
+[markdown]
+comment
+    
+[code]
+%%function --test
+def second ():
+    pass
+"""
 
 # %% [markdown]
 # ## Notebook structure
@@ -87,9 +106,10 @@ print (a)
 # %% [markdown]
 # ### convert_nested_nb_cells_to_dicts
 
+
 # %%
-#| export
-def convert_nested_nb_cells_to_dicts (dict_like_with_nbcells: dict) -> dict:
+# | export
+def convert_nested_nb_cells_to_dicts(dict_like_with_nbcells: dict) -> dict:
     """Convert nested NbCells to dicts.
 
     Parameters
@@ -102,9 +122,10 @@ def convert_nested_nb_cells_to_dicts (dict_like_with_nbcells: dict) -> dict:
     dict
         dict object without embedded NbCell cells
     """
-    new_dict = {k:v for k, v in dict_like_with_nbcells.items()}
-    new_dict["cells"]=[dict(**cell) for cell in new_dict["cells"]]
+    new_dict = {k: v for k, v in dict_like_with_nbcells.items()}
+    new_dict["cells"] = [dict(**cell) for cell in new_dict["cells"]]
     return new_dict
+
 
 # %% [markdown]
 # ### parse_nb_sections
@@ -160,30 +181,43 @@ nb_text = text2nb(nb1)
 # #### checks
 
 # %%
-expected={'cells': [{'cell_type': 'markdown',
-   'source': '# First notebook',
-   'directives_': {},
-   'metadata': {},
-   'idx_': 0},
-  {'cell_type': 'code',
-   'source': "%%function hello\nprint ('hello')",
-   'directives_': {},
-   'metadata': {},
-   'idx_': 1},
-  {'cell_type': 'code',
-   'source': '%%function one_plus_one --test\na=1+1\nprint (a)',
-   'directives_': {},
-   'metadata': {},
-   'idx_': 2}],
- 'metadata': {},
- 'nbformat': 4,
- 'nbformat_minor': 5}
-actual = convert_nested_nb_cells_to_dicts(nb_text) # just for comparison purposes, we convert nested NbCells to dicts
-assert actual==expected
+expected = {
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "source": "# First notebook",
+            "directives_": {},
+            "metadata": {},
+            "idx_": 0,
+        },
+        {
+            "cell_type": "code",
+            "source": "%%function hello\nprint ('hello')",
+            "directives_": {},
+            "metadata": {},
+            "idx_": 1,
+        },
+        {
+            "cell_type": "code",
+            "source": "%%function one_plus_one --test\na=1+1\nprint (a)",
+            "directives_": {},
+            "metadata": {},
+            "idx_": 2,
+        },
+    ],
+    "metadata": {},
+    "nbformat": 4,
+    "nbformat_minor": 5,
+}
+actual = convert_nested_nb_cells_to_dicts(
+    nb_text
+)  # just for comparison purposes, we convert nested NbCells to dicts
+assert actual == expected
 
 
 # %% [markdown]
 # ### texts2nbs
+
 
 # %%
 # | export
@@ -191,6 +225,7 @@ def texts2nbs(nbs: List[str] | str) -> List[dict]:
     if not isinstance(nbs, list):
         nbs = [nbs]
     return [text2nb(nb) for nb in nbs]
+
 
 # %% [markdown]
 # ### nb2text
@@ -203,7 +238,8 @@ def nb2text(nb: dict) -> str:
         [f"[{cell['cell_type']}]\n{cell['source']}" for cell in nb["cells"]]
     )
 
-def nbs2text (nbs: List[dict]) -> List[str]:
+
+def nbs2text(nbs: List[dict]) -> List[str]:
     return [nb2text(nb) for nb in (nbs if isinstance(nbs, list) else [nbs])]
 
 
@@ -248,18 +284,25 @@ print (a)"""
 # %% [markdown]
 # ### printnb
 
+
 # %%
 # | export
-def printnb(nb_text: str | dict | List[str] | List[dict], no_newlines: bool = False, titles=None) -> None:
+def printnb(
+    nb_text: str | dict | List[str] | List[dict], no_newlines: bool = False, titles=None
+) -> None:
     if isinstance(nb_text, list):
-        assert titles is None or len (titles)==len(nb_text)
-        titles = ["\n"]*len(nb_text) if titles is None else ["\n" + title for title in titles]        
+        assert titles is None or len(titles) == len(nb_text)
+        titles = (
+            ["\n"] * len(nb_text)
+            if titles is None
+            else ["\n" + title for title in titles]
+        )
         for nb_text, title in zip(nb_text, titles):
-            print (title)
-            print (f"{'-'*50}")
-            printnb (nb_text, no_newlines=no_newlines)
+            print(title)
+            print(f"{'-'*50}")
+            printnb(nb_text, no_newlines=no_newlines)
     else:
-        if isinstance (nb_text, dict):
+        if isinstance(nb_text, dict):
             nb_text = nb2text(nb_text)
         print(f'''"""{nb_text}"""''' if no_newlines else f'''"""\n{nb_text}\n"""''')
 
@@ -277,7 +320,7 @@ print("without new lines at beginning and end:")
 printnb(nb1, no_newlines=True)
 
 # %%
-printnb ([nb1, nb1], titles=["Number 1","Number 2"], no_newlines=True)
+printnb([nb1, nb1], titles=["Number 1", "Number 2"], no_newlines=True)
 
 
 # %% [markdown]
@@ -286,24 +329,26 @@ printnb ([nb1, nb1], titles=["Number 1","Number 2"], no_newlines=True)
 # %% [markdown]
 # ### strip_nb
 
+
 # %%
-#| export
-def strip_nb (nb: str) -> str:
+# | export
+def strip_nb(nb: str) -> str:
     return nb2text(text2nb(nb))
 
 
 # %% [markdown]
 # ### check_test_repo_content
 
+
 # %%
-#| export
-def check_test_repo_content (
-    current_root: str, 
+# | export
+def check_test_repo_content(
+    current_root: str,
     new_root: str,
     nb_folder: str,
-    nb_paths: List[str], # type: ignore
-    nbs: Optional[List[str]]=None,
-    show_content: bool=False,
+    nb_paths: List[str],  # type: ignore
+    nbs: Optional[List[str]] = None,
+    show_content: bool = False,
     clean: bool = False,
 ):
     """_summary_
@@ -327,7 +372,9 @@ def check_test_repo_content (
     assert Path(new_wd).resolve() == Path(f"{current_root}/{new_root}").resolve()
     os.chdir(current_root)
     assert (Path(new_root) / "settings.ini").exists()
-    nb_paths : List[Path] = [Path(f"{new_root}/{nb_folder}/{nb_path}") for nb_path in nb_paths] 
+    nb_paths: List[Path] = [
+        Path(f"{new_root}/{nb_folder}/{nb_path}") for nb_path in nb_paths
+    ]
 
     all_files = []
     for nb_path in nb_paths:
@@ -342,9 +389,10 @@ def check_test_repo_content (
     if nbs is not None:
         assert [nb2text(nb) for nb in nbs_in_disk] == [strip_nb(nb) for nb in nbs]
     if show_content:
-        printnb (nbs_in_disk, no_newlines=True)
+        printnb(nbs_in_disk, no_newlines=True)
     if clean:
         shutil.rmtree(new_root)
+
 
 # %% [markdown]
 # ##### Example usage
@@ -451,8 +499,8 @@ current_root, nb_paths = create_test_content(
 # #### checks and cleaning
 
 # %%
-check_test_repo_content (
-    current_root, 
+check_test_repo_content(
+    current_root,
     new_root,
     nb_folder,
     nb_paths,
