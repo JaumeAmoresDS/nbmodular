@@ -25,16 +25,12 @@ from nbdev.processors import Processor, NBProcessor
 from nbdev.export import nb_export
 from nbdev.sync import _update_mod, _mod_files
 from nbdev.doclinks import nbglob
-from execnb.shell import CaptureShell
-from execnb.nbio import new_nb, mk_cell, read_nb, write_nb, NbCell
+from execnb.nbio import mk_cell, read_nb, write_nb, NbCell
 from fastcore.all import globtastic
 
 # nbmodular
-from nbmodular.core.utils import (
-    set_log_level,
-    get_config,
-    create_and_cd_to_new_root_folder,
-)
+from ..core.utils import set_log_level, get_config
+import nbmodular.testing.utils as tst
 from ..core.cell2func import CellProcessor
 
 # %% ../../nbs/export.ipynb 5
@@ -227,7 +223,7 @@ class NbMagicProcessor(Processor):
                     is_class=command == "class",
                 )
 
-# %% ../../nbs/export.ipynb 36
+# %% ../../nbs/export.ipynb 33
 class NbMagicExporter(Processor):
     def __init__(
         self,
@@ -372,7 +368,7 @@ class NbMagicExporter(Processor):
         # step 2 (end) in diagram
         self.duplicate_tmp_path.rename(self.dest_nb_path)
 
-# %% ../../nbs/export.ipynb 38
+# %% ../../nbs/export.ipynb 35
 def nbm_export(
     path,
     **kwargs,
@@ -386,7 +382,7 @@ def nbm_export(
     )
     NBProcessor(path, processor, rm_directives=False, nb=nb).process()
 
-# %% ../../nbs/export.ipynb 51
+# %% ../../nbs/export.ipynb 47
 def nbm_export_all_paths(path):
     files = nbglob(path=path, as_path=True).sorted("name")
     for f in files:
@@ -405,7 +401,7 @@ def parse_argv_and_run_nbm_export_all_paths(argv: List[str]):
 def nbm_export_cli():
     parse_argv_and_run_nbm_export_all_paths(sys.argv)
 
-# %% ../../nbs/export.ipynb 61
+# %% ../../nbs/export.ipynb 57
 def process_cell_for_nbm_update(cell: NbCell):
     source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
     found_directive = False
@@ -442,7 +438,7 @@ def process_cell_for_nbm_update(cell: NbCell):
         raise ValueError("Magic line not found at beginning of cell")
     cell.source = "\n".join([line] + source_lines[line_number + 1 :])
 
-# %% ../../nbs/export.ipynb 63
+# %% ../../nbs/export.ipynb 59
 def nbm_update(
     path,
     code_cells_path=".nbmodular",
@@ -499,7 +495,7 @@ def nbm_update(
     original_nb.cells = nb_processor.cells
     write_nb(original_nb, path)
 
-# %% ../../nbs/export.ipynb 73
+# %% ../../nbs/export.ipynb 69
 def nbm_update_all_paths(args):
     files = nbglob(path=args.path, as_path=True).sorted("name")
     cfg = get_config()
