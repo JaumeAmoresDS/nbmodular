@@ -1,8 +1,9 @@
 
 
 # %% auto 0
-__all__ = ['nb1', 'convert_nested_nb_cells_to_dicts', 'parse_nb_sections', 'text2nb', 'texts2nbs', 'nb2text', 'nbs2text',
-           'printnb', 'strip_nb', 'check_test_repo_content', 'create_and_cd_to_new_root_folder', 'create_test_content']
+__all__ = ['nb1', 'mixed_nb1', 'convert_nested_nb_cells_to_dicts', 'parse_nb_sections', 'text2nb', 'texts2nbs', 'nb2text',
+           'nbs2text', 'printnb', 'strip_nb', 'check_test_repo_content', 'create_and_cd_to_new_root_folder',
+           'create_test_content']
 
 # %% ../../nbs/test_utils.ipynb 2
 # standard
@@ -34,8 +35,24 @@ a=1+1
 print (a)
 """
 
-# %% ../../nbs/test_utils.ipynb 10
-def convert_nested_nb_cells_to_dicts (dict_like_with_nbcells: dict) -> dict:
+# %% ../../nbs/test_utils.ipynb 9
+mixed_nb1 = """
+[code]
+%%function
+def first():
+    pass
+
+[markdown]
+comment
+    
+[code]
+%%function --test
+def second ():
+    pass
+"""
+
+# %% ../../nbs/test_utils.ipynb 12
+def convert_nested_nb_cells_to_dicts(dict_like_with_nbcells: dict) -> dict:
     """Convert nested NbCells to dicts.
 
     Parameters
@@ -48,11 +65,11 @@ def convert_nested_nb_cells_to_dicts (dict_like_with_nbcells: dict) -> dict:
     dict
         dict object without embedded NbCell cells
     """
-    new_dict = {k:v for k, v in dict_like_with_nbcells.items()}
-    new_dict["cells"]=[dict(**cell) for cell in new_dict["cells"]]
+    new_dict = {k: v for k, v in dict_like_with_nbcells.items()}
+    new_dict["cells"] = [dict(**cell) for cell in new_dict["cells"]]
     return new_dict
 
-# %% ../../nbs/test_utils.ipynb 12
+# %% ../../nbs/test_utils.ipynb 14
 def parse_nb_sections(nb):
     # Define the regex pattern to match sections
     pattern = "\[(markdown|code)\](.*?)((?=\[markdown\])|(?=\[code\])|$)"
@@ -65,54 +82,61 @@ def parse_nb_sections(nb):
 
     return result
 
-# %% ../../nbs/test_utils.ipynb 16
+# %% ../../nbs/test_utils.ipynb 18
 def text2nb(nb: str):
     cells = [
         mk_cell(text, cell_type=cell_type) for cell_type, text in parse_nb_sections(nb)
     ]
     return new_nb(cells)
 
-# %% ../../nbs/test_utils.ipynb 22
+# %% ../../nbs/test_utils.ipynb 24
 def texts2nbs(nbs: List[str] | str) -> List[dict]:
     if not isinstance(nbs, list):
         nbs = [nbs]
     return [text2nb(nb) for nb in nbs]
 
-# %% ../../nbs/test_utils.ipynb 24
+# %% ../../nbs/test_utils.ipynb 26
 def nb2text(nb: dict) -> str:
     return "\n\n".join(
         [f"[{cell['cell_type']}]\n{cell['source']}" for cell in nb["cells"]]
     )
 
-def nbs2text (nbs: List[dict]) -> List[str]:
+
+def nbs2text(nbs: List[dict]) -> List[str]:
     return [nb2text(nb) for nb in (nbs if isinstance(nbs, list) else [nbs])]
 
-# %% ../../nbs/test_utils.ipynb 30
-def printnb(nb_text: str | dict | List[str] | List[dict], no_newlines: bool = False, titles=None) -> None:
+# %% ../../nbs/test_utils.ipynb 32
+def printnb(
+    nb_text: str | dict | List[str] | List[dict], no_newlines: bool = False, titles=None
+) -> None:
     if isinstance(nb_text, list):
-        assert titles is None or len (titles)==len(nb_text)
-        titles = ["\n"]*len(nb_text) if titles is None else ["\n" + title for title in titles]        
+        assert titles is None or len(titles) == len(nb_text)
+        titles = (
+            ["\n"] * len(nb_text)
+            if titles is None
+            else ["\n" + title for title in titles]
+        )
         for nb_text, title in zip(nb_text, titles):
-            print (title)
-            print (f"{'-'*50}")
-            printnb (nb_text, no_newlines=no_newlines)
+            print(title)
+            print(f"{'-'*50}")
+            printnb(nb_text, no_newlines=no_newlines)
     else:
-        if isinstance (nb_text, dict):
+        if isinstance(nb_text, dict):
             nb_text = nb2text(nb_text)
         print(f'''"""{nb_text}"""''' if no_newlines else f'''"""\n{nb_text}\n"""''')
 
-# %% ../../nbs/test_utils.ipynb 36
-def strip_nb (nb: str) -> str:
+# %% ../../nbs/test_utils.ipynb 38
+def strip_nb(nb: str) -> str:
     return nb2text(text2nb(nb))
 
-# %% ../../nbs/test_utils.ipynb 38
-def check_test_repo_content (
-    current_root: str, 
+# %% ../../nbs/test_utils.ipynb 40
+def check_test_repo_content(
+    current_root: str,
     new_root: str,
     nb_folder: str,
-    nb_paths: List[str], # type: ignore
-    nbs: Optional[List[str]]=None,
-    show_content: bool=False,
+    nb_paths: List[str],  # type: ignore
+    nbs: Optional[List[str]] = None,
+    show_content: bool = False,
     clean: bool = False,
 ):
     """_summary_
@@ -136,7 +160,9 @@ def check_test_repo_content (
     assert Path(new_wd).resolve() == Path(f"{current_root}/{new_root}").resolve()
     os.chdir(current_root)
     assert (Path(new_root) / "settings.ini").exists()
-    nb_paths : List[Path] = [Path(f"{new_root}/{nb_folder}/{nb_path}") for nb_path in nb_paths] 
+    nb_paths: List[Path] = [
+        Path(f"{new_root}/{nb_folder}/{nb_path}") for nb_path in nb_paths
+    ]
 
     all_files = []
     for nb_path in nb_paths:
@@ -151,11 +177,11 @@ def check_test_repo_content (
     if nbs is not None:
         assert [nb2text(nb) for nb in nbs_in_disk] == [strip_nb(nb) for nb in nbs]
     if show_content:
-        printnb (nbs_in_disk, no_newlines=True)
+        printnb(nbs_in_disk, no_newlines=True)
     if clean:
         shutil.rmtree(new_root)
 
-# %% ../../nbs/test_utils.ipynb 43
+# %% ../../nbs/test_utils.ipynb 45
 def create_and_cd_to_new_root_folder(
     root_folder: str | Path,
     config_path: str | Path = "settings.ini",
@@ -188,7 +214,7 @@ def create_and_cd_to_new_root_folder(
 
     return root_folder
 
-# %% ../../nbs/test_utils.ipynb 45
+# %% ../../nbs/test_utils.ipynb 47
 def create_test_content(
     nbs: List[str] | str,
     nb_paths=None,
