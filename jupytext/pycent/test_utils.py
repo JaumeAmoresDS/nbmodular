@@ -27,11 +27,14 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import re
 
 # 3rd party
-from execnb.nbio import new_nb, write_nb, mk_cell
+from execnb.nbio import new_nb, write_nb, mk_cell, read_nb
+
+# ours
+from nbmodular.core.utils import cd_root
 
 # %% [markdown]
 # ## Notebook examples
@@ -39,13 +42,13 @@ from execnb.nbio import new_nb, write_nb, mk_cell
 # > Example notebooks used for testing
 
 # %% [markdown]
-# ### Simple example 1
+# ### Example 1
 
 # %%
 # | export
 nb1 = """
 [markdown]
-## First notebook
+# First notebook
 
 [code]
 %%function hello
@@ -58,12 +61,12 @@ print (a)
 """
 
 # %% [markdown]
-# ### Simple example 2
+# ### Example 2
 
 # %%
 nb2 = """
 [markdown]
-## Second notebook
+# Second notebook
 
 [code]
 %%function bye
@@ -77,29 +80,31 @@ print (a)
 
 
 # %% [markdown]
-# ### Mixed Cells Example
-
-# %%
-# | export
-mixed_nb1 = """
-[code]
-%%function
-def first():
-    pass
-
-[markdown]
-comment
-    
-[code]
-%%function --test
-def second ():
-    pass
-"""
-
-# %% [markdown]
 # ## Notebook structure
 #
 # > Utilities for building a dictionary with notebook structure. Useful for testing purposes.
+
+# %% [markdown]
+# ### convert_nested_nb_cells_to_dicts
+
+# %%
+#| export
+def convert_nested_nb_cells_to_dicts (dict_like_with_nbcells: dict) -> dict:
+    """Convert nested NbCells to dicts.
+
+    Parameters
+    ----------
+    dict_like_with_nbcells : dict
+        dict-like object with embedded NbCell cells
+
+    Returns
+    -------
+    dict
+        dict object without embedded NbCell cells
+    """
+    new_dict = {k:v for k, v in dict_like_with_nbcells.items()}
+    new_dict["cells"]=[dict(**cell) for cell in new_dict["cells"]]
+    return new_dict
 
 # %% [markdown]
 # ### parse_nb_sections
@@ -124,21 +129,21 @@ def parse_nb_sections(nb):
 # #### Example usage
 
 # %%
-nb = parse_nb_sections(nb1)
-assert nb == [
-    ("markdown", "## First notebook"),
+nb_text = parse_nb_sections(nb1)
+assert nb_text == [
+    ("markdown", "# First notebook"),
     ("code", "%%function hello\nprint ('hello')"),
     ("code", "%%function one_plus_one --test\na=1+1\nprint (a)"),
 ]
 
 
 # %% [markdown]
-# ### create_notebook
+# ### text2nb
 
 
 # %%
 # | export
-def create_notebook(nb: str):
+def text2nb(nb: str):
     cells = [
         mk_cell(text, cell_type=cell_type) for cell_type, text in parse_nb_sections(nb)
     ]
@@ -149,101 +154,209 @@ def create_notebook(nb: str):
 # #### Example usage
 
 # %%
-nb = create_notebook(nb1)
-assert nb == {
-    "cells": [
-        {
-            "cell_type": "markdown",
-            "directives_": {},
-            "idx_": 0,
-            "metadata": {},
-            "source": "## First notebook",
-        },
-        {
-            "cell_type": "code",
-            "directives_": {},
-            "idx_": 1,
-            "metadata": {},
-            "source": "%%function hello\nprint ('hello')",
-        },
-        {
-            "cell_type": "code",
-            "directives_": {},
-            "idx_": 2,
-            "metadata": {},
-            "source": "%%function one_plus_one --test\na=1+1\nprint (a)",
-        },
-    ],
-    "metadata": {},
-    "nbformat": 4,
-    "nbformat_minor": 5,
-}
+nb_text = text2nb(nb1)
 
 # %% [markdown]
-# ### nb_to_text
+# #### checks
+
+# %%
+expected={'cells': [{'cell_type': 'markdown',
+   'source': '# First notebook',
+   'directives_': {},
+   'metadata': {},
+   'idx_': 0},
+  {'cell_type': 'code',
+   'source': "%%function hello\nprint ('hello')",
+   'directives_': {},
+   'metadata': {},
+   'idx_': 1},
+  {'cell_type': 'code',
+   'source': '%%function one_plus_one --test\na=1+1\nprint (a)',
+   'directives_': {},
+   'metadata': {},
+   'idx_': 2}],
+ 'metadata': {},
+ 'nbformat': 4,
+ 'nbformat_minor': 5}
+actual = convert_nested_nb_cells_to_dicts(nb_text) # just for comparison purposes, we convert nested NbCells to dicts
+assert actual==expected
+
+
+# %% [markdown]
+# ### texts2nbs
+
+# %%
+# | export
+def texts2nbs(nbs: List[str] | str) -> List[dict]:
+    if not isinstance(nbs, list):
+        nbs = [nbs]
+    return [text2nb(nb) for nb in nbs]
+
+# %% [markdown]
+# ### nb2text
 
 
 # %%
 # | export
-def nb_to_text(nb: dict) -> str:
+def nb2text(nb: dict) -> str:
     return "\n\n".join(
         [f"[{cell['cell_type']}]\n{cell['source']}" for cell in nb["cells"]]
     )
 
+def nbs2text (nbs: List[dict]) -> List[str]:
+    return [nb2text(nb) for nb in (nbs if isinstance(nbs, list) else [nbs])]
+
 
 # %% [markdown]
 # #### Usage example
-# nb = create_notebook(nb1)
-# nb_text = nb_to_text(nb)
-# assert (
-#     nb_text
-#     == """[markdown]
-# # First notebook
-#
-# [code]
-# %%function hello
-# print ('hello')
-#
-# [code]
-# %%function one_plus_one --test
-# a=1+1
-# print (a)"""
-# )
+
+# %%
+nb_text = text2nb(nb1)
+nb_text = nb2text(nb_text)
+assert (
+    nb_text
+    == """[markdown]
+# First notebook
+
+[code]
+%%function hello
+print ('hello')
+
+[code]
+%%function one_plus_one --test
+a=1+1
+print (a)"""
+)
+
+# %%
+nb_text
+
+# %%
+"""[markdown]
+# First notebook
+
+[code]
+%%function hello
+print ('hello')
+
+[code]
+%%function one_plus_one --test
+a=1+1
+print (a)"""
+
 
 # %% [markdown]
 # ### printnb
 
-
 # %%
 # | export
-def printnb(nb_text: str, no_newlines: bool = False) -> None:
-    print(f'''"""{nb_text}"""''' if no_newlines else f'''"""\n{nb_text}\n"""''')
+def printnb(nb_text: str | dict | List[str] | List[dict], no_newlines: bool = False, titles=None) -> None:
+    if isinstance(nb_text, list):
+        assert titles is None or len (titles)==len(nb_text)
+        titles = ["\n"]*len(nb_text) if titles is None else ["\n" + title for title in titles]        
+        for nb_text, title in zip(nb_text, titles):
+            print (title)
+            print (f"{'-'*50}")
+            printnb (nb_text, no_newlines=no_newlines)
+    else:
+        if isinstance (nb_text, dict):
+            nb_text = nb2text(nb_text)
+        print(f'''"""{nb_text}"""''' if no_newlines else f'''"""\n{nb_text}\n"""''')
 
 
 # %% [markdown]
 # #### Usage example
-# print("-" * 50)
-# print("with new lines at beginning and end:")
-# printnb(nb1)
-# print()
-# print("-" * 50)
-# print("without new lines at beginning and end:")
-# printnb(nb1, no_newlines=True)
-
-# %% [markdown]
-# ### create_notebooks
-
 
 # %%
-# | export
-def create_notebooks(nbs: List[str] | str) -> List[dict]:
-    if not isinstance(nbs, list):
-        nbs = [nbs]
-    return [create_notebook(nb) for nb in nbs]
+print("-" * 50)
+print("with new lines at beginning and end:")
+printnb(nb1)
+print()
+print("-" * 50)
+print("without new lines at beginning and end:")
+printnb(nb1, no_newlines=True)
+
+# %%
+printnb ([nb1, nb1], titles=["Number 1","Number 2"], no_newlines=True)
 
 
 # %% [markdown]
-# ## create_and_cd_to_new_root_folder
+# ## Check utilities
+
+# %% [markdown]
+# ### strip_nb
+
+# %%
+#| export
+def strip_nb (nb: str) -> str:
+    return nb2text(text2nb(nb))
+
+
+# %% [markdown]
+# ### check_test_repo_content
+
+# %%
+#| export
+def check_test_repo_content (
+    current_root: str, 
+    new_root: str,
+    nb_folder: str,
+    nb_paths: List[str], # type: ignore
+    nbs: Optional[List[str]]=None,
+    show_content: bool=False,
+    clean: bool = False,
+):
+    """_summary_
+
+    Parameters
+    ----------
+    current_root : Path
+        _description_
+    nb_paths : List[str]
+        _description_
+    content : Optional[List[str]], optional
+        _description_, by default None
+    show_content : bool, optional
+        _description_, by default False
+    clean : bool, optional
+        _description_, by default False
+    """
+    assert Path(current_root).name == "nbmodular"
+    new_wd = os.getcwd()
+
+    assert Path(new_wd).resolve() == Path(f"{current_root}/{new_root}").resolve()
+    os.chdir(current_root)
+    assert (Path(new_root) / "settings.ini").exists()
+    nb_paths : List[Path] = [Path(f"{new_root}/{nb_folder}/{nb_path}") for nb_path in nb_paths] 
+
+    all_files = []
+    for nb_path in nb_paths:
+        all_files += os.listdir(nb_path.parent)
+    assert all_files == [nb_path_i.name for nb_path_i in nb_paths]
+
+    nbs_in_disk = []
+    for nb_path in nb_paths:
+        assert nb_path.exists()
+        nbs_in_disk.append(read_nb(nb_path))
+
+    if nbs is not None:
+        assert [nb2text(nb) for nb in nbs_in_disk] == [strip_nb(nb) for nb in nbs]
+    if show_content:
+        printnb (nbs_in_disk, no_newlines=True)
+    if clean:
+        shutil.rmtree(new_root)
+
+# %% [markdown]
+# ##### Example usage
+
+# %% [markdown]
+# See checks after example usage for `create_test_content`
+
+# %% [markdown]
+# ## Create tests
+
+# %% [markdown]
+# ### create_and_cd_to_new_root_folder
 
 
 # %%
@@ -282,14 +395,14 @@ def create_and_cd_to_new_root_folder(
 
 
 # %% [markdown]
-# ## create_test_content
+# ### create_test_content
 
 
 # %%
 # | export
 def create_test_content(
     nbs: List[str] | str,
-    nb_paths: Optional[List[str] | str] = None,
+    nb_paths=None,
     nb_folder="nbm",
     new_root="new_test",
     config_path="settings.ini",
@@ -299,15 +412,11 @@ def create_test_content(
     current_root = os.getcwd()
 
     # Convert input texts into corresponding dicts with notebook structure
-    nbs = create_notebooks(nbs)
+    nbs = texts2nbs(nbs)
 
     # Generate list of nb_paths if None
     if nb_paths is None:
         nb_paths = [f"f{idx}" for idx in range(len(nbs))]
-    elif not isinstance(nb_paths, list):
-        nb_paths = [nb_paths]
-    if not len(nb_paths) == len(nbs):
-        raise ValueError("nb_paths have same number of elements as nbs")
     for nb, nb_path in zip(nbs, nb_paths):
         full_nb_path = Path(new_root) / nb_folder / nb_path
         full_nb_path.parent.mkdir(parents=True, exist_ok=True)
@@ -325,9 +434,10 @@ def create_test_content(
 # #### Example usage
 
 # %%
+# just for checking later
 cwd = os.getcwd()
 
-# %%
+# usage
 new_root = "test_create_test_content"
 nb_folder = "nbm"
 current_root, nb_paths = create_test_content(
@@ -341,33 +451,12 @@ current_root, nb_paths = create_test_content(
 # #### checks and cleaning
 
 # %%
-assert Path(current_root).name == "nbmodular"
-os.chdir(current_root)
-new_wd = os.getcwd()
-assert Path(new_wd).resolve() == Path(f"{current_root}/{new_root}").resolve()
-nb_paths = [Path(f"{new_root}/{nb_folder}/{nb_path}") for nb_path in nb_paths]
-assert (Path(new_root) / "settings.ini").exists()
-all_files = []
-for nb_path in nb_paths:
-    all_files += os.listdir(nb_path.parent)
-assert all_files == ["first.ipynb", "second.ipynb"]
-nbs_in_disk = []
-for nb_path in nb_paths:
-    assert nb_path.exists()
-    nbs_in_disk.append(read_nb(nb_path))
-
-content = [[c["source"] for c in nb.cells] for nb in nbs_in_disk]
-assert content == [
-    [
-        "## First notebook",
-        "%%function hello\nprint ('hello')",
-        "%%function one_plus_one --test\na=1+1\nprint (a)",
-    ],
-    [
-        "## Second notebook",
-        "%%function bye\nprint ('bye')",
-        "%%function two_plus_two --test\na=2+2\nprint (a)",
-    ],
-]
-
-shutil.rmtree(new_root)
+check_test_repo_content (
+    current_root, 
+    new_root,
+    nb_folder,
+    nb_paths,
+    nbs=[nb1, nb2],
+    show_content=True,
+    clean=True,
+)
