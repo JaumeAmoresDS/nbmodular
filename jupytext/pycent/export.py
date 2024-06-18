@@ -412,11 +412,12 @@ class NbMagicProcessor(Processor):
 # %%
 # Run example
 path = "no_nb"
+nb = tst.text2nb(tst.nb1)
 nb_magic_processor = NbMagicProcessor(
     path=path,
-    nb=tst.text2nb(tst.nb1),
+    nb=nb,
 )
-NBProcessor(path, nb_magic_processor, rm_directives=False, nb=tst.nb1).process()
+NBProcessor(path, nb_magic_processor, rm_directives=False, nb=nb).process()
 
 # %% [markdown]
 # #### Checks
