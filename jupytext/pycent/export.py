@@ -175,11 +175,30 @@ assert actual == expected
 
 # %%
 # | export
+from pathlib import Path
+
 def replace_folder_in_path(
     path: Path,
     original_folder: str,
     new_folder: str,
 ):
+    """
+    Replace a folder in the given path with a new folder.
+
+    Parameters
+    ----------
+    path : Path
+        The original path to modify.
+    original_folder : str
+        The name of the folder to replace.
+    new_folder : str
+        The name of the new folder.
+
+    Returns
+    -------
+    Path
+        The modified path with the folder replaced.
+    """
     if original_folder in path.parent.parts:
         index = path.parent.parts.index(original_folder)
         parts = (
@@ -209,9 +228,18 @@ assert replace_folder_in_path(
 # %%
 # | export
 def set_paths_nb_processor(
-    nb_processor,
-    path,
-):
+    nb_processor: "NbMagicExporter",
+    path: None,
+) -> None:
+    """
+    Set the paths for the notebook processor.
+
+    Parameters:
+        nb_processor (NbMagicExporter): The notebook processor object.
+        path (str): The path of the notebook file.
+    """
+    nb_processor.path = Path(path)
+    nb_processor.file_name_without_extension = nb_processor.path.name[: -len(".ipynb")]
     nb_processor.path = Path(path)
     nb_processor.file_name_without_extension = nb_processor.path.name[: -len(".ipynb")]
 
@@ -376,13 +404,33 @@ shutil.rmtree(new_root)
 # %%
 # | export
 class NbMagicProcessor(Processor):
+    """
+    Processor class for handling magic commands in Jupyter notebooks.
+    """
+
     def __init__(
-        self,
-        path,
-        nb=None,
-        logger=None,
-        log_level="INFO",
-    ):
+            self,
+            path,
+            nb=None,
+            logger=None,
+            log_level="INFO",
+        ):
+        """
+        Initializes the NbMagicProcessor object.
+
+        Parameters
+        ----------
+        path : str
+            The path to the notebook file.
+        nb : Notebook object, optional
+            The notebook object. If not provided, it will be read from the file.
+        logger : Logger, optional
+            The logger object. If not provided, a new logger will be created.
+        log_level : str, optional
+            The log level for the logger. Defaults to "INFO".
+        """
+        log_level (str, optional): The log level for the logger. Defaults to "INFO".
+        
         nb = read_nb(path) if nb is None else nb
         super().__init__(nb)
         self.logger = logging.getLogger("nb_exporter") if logger is None else logger
@@ -392,6 +440,14 @@ class NbMagicProcessor(Processor):
         self.cell_processor.set_run_tests(False)
 
     def cell(self, cell):
+        """
+        Process a notebook cell.
+
+        Parameters
+        ----------
+        cell : Cell object
+            The notebook cell to process.
+        """
         source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
         if len(source_lines) > 0 and source_lines[0].strip().startswith("%%"):
             line = source_lines[0]
