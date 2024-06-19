@@ -450,11 +450,26 @@ def create_and_cd_to_new_root_folder(
 # | export
 def create_test_content(
     nbs: List[str] | str,
-    nb_paths=None,
-    nb_folder="nbm",
-    new_root="new_test",
-    config_path="settings.ini",
+    nb_paths: Optional[List[str] | List[Path] | str | Path] = None,
+    nb_folder: str = "nbm",
+    new_root: str = "new_test",
+    config_path: str = "settings.ini",
 ) -> Tuple[str, List[str]]:
+    """
+    Create test content for notebooks.
+
+    Parameters:
+        nbs (List[str] | str): List of notebook texts or a single notebook text.
+        nb_paths (Optional[List[str] | List[Path] | str | Path]): List of notebook paths or a single notebook path.
+            If None, automatically generates notebook paths based on the number of notebooks.
+        nb_folder (str): Name of the notebook folder.
+        new_root (str): Name of the new root folder.
+        config_path (str): Path to the configuration file.
+
+    Returns:
+        Tuple[str, List[str]]: A tuple containing the current root folder path and the list of notebook paths.
+    """
+
     # we start from the root folder of our repo
     cd_root()
     current_root = os.getcwd()
@@ -465,6 +480,12 @@ def create_test_content(
     # Generate list of nb_paths if None
     if nb_paths is None:
         nb_paths = [f"f{idx}" for idx in range(len(nbs))]
+    else:
+        if not isinstance(nb_paths, list):
+            nb_paths = [nb_paths]
+        if len(nb_paths) != len(nbs):
+            raise ValueError("nb_paths must have same number of items as nbs")
+
     for nb, nb_path in zip(nbs, nb_paths):
         full_nb_path = Path(new_root) / nb_folder / nb_path
         full_nb_path.parent.mkdir(parents=True, exist_ok=True)

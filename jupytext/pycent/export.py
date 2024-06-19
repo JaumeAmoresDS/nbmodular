@@ -177,6 +177,7 @@ assert actual == expected
 # | export
 from pathlib import Path
 
+
 def replace_folder_in_path(
     path: Path,
     original_folder: str,
@@ -334,11 +335,10 @@ def set_paths_nb_processor(
 # ##### Set up to run example
 
 # %%
-# firt cd to where settings.ini is
+# firt cd to the root of the current repo
 cd_root()
-
 current_root = os.getcwd()
-
+# create and cd to new root
 new_root = tst.create_and_cd_to_new_root_folder("test_set_paths")
 
 # %% [markdown]
@@ -354,7 +354,10 @@ set_paths_nb_processor(
     new_root / "nbm/test_nbs/nb.ipynb",
 )
 
-# check result
+# %% [markdown]
+# ##### check result
+
+# %%
 actual = nb_processor
 expected = Bunch(
     **{
@@ -377,22 +380,16 @@ expected = Bunch(
         "test_dest_module_path": "tests.test_nbs.test_nb",
     }
 )
-
-# %% [markdown]
-# ##### Checks
-
-# %%
 assert actual == expected
-new_folders = [
-    Path("/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/.nbs"),
-    Path("/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/nbmodular"),
-    Path("/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/nbs"),
-]
-new_file = Path("/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/settings.ini")
 
+# check that new root folders and file have been created
+new_folders = [new_root / folder for folder in [".nbs", "nbmodular", "nbs"]]
+new_file = new_root / "settings.ini"
 assert new_file.exists() and new_file.is_file()
 for new_folder in new_folders:
     assert new_folder.exists() and new_folder.is_dir()
+
+# clean
 os.chdir(current_root)
 shutil.rmtree(new_root)
 
@@ -405,32 +402,28 @@ shutil.rmtree(new_root)
 # | export
 class NbMagicProcessor(Processor):
     """
-    Processor class for handling magic commands in Jupyter notebooks.
+    Processor class that stores information and code for cells using the magic
+    commands recognized by `CellProcessor`
+
+    Parameters
+    ----------
+    path : str
+        The path to the notebook file.
+    nb : Notebook object, optional
+        The notebook object. If not provided, it will be read from the file.
+    logger : Logger, optional
+        The logger object. If not provided, a new logger will be created.
+    log_level : str, optional
+        The log level for the logger. Defaults to "INFO".
     """
 
     def __init__(
-            self,
-            path,
-            nb=None,
-            logger=None,
-            log_level="INFO",
-        ):
-        """
-        Initializes the NbMagicProcessor object.
-
-        Parameters
-        ----------
-        path : str
-            The path to the notebook file.
-        nb : Notebook object, optional
-            The notebook object. If not provided, it will be read from the file.
-        logger : Logger, optional
-            The logger object. If not provided, a new logger will be created.
-        log_level : str, optional
-            The log level for the logger. Defaults to "INFO".
-        """
-        log_level (str, optional): The log level for the logger. Defaults to "INFO".
-        
+        self,
+        path,
+        nb=None,
+        logger=None,
+        log_level="INFO",
+    ):
         nb = read_nb(path) if nb is None else nb
         super().__init__(nb)
         self.logger = logging.getLogger("nb_exporter") if logger is None else logger
@@ -479,18 +472,25 @@ NBProcessor(path, nb_magic_processor, rm_directives=False, nb=nb).process()
 # #### Checks
 
 # %%
-# Check
-assert list(nb_magic_processor.cell_processor.test_function_info.keys()) == [
-    "test_one_plus_one"
-]
-assert len(nb_magic_processor.cell_processor.test_function_list) == 1
-assert len(nb_magic_processor.cell_processor.function_list) == 0
+# Check that the processor has stored information about
+# the %%functions in the notebook
+stored_functions = sorted(nb_magic_processor.cell_processor.function_info)
+assert stored_functions == ["default_pipeline", "hello"]
+assert len(nb_magic_processor.cell_processor.function_list) == len(stored_functions) - 1
 assert nb_magic_processor.cell_processor.test_function_info[
-    "test_one_plus_one"
+    "one_plus_one"
 ].created_variables == ["a"]
+
+# ... and about the test functions (those with flag test)
+stored_test_functions = sorted(nb_magic_processor.cell_processor.test_function_info)
+assert stored_test_functions == ["default_test_pipeline", "one_plus_one"]
 assert (
-    nb_magic_processor.cell_processor.test_function_info["test_one_plus_one"].a is None
+    len(nb_magic_processor.cell_processor.test_function_list)
+    == len(stored_test_functions) - 1
 )
+
+# check that functions were not run and therefore the local variables are empty
+assert nb_magic_processor.cell_processor.test_function_info["one_plus_one"].a is None
 
 
 # %% [markdown]
@@ -500,6 +500,29 @@ assert (
 # %%
 # | export
 class NbMagicExporter(Processor):
+    """
+    Processor class for exporting notebooks with magic commands.
+
+    Parameters:
+    ----------
+    path : str
+        The path to the notebook file.
+    nb : fastcore.basics.AttrDict, optional
+        The notebook object. If not provided, it will be read from the file specified by `path`.
+    code_cells_file_name : str, optional
+        The name of the file to store the code cells. If not provided, it will be set to the file name without extension.
+    code_cells_path : str, optional
+        The path to the directory where the code cells file will be stored. Default is ".nbmodular".
+    execute : bool, optional
+        Flag indicating whether to execute the notebook before exporting. Default is True.
+    logger : logging.Logger, optional
+        The logger object to use for logging. If not provided, a new logger will be created.
+    log_level : str, optional
+        The log level for the logger. Default is "INFO".
+    tab_size : int, optional
+        The number of spaces to use for indentation. Default is 4.
+    """
+
     def __init__(
         self,
         path,
@@ -548,6 +571,14 @@ class NbMagicExporter(Processor):
         self.tab_size = tab_size
 
     def cell(self, cell):
+        """
+        Process a cell.
+
+        Parameters:
+        ----------
+        cell : nbdev.NbCell
+            The cell to process.
+        """
         source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
         is_test = False
         cell_type = "original"
@@ -618,6 +649,9 @@ class NbMagicExporter(Processor):
         self.cell_types.append(cell_type)
 
     def end(self):
+        """
+        Perform final processing steps.
+        """
         # store cell_types for later use by NBImporter
         joblib.dump(self.cell_types, self.code_cells_path / "cell_types.pk")
 
