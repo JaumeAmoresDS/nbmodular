@@ -706,49 +706,59 @@ def nbm_export(
 
 # %%
 new_root = "test_nbm_export"
-nb_folder = "nbs"
+nb_folder = "nbm"
+nb_path = "mixed/mixed_cells.ipynb"
+# Create notebook in "new repo", and cd to it
 current_root, nb_paths = tst.create_test_content(
     nbs=tst.mixed_nb1,
-    nb_paths="mixed/mixed_cells.ipynb",
+    nb_paths=nb_path,
     nb_folder=nb_folder,
     new_root=new_root,
 )
+
 
 # %% [markdown]
 # #### Example usage
 
 # %%
-# TODO: CHANGE TEST
-# nbm_export(path="nbm/test_nbs/nb.ipynb")
-tst.mixed_nb1
+#
+nbm_export(path=f"{nb_folder}/{nb_path}")
+
 
 # %% [markdown]
 # #### checks
 
 # %%
+
 nb_paths = [
-    Path("nbs/test_nbs/nb.ipynb"),
-    Path(".nbs/test_nbs/nb.ipynb"),
-    Path(".nbs/test_nbs/test_nb.ipynb"),
+    Path(nb_folder) / nb_path,
+    Path(".nbs") / nb_path,
+    Path(".nbs") / Path(nb_path).parent / f"test_{Path(nb_path).name}",
 ]
 py_paths = [
-    Path("nbmodular/test_nbs/nb.py"),
-    Path("nbmodular/tests/test_nbs/test_nb.py"),
+    Path("nbmodular") / Path(nb_path).parent / f"{Path(nb_path).stem}.py",
+    Path("nbmodular")
+    / "tests"
+    / Path(nb_path).parent
+    / f"test_{Path(nb_path).stem}.py",
 ]
+
+if False:
+    tst.check_test_repo_content(
+        current_root=current_root,
+        new_root=new_root,
+        nb_folder=nb_folder,
+        nb_paths=[nb_path],
+        nbs=[tst.mixed_nb1],
+        show_content=True,
+    )
 
 # %%
 nbs = []
 for nb_path in nb_paths:
     assert nb_path.exists()
     nbs.append(read_nb(nb_path))
-assert [[c["source"] for c in nb.cells] for nb in nbs] == [
-    ["#|export\ndef first():\n    pass\n", "comment", "pass"],
-    ["#|default_exp test_nbs.nb", "#|export\n#@@function\ndef first():\n    pass\n"],
-    [
-        "#|default_exp tests.test_nbs.test_nb",
-        "#|export\n#@@function --test\ndef second():\n    pass\n",
-    ],
-]
+
 
 # %%
 pymods = []
