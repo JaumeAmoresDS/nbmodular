@@ -86,11 +86,31 @@ def transform_test_source_for_docs(source: str, idx: int, tab_size: int) -> str:
     return "\n".join(transformed_lines)
 
 # %% ../../nbs/export.ipynb 14
+from pathlib import Path
+
+
 def replace_folder_in_path(
     path: Path,
     original_folder: str,
     new_folder: str,
 ):
+    """
+    Replace a folder in the given path with a new folder.
+
+    Parameters
+    ----------
+    path : Path
+        The original path to modify.
+    original_folder : str
+        The name of the folder to replace.
+    new_folder : str
+        The name of the new folder.
+
+    Returns
+    -------
+    Path
+        The modified path with the folder replaced.
+    """
     if original_folder in path.parent.parts:
         index = path.parent.parts.index(original_folder)
         parts = (
@@ -103,9 +123,18 @@ def replace_folder_in_path(
 
 # %% ../../nbs/export.ipynb 18
 def set_paths_nb_processor(
-    nb_processor,
-    path,
-):
+    nb_processor: "NbMagicExporter",
+    path: None,
+) -> None:
+    """
+    Set the paths for the notebook processor.
+
+    Parameters:
+        nb_processor (NbMagicExporter): The notebook processor object.
+        path (str): The path of the notebook file.
+    """
+    nb_processor.path = Path(path)
+    nb_processor.file_name_without_extension = nb_processor.path.name[: -len(".ipynb")]
     nb_processor.path = Path(path)
     nb_processor.file_name_without_extension = nb_processor.path.name[: -len(".ipynb")]
 
@@ -194,6 +223,22 @@ def set_paths_nb_processor(
 
 # %% ../../nbs/export.ipynb 27
 class NbMagicProcessor(Processor):
+    """
+    Processor class that stores information and code for cells using the magic
+    commands recognized by `CellProcessor`
+
+    Parameters
+    ----------
+    path : str
+        The path to the notebook file.
+    nb : Notebook object, optional
+        The notebook object. If not provided, it will be read from the file.
+    logger : Logger, optional
+        The logger object. If not provided, a new logger will be created.
+    log_level : str, optional
+        The log level for the logger. Defaults to "INFO".
+    """
+
     def __init__(
         self,
         path,
@@ -210,6 +255,14 @@ class NbMagicProcessor(Processor):
         self.cell_processor.set_run_tests(False)
 
     def cell(self, cell):
+        """
+        Process a notebook cell.
+
+        Parameters
+        ----------
+        cell : Cell object
+            The notebook cell to process.
+        """
         source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
         if len(source_lines) > 0 and source_lines[0].strip().startswith("%%"):
             line = source_lines[0]
@@ -225,6 +278,29 @@ class NbMagicProcessor(Processor):
 
 # %% ../../nbs/export.ipynb 33
 class NbMagicExporter(Processor):
+    """
+    Processor class for exporting notebooks with magic commands.
+
+    Parameters:
+    ----------
+    path : str
+        The path to the notebook file.
+    nb : fastcore.basics.AttrDict, optional
+        The notebook object. If not provided, it will be read from the file specified by `path`.
+    code_cells_file_name : str, optional
+        The name of the file to store the code cells. If not provided, it will be set to the file name without extension.
+    code_cells_path : str, optional
+        The path to the directory where the code cells file will be stored. Default is ".nbmodular".
+    execute : bool, optional
+        Flag indicating whether to execute the notebook before exporting. Default is True.
+    logger : logging.Logger, optional
+        The logger object to use for logging. If not provided, a new logger will be created.
+    log_level : str, optional
+        The log level for the logger. Default is "INFO".
+    tab_size : int, optional
+        The number of spaces to use for indentation. Default is 4.
+    """
+
     def __init__(
         self,
         path,
@@ -273,6 +349,14 @@ class NbMagicExporter(Processor):
         self.tab_size = tab_size
 
     def cell(self, cell):
+        """
+        Process a cell.
+
+        Parameters:
+        ----------
+        cell : nbdev.NbCell
+            The cell to process.
+        """
         source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
         is_test = False
         cell_type = "original"
@@ -343,6 +427,9 @@ class NbMagicExporter(Processor):
         self.cell_types.append(cell_type)
 
     def end(self):
+        """
+        Perform final processing steps.
+        """
         # store cell_types for later use by NBImporter
         joblib.dump(self.cell_types, self.code_cells_path / "cell_types.pk")
 
