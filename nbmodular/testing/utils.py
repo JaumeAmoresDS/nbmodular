@@ -2,8 +2,8 @@
 
 # %% auto 0
 __all__ = ['nb1', 'mixed_nb1', 'convert_nested_nb_cells_to_dicts', 'parse_nb_sections', 'text2nb', 'texts2nbs', 'nb2text',
-           'nbs2text', 'printnb', 'strip_nb', 'check_test_repo_content', 'create_and_cd_to_new_root_folder',
-           'create_test_content']
+           'nbs2text', 'printnb', 'strip_nb', 'check_test_repo_content', 'derive_nb_paths_and_py_paths',
+           'create_and_cd_to_new_root_folder', 'create_test_content']
 
 # %% ../../nbs/test_utils.ipynb 2
 # standard
@@ -138,22 +138,40 @@ def check_test_repo_content(
     nbs: Optional[List[str]] = None,
     show_content: bool = False,
     clean: bool = False,
+    output: bool = False,
+    keep_cwd: bool = False,
 ):
-    """_summary_
+    """
+    Check the content of a test repository.
 
     Parameters
     ----------
-    current_root : Path
-        _description_
+    current_root : str
+        The current root directory.
+    new_root : str
+        The new root directory.
+    nb_folder : str
+        The folder containing the notebooks.
     nb_paths : List[str]
-        _description_
-    content : Optional[List[str]], optional
-        _description_, by default None
+        The list of notebook paths.
+    nbs : Optional[List[str]], optional
+        The list of expected notebook contents, by default None.
     show_content : bool, optional
-        _description_, by default False
+        Whether to print the notebook contents, by default False.
     clean : bool, optional
-        _description_, by default False
+        Whether to remove the new root directory, by default False.
+    output : bool, optional
+        Whether to return the notebook contents and paths, by default False.
+    keep_cwd : bool, optional
+        Whether to keep the current working directory unchanged, by default False.
+
+    Returns
+    -------
+    Tuple[List[str], List[str]] or None
+        If `output` is True, returns a tuple containing the notebook contents and paths.
+        Otherwise, returns None.
     """
+
     assert Path(current_root).name == "nbmodular"
     new_wd = os.getcwd()
 
@@ -175,13 +193,56 @@ def check_test_repo_content(
         nbs_in_disk.append(read_nb(nb_path))
 
     if nbs is not None:
-        assert [nb2text(nb) for nb in nbs_in_disk] == [strip_nb(nb) for nb in nbs]
+        assert [strip_nb(nb2text(nb)) for nb in nbs_in_disk] == [
+            strip_nb(nb) for nb in nbs
+        ]
     if show_content:
         printnb(nbs_in_disk, no_newlines=True)
     if clean:
         shutil.rmtree(new_root)
+    if keep_cwd:
+        if clean:
+            raise ValueError("keep_cwd can't be True if clean is True")
+        os.chdir(new_root)
+    if output:
+        return nbs_in_disk, nb_paths
 
-# %% ../../nbs/test_utils.ipynb 45
+# %% ../../nbs/test_utils.ipynb 44
+def derive_nb_paths_and_py_paths(
+    nb_paths: List[str],
+    new_root: str | Path,
+    nbm_folder: str = "nbm",
+    tmp_folder: str = ".nbs",
+    nbs_folder: str = "nbs",
+    lib_folder: str = "nbmodular",
+):
+    all_nb_paths = []
+    for nb_path in nb_paths:
+        all_nb_paths.append(Path(new_root) / nbm_folder / nb_path)
+        all_nb_paths.append(Path(new_root) / nbs_folder / nb_path)
+        tmp_nb = Path(new_root) / tmp_folder / nb_path
+        all_nb_paths.append(tmp_nb)
+        tmp_test_nb = tmp_nb.parent / f"test_{tmp_nb.name}"
+        all_nb_paths.append(tmp_test_nb)
+    py_paths = []
+    for nb_path in nb_paths:
+        original_nb_path = Path(nb_path)
+        py_paths.append(
+            Path(new_root)
+            / lib_folder
+            / original_nb_path.parent
+            / f"{original_nb_path.stem}.py"
+        )
+        py_paths.append(
+            Path(new_root)
+            / lib_folder
+            / "tests"
+            / original_nb_path.parent
+            / f"test_{original_nb_path.stem}.py"
+        )
+    return nb_paths, py_paths
+
+# %% ../../nbs/test_utils.ipynb 47
 def create_and_cd_to_new_root_folder(
     root_folder: str | Path,
     config_path: str | Path = "settings.ini",
@@ -214,7 +275,7 @@ def create_and_cd_to_new_root_folder(
 
     return root_folder
 
-# %% ../../nbs/test_utils.ipynb 47
+# %% ../../nbs/test_utils.ipynb 49
 def create_test_content(
     nbs: List[str] | str,
     nb_paths: Optional[List[str] | List[Path] | str | Path] = None,

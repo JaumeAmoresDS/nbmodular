@@ -743,15 +743,14 @@ py_paths = [
     / f"test_{Path(nb_path).stem}.py",
 ]
 
-if False:
-    tst.check_test_repo_content(
-        current_root=current_root,
-        new_root=new_root,
-        nb_folder=nb_folder,
-        nb_paths=[nb_path],
-        nbs=[tst.mixed_nb1],
-        show_content=True,
-    )
+tst.check_test_repo_content (
+    current_root=current_root,
+    new_root=new_root,
+    nb_folder=nb_folder,
+    nb_paths=[nb_path],
+    nbs=[tst.mixed_nb1],
+    show_content=True,
+)
 
 # %%
 nbs = []
