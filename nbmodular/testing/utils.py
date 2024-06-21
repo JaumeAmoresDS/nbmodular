@@ -1,8 +1,8 @@
 
 
 # %% auto 0
-__all__ = ['nb1', 'mixed_nb1', 'convert_nested_nb_cells_to_dicts', 'parse_nb_sections', 'text2nb', 'texts2nbs', 'nb2text',
-           'nbs2text', 'printnb', 'strip_nb', 'check_test_repo_content', 'derive_nb_paths_and_py_paths',
+__all__ = ['nb1', 'mixed_nb1', 'py1', 'convert_nested_nb_cells_to_dicts', 'parse_nb_sections', 'text2nb', 'texts2nbs', 'nb2text',
+           'nbs2text', 'printnb', 'strip_nb', 'check_test_repo_content', 'derive_nb_paths_and_py_paths', 'read_nbs',
            'create_and_cd_to_new_root_folder', 'create_test_content']
 
 # %% ../../nbs/test_utils.ipynb 2
@@ -13,9 +13,11 @@ import shutil
 from pathlib import Path
 from typing import List, Tuple, Optional
 import re
+import operator
 
 # 3rd party
 from execnb.nbio import new_nb, write_nb, mk_cell, read_nb
+from plum import Val
 
 # ours
 from ..core.utils import cd_root
@@ -52,6 +54,16 @@ def second ():
 """
 
 # %% ../../nbs/test_utils.ipynb 12
+py1 = """
+def hello ():
+    print ('hello')
+
+def one_plus_one ():
+    a=1+1
+    print (a)
+"""
+
+# %% ../../nbs/test_utils.ipynb 17
 def convert_nested_nb_cells_to_dicts(dict_like_with_nbcells: dict) -> dict:
     """Convert nested NbCells to dicts.
 
@@ -69,7 +81,7 @@ def convert_nested_nb_cells_to_dicts(dict_like_with_nbcells: dict) -> dict:
     new_dict["cells"] = [dict(**cell) for cell in new_dict["cells"]]
     return new_dict
 
-# %% ../../nbs/test_utils.ipynb 14
+# %% ../../nbs/test_utils.ipynb 19
 def parse_nb_sections(nb):
     # Define the regex pattern to match sections
     pattern = "\[(markdown|code)\](.*?)((?=\[markdown\])|(?=\[code\])|$)"
@@ -82,20 +94,20 @@ def parse_nb_sections(nb):
 
     return result
 
-# %% ../../nbs/test_utils.ipynb 18
+# %% ../../nbs/test_utils.ipynb 23
 def text2nb(nb: str):
     cells = [
         mk_cell(text, cell_type=cell_type) for cell_type, text in parse_nb_sections(nb)
     ]
     return new_nb(cells)
 
-# %% ../../nbs/test_utils.ipynb 24
+# %% ../../nbs/test_utils.ipynb 29
 def texts2nbs(nbs: List[str] | str) -> List[dict]:
     if not isinstance(nbs, list):
         nbs = [nbs]
     return [text2nb(nb) for nb in nbs]
 
-# %% ../../nbs/test_utils.ipynb 26
+# %% ../../nbs/test_utils.ipynb 31
 def nb2text(nb: dict) -> str:
     return "\n\n".join(
         [f"[{cell['cell_type']}]\n{cell['source']}" for cell in nb["cells"]]
@@ -105,7 +117,7 @@ def nb2text(nb: dict) -> str:
 def nbs2text(nbs: List[dict]) -> List[str]:
     return [nb2text(nb) for nb in (nbs if isinstance(nbs, list) else [nbs])]
 
-# %% ../../nbs/test_utils.ipynb 32
+# %% ../../nbs/test_utils.ipynb 37
 def printnb(
     nb_text: str | dict | List[str] | List[dict], no_newlines: bool = False, titles=None
 ) -> None:
@@ -125,11 +137,11 @@ def printnb(
             nb_text = nb2text(nb_text)
         print(f'''"""{nb_text}"""''' if no_newlines else f'''"""\n{nb_text}\n"""''')
 
-# %% ../../nbs/test_utils.ipynb 38
+# %% ../../nbs/test_utils.ipynb 43
 def strip_nb(nb: str) -> str:
     return nb2text(text2nb(nb))
 
-# %% ../../nbs/test_utils.ipynb 40
+# %% ../../nbs/test_utils.ipynb 45
 def check_test_repo_content(
     current_root: str,
     new_root: str,
@@ -207,7 +219,7 @@ def check_test_repo_content(
     if output:
         return nbs_in_disk, nb_paths
 
-# %% ../../nbs/test_utils.ipynb 44
+# %% ../../nbs/test_utils.ipynb 49
 def derive_nb_paths_and_py_paths(
     nb_paths: List[str],
     new_root: str | Path,
@@ -240,9 +252,34 @@ def derive_nb_paths_and_py_paths(
             / original_nb_path.parent
             / f"test_{original_nb_path.stem}.py"
         )
-    return nb_paths, py_paths
+    return all_nb_paths, py_paths
 
-# %% ../../nbs/test_utils.ipynb 47
+# %% ../../nbs/test_utils.ipynb 53
+def read_nbs(paths: List[str], as_text: bool = True) -> List[str] | List[dict]:
+    """
+    Read notebooks from disk.
+
+    Parameters:
+        paths (List[str]): A list of paths to the notebooks.
+        as_text (bool, optional): If True, the notebooks will be returned as text.
+            If False, the notebooks will be returned as dictionaries.
+            Defaults to True.
+
+    Returns:
+        List[str] | List[dict]: A list of notebooks. If `as_text` is True, the notebooks
+            will be returned as text. If `as_text` is False, the notebooks will be
+            returned as dictionaries.
+    """
+    nbs_in_disk = []
+    for path in paths:
+        # Check that file exists. useful for being called inside a test utility
+        # to see where it fails.
+        assert os.path.exists(path)
+        nbs_in_disk.append(read_nb(path))
+
+    return [strip_nb(nb2text(nb)) for nb in nbs_in_disk] if as_text else nbs_in_disk
+
+# %% ../../nbs/test_utils.ipynb 72
 def create_and_cd_to_new_root_folder(
     root_folder: str | Path,
     config_path: str | Path = "settings.ini",
@@ -275,7 +312,7 @@ def create_and_cd_to_new_root_folder(
 
     return root_folder
 
-# %% ../../nbs/test_utils.ipynb 49
+# %% ../../nbs/test_utils.ipynb 74
 def create_test_content(
     nbs: List[str] | str,
     nb_paths: Optional[List[str] | List[Path] | str | Path] = None,

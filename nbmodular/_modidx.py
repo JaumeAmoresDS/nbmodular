@@ -402,6 +402,7 @@ d = { 'settings': { 'branch': 'main',
                                          'nbmodular.testing.utils.parse_nb_sections': ( 'test_utils.html#parse_nb_sections',
                                                                                         'nbmodular/testing/utils.py'),
                                          'nbmodular.testing.utils.printnb': ('test_utils.html#printnb', 'nbmodular/testing/utils.py'),
+                                         'nbmodular.testing.utils.read_nbs': ('test_utils.html#read_nbs', 'nbmodular/testing/utils.py'),
                                          'nbmodular.testing.utils.strip_nb': ('test_utils.html#strip_nb', 'nbmodular/testing/utils.py'),
                                          'nbmodular.testing.utils.text2nb': ('test_utils.html#text2nb', 'nbmodular/testing/utils.py'),
                                          'nbmodular.testing.utils.texts2nbs': ('test_utils.html#texts2nbs', 'nbmodular/testing/utils.py')}}}

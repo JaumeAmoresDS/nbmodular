@@ -29,9 +29,11 @@ import shutil
 from pathlib import Path
 from typing import List, Tuple, Optional
 import re
+import operator
 
 # 3rd party
 from execnb.nbio import new_nb, write_nb, mk_cell, read_nb
+from plum import Val
 
 # ours
 from nbmodular.core.utils import cd_root
@@ -96,6 +98,38 @@ comment
 %%function --test
 def second ():
     pass
+"""
+
+# %% [markdown]
+# ## Python module examples
+#
+# > Example python modules used here
+
+# %% [markdown]
+# ### Example 1
+
+# %%
+# | export
+py1 = """
+def hello ():
+    print ('hello')
+
+def one_plus_one ():
+    a=1+1
+    print (a)
+"""
+
+# %% [markdown]
+# ### Simple example 2
+
+# %%
+py2 = """
+def bye ():
+    print ('bye')
+
+def two_plus_two ():
+    a=2+2
+    print (a)
 """
 
 # %% [markdown]
@@ -464,7 +498,192 @@ def derive_nb_paths_and_py_paths(
             / original_nb_path.parent
             / f"test_{original_nb_path.stem}.py"
         )
-    return nb_paths, py_paths
+    return all_nb_paths, py_paths
+
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+nb_paths, py_paths = derive_nb_paths_and_py_paths(
+    nb_paths=["folder_A/nb_A.ipynb", "folder_B/nb_B.ipynb"], new_root="tmp_repo"
+)
+assert nb_paths == [
+    Path("tmp_repo/nbm/folder_A/nb_A.ipynb"),
+    Path("tmp_repo/nbs/folder_A/nb_A.ipynb"),
+    Path("tmp_repo/.nbs/folder_A/nb_A.ipynb"),
+    Path("tmp_repo/.nbs/folder_A/test_nb_A.ipynb"),
+    Path("tmp_repo/nbm/folder_B/nb_B.ipynb"),
+    Path("tmp_repo/nbs/folder_B/nb_B.ipynb"),
+    Path("tmp_repo/.nbs/folder_B/nb_B.ipynb"),
+    Path("tmp_repo/.nbs/folder_B/test_nb_B.ipynb"),
+]
+assert py_paths == [
+    Path("tmp_repo/nbmodular/folder_A/nb_A.py"),
+    Path("tmp_repo/nbmodular/tests/folder_A/test_nb_A.py"),
+    Path("tmp_repo/nbmodular/folder_B/nb_B.py"),
+    Path("tmp_repo/nbmodular/tests/folder_B/test_nb_B.py"),
+]
+
+# %% [markdown]
+# ### read_nbs
+
+
+# %%
+# | export
+def read_nbs(paths: List[str], as_text: bool = True) -> List[str] | List[dict]:
+    """
+    Read notebooks from disk.
+
+    Parameters:
+        paths (List[str]): A list of paths to the notebooks.
+        as_text (bool, optional): If True, the notebooks will be returned as text.
+            If False, the notebooks will be returned as dictionaries.
+            Defaults to True.
+
+    Returns:
+        List[str] | List[dict]: A list of notebooks. If `as_text` is True, the notebooks
+            will be returned as text. If `as_text` is False, the notebooks will be
+            returned as dictionaries.
+    """
+    nbs_in_disk = []
+    for path in paths:
+        # Check that file exists. useful for being called inside a test utility
+        # to see where it fails.
+        assert os.path.exists(path)
+        nbs_in_disk.append(read_nb(path))
+
+    return [strip_nb(nb2text(nb)) for nb in nbs_in_disk] if as_text else nbs_in_disk
+
+
+# %% [markdown]
+# ### write_nbs
+
+
+# %%
+def write_nbs(nbs: List[str], nb_paths: List[str]) -> None:
+    for nb, path in zip(nbs, nb_paths):
+        write_nb(text2nb(nb), path)
+
+
+# %% [markdown]
+# ### compare_nbs
+
+
+# %%
+def compare_nb(nb1: str, nb2: str) -> bool:
+    return strip_nb(nb1) == strip_nb(nb2)
+
+
+def compare_nbs(nbs1: List[str], nbs2: List[str]) -> bool:
+    return all(map(compare_nb, nbs1, nbs2))
+
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+nbs = [nb1, nb2]
+nb_paths = ["first.ipynb", "second.ipynb"]
+write_nbs(nbs, nb_paths)
+nbs_in_disk = read_nbs(nb_paths)
+assert compare_nbs(nbs_in_disk, nbs)
+for nb_path in nb_paths:
+    Path(nb_path).unlink()
+
+# %% [markdown]
+# ### read_pymodules
+
+
+# %%
+def read_text_files(paths: List[str]) -> List[str]:
+    """
+    Read the contents of Python modules from the given paths.
+
+    Parameters
+    ----------
+    paths : List[str]
+        A list of file paths to Python modules.
+
+    Returns
+    -------
+    List[str]
+        A list of strings containing the contents of the Python modules.
+
+    Raises
+    ------
+    AssertionError
+        If a file path does not exist.
+
+    """
+    text_files = []
+    for path in paths:
+        # Check that file exists. useful for being called inside a test utility
+        # to see where it fails.
+        assert os.path.exists(path)
+        with open(path, "rt") as file:
+            text_files.append(file.read())
+    return text_files
+
+
+# %% [markdown]
+# ### write_text_files
+
+
+# %%
+def write_text_files(texts: List[str], paths: List[str]) -> None:
+    for text, path in zip(texts, paths):
+        with open(path, "wt") as file:
+            file.write(text)
+
+
+# %% [markdown]
+# ### compare_texts
+
+
+# %%
+def compare_texts(texts1: List[str], texts2: List[str]) -> bool:
+    return all(map(operator.eq, texts1, texts2))
+
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+texts = [py1, py2]
+paths = ["first.py", "second.py"]
+write_text_files(texts, paths)
+texts_in_disk = read_text_files(paths)
+assert compare_texts(texts_in_disk, texts)
+
+# clean
+for path in paths:
+    Path(path).unlink()
+
+# %% [markdown]
+# ### read_and_print
+
+
+# %%
+def read_and_print(
+    paths: List[str], file_type: str, print_as_list: bool = False
+) -> None:
+    if file_type == "notebook":
+        files = read_nbs(paths)
+    elif file_type == "python":
+        files = read_text_files(paths)
+    else:
+        raise ValueError(f"file_type {file_type} not recognized")
+    if print_as_list:
+        print(f"[")
+    for file in files:
+        if not print_as_list:
+            print(f"{'-'*50}")
+        print('"""')
+        print(file)
+        print('"""')
+        if print_as_list:
+            print(",")
 
 
 # %% [markdown]
