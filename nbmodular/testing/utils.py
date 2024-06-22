@@ -3,6 +3,7 @@
 # %% auto 0
 __all__ = ['nb1', 'mixed_nb1', 'py1', 'convert_nested_nb_cells_to_dicts', 'parse_nb_sections', 'text2nb', 'texts2nbs', 'nb2text',
            'nbs2text', 'printnb', 'strip_nb', 'check_test_repo_content', 'derive_nb_paths_and_py_paths', 'read_nbs',
+           'compare_nb', 'compare_nbs', 'read_text_files', 'write_text_files', 'compare_texts', 'read_and_print',
            'create_and_cd_to_new_root_folder', 'create_test_content']
 
 # %% ../../nbs/test_utils.ipynb 2
@@ -278,6 +279,75 @@ def read_nbs(paths: List[str], as_text: bool = True) -> List[str] | List[dict]:
         nbs_in_disk.append(read_nb(path))
 
     return [strip_nb(nb2text(nb)) for nb in nbs_in_disk] if as_text else nbs_in_disk
+
+# %% ../../nbs/test_utils.ipynb 57
+def compare_nb(nb1: str, nb2: str) -> bool:
+    return strip_nb(nb1) == strip_nb(nb2)
+
+
+def compare_nbs(nbs1: List[str], nbs2: List[str]) -> bool:
+    return all(map(compare_nb, nbs1, nbs2))
+
+# %% ../../nbs/test_utils.ipynb 61
+def read_text_files(paths: List[str]) -> List[str]:
+    """
+    Read the contents of Python modules from the given paths.
+
+    Parameters
+    ----------
+    paths : List[str]
+        A list of file paths to Python modules.
+
+    Returns
+    -------
+    List[str]
+        A list of strings containing the contents of the Python modules.
+
+    Raises
+    ------
+    AssertionError
+        If a file path does not exist.
+
+    """
+    text_files = []
+    for path in paths:
+        # Check that file exists. useful for being called inside a test utility
+        # to see where it fails.
+        assert os.path.exists(path)
+        with open(path, "rt") as file:
+            text_files.append(file.read())
+    return text_files
+
+# %% ../../nbs/test_utils.ipynb 63
+def write_text_files(texts: List[str], paths: List[str]) -> None:
+    for text, path in zip(texts, paths):
+        with open(path, "wt") as file:
+            file.write(text)
+
+# %% ../../nbs/test_utils.ipynb 65
+def compare_texts(texts1: List[str], texts2: List[str]) -> bool:
+    return all(map(operator.eq, texts1, texts2))
+
+# %% ../../nbs/test_utils.ipynb 69
+def read_and_print(
+    paths: List[str], file_type: str, print_as_list: bool = False
+) -> None:
+    if file_type == "notebook":
+        files = read_nbs(paths)
+    elif file_type == "python":
+        files = read_text_files(paths)
+    else:
+        raise ValueError(f"file_type {file_type} not recognized")
+    if print_as_list:
+        print(f"[")
+    for file in files:
+        if not print_as_list:
+            print(f"{'-'*50}")
+        print('"""')
+        print(file)
+        print('"""')
+        if print_as_list:
+            print(",")
 
 # %% ../../nbs/test_utils.ipynb 72
 def create_and_cd_to_new_root_folder(

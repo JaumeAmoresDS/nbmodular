@@ -727,6 +727,33 @@ nbm_export(path=f"{nb_folder}/{nb_path}")
 
 # %% [markdown]
 # #### checks
+# ```
+# create_test_content
+#
+# run
+#
+#
+# check:
+# cd new root
+#
+# nb_paths and py_paths => generate
+#
+# for nb, py:
+# 	read
+#
+# 	print => check manually and copy content
+#
+# 	compare with copied
+#
+# remove
+#
+# # --------------------------
+# #no cd o
+# os.chdir(current_root)
+# nb_paths, py_paths = tst.derive_nb_paths_and_py_paths ([nb_path], new_root)
+# nbs = tst.read_nbs (nb_paths)
+# tst.printnb(nbs, titles=[str(p) for p in nb_paths])
+# ```
 
 # %%
 
@@ -743,7 +770,7 @@ py_paths = [
     / f"test_{Path(nb_path).stem}.py",
 ]
 
-tst.check_test_repo_content (
+tst.check_test_repo_content(
     current_root=current_root,
     new_root=new_root,
     nb_folder=nb_folder,

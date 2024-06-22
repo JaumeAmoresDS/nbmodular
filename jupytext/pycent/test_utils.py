@@ -571,6 +571,7 @@ def write_nbs(nbs: List[str], nb_paths: List[str]) -> None:
 
 
 # %%
+# | export
 def compare_nb(nb1: str, nb2: str) -> bool:
     return strip_nb(nb1) == strip_nb(nb2)
 
@@ -596,6 +597,7 @@ for nb_path in nb_paths:
 
 
 # %%
+# | export
 def read_text_files(paths: List[str]) -> List[str]:
     """
     Read the contents of Python modules from the given paths.
@@ -631,6 +633,7 @@ def read_text_files(paths: List[str]) -> List[str]:
 
 
 # %%
+# | export
 def write_text_files(texts: List[str], paths: List[str]) -> None:
     for text, path in zip(texts, paths):
         with open(path, "wt") as file:
@@ -642,6 +645,7 @@ def write_text_files(texts: List[str], paths: List[str]) -> None:
 
 
 # %%
+# | export
 def compare_texts(texts1: List[str], texts2: List[str]) -> bool:
     return all(map(operator.eq, texts1, texts2))
 
@@ -665,6 +669,7 @@ for path in paths:
 
 
 # %%
+# | export
 def read_and_print(
     paths: List[str], file_type: str, print_as_list: bool = False
 ) -> None:
