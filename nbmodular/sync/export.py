@@ -469,7 +469,7 @@ def nbm_export(
     )
     NBProcessor(path, processor, rm_directives=False, nb=nb).process()
 
-# %% ../../nbs/export.ipynb 47
+# %% ../../nbs/export.ipynb 44
 def nbm_export_all_paths(path):
     files = nbglob(path=path, as_path=True).sorted("name")
     for f in files:
@@ -488,7 +488,7 @@ def parse_argv_and_run_nbm_export_all_paths(argv: List[str]):
 def nbm_export_cli():
     parse_argv_and_run_nbm_export_all_paths(sys.argv)
 
-# %% ../../nbs/export.ipynb 57
+# %% ../../nbs/export.ipynb 54
 def process_cell_for_nbm_update(cell: NbCell):
     source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
     found_directive = False
@@ -525,7 +525,7 @@ def process_cell_for_nbm_update(cell: NbCell):
         raise ValueError("Magic line not found at beginning of cell")
     cell.source = "\n".join([line] + source_lines[line_number + 1 :])
 
-# %% ../../nbs/export.ipynb 59
+# %% ../../nbs/export.ipynb 56
 def nbm_update(
     path,
     code_cells_path=".nbmodular",
@@ -582,7 +582,7 @@ def nbm_update(
     original_nb.cells = nb_processor.cells
     write_nb(original_nb, path)
 
-# %% ../../nbs/export.ipynb 69
+# %% ../../nbs/export.ipynb 66
 def nbm_update_all_paths(args):
     files = nbglob(path=args.path, as_path=True).sorted("name")
     cfg = get_config()

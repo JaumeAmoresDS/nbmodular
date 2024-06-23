@@ -23,6 +23,7 @@
 # %%
 # |export
 # standard
+from code import interact
 import logging
 from math import log
 import os
@@ -480,10 +481,6 @@ def read_pymodules_in_repo(
         Content of the Python modules.
 
     """
-    if interactive_notebook and not print_as_list:
-        raise ValueError(
-            "interactive_notebook can only be True if print_as_list is True"
-        )
     py_paths = derive_py_paths(nb_paths, new_root, lib_folder=lib_folder)
     content = read_text_files(py_paths)
     if interactive_notebook:
@@ -995,9 +992,7 @@ def check_py_modules(
     AssertionError
         If the actual Python modules do not match the expected modules.
     """
-    actual = read_pymodules_in_repo(nb_paths, new_root, lib_folder=lib_folder)
-    if interactive_notebook:
-        actual = [x.replace("%%", "@%%") for x in actual]
+    actual = read_pymodules_in_repo(nb_paths, new_root, lib_folder=lib_folder, interactive_notebook=interactive_notebook)
     assert compare_texts(actual, expected)
 
 

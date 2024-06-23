@@ -757,7 +757,7 @@ def first():
     pass
 
 [markdown]
-comment2
+comment
 
 [code]
 pass
@@ -785,23 +785,23 @@ def second():
     pass
 """,
 ]
-py_modules = [
+expected_py_modules = [
     # nbmodular/mixed/mixed_cells.py
     """
-# %% auto 0
+# @%% auto 0
 __all__ = ['first']
 
-# %% ../../nbs/mixed/mixed_cells.ipynb 1
+# @%% ../../nbs/mixed/mixed_cells.ipynb 1
 #@@function
 def first():
     pass
 """,
     # nbmodular/tests/mixed/test_mixed_cells.py
     """
-# %% auto 0
+# @%% auto 0
 __all__ = ['second']
 
-# %% ../../../nbs/mixed/test_mixed_cells.ipynb 1
+# @%% ../../../nbs/mixed/test_mixed_cells.ipynb 1
 #@@function --test
 def second():
     pass
@@ -811,7 +811,7 @@ def second():
 tst.check_test_repo_content(
     [nb_path],
     expected_nbs=expected_nbs,
-    expected_py_modules=py_modules,
+    expected_py_modules=expected_py_modules,
     current_root=current_root,
     new_root=new_root,
     clean=False,

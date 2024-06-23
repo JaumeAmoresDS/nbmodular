@@ -9,7 +9,9 @@ __all__ = ['nb1', 'mixed_nb1', 'py1', 'convert_nested_nb_cells_to_dicts', 'parse
 
 # %% ../../nbs/test_utils.ipynb 2
 # standard
+from code import interact
 import logging
+from math import log
 import os
 import shutil
 from pathlib import Path
@@ -20,6 +22,7 @@ import re
 # 3rd party
 from execnb.nbio import new_nb, write_nb, mk_cell, read_nb
 from plum import Val
+from requests import post
 
 # ours
 from ..core.utils import cd_root
@@ -152,6 +155,9 @@ def read_nbs_in_repo(
     nbs_folder: Optional[str] = "nbs",
     print_as_list: bool = False,
     print: bool = False,
+    logger: logging.Logger = None,
+    previous_text: str = "",
+    posterior_text: str = "",
 ):
     """
     Read notebooks in a repository.
@@ -172,6 +178,10 @@ def read_nbs_in_repo(
         Whether to print the files as a list, by default False.
     print : bool, optional
         Whether to print the files, by default False.
+    previous_text : str, optional
+        Text to print before the files, by default "".
+    posterior_text : str, optional
+        Text to print after the files, by default "".
 
     Returns
     -------
@@ -185,9 +195,17 @@ def read_nbs_in_repo(
         tmp_folder=tmp_folder,
         nbs_folder=nbs_folder,
     )
+    if logger is not None:
+        logger.debug(f"Reading notebooks in {nb_paths}")
     content = read_nbs(nb_paths)
     if print:
-        print_files(content, print_as_list=print_as_list, paths=nb_paths)
+        print_files(
+            content,
+            print_as_list=print_as_list,
+            paths=nb_paths,
+            previous_text=previous_text,
+            posterior_text=posterior_text,
+        )
     return content
 
 # %% ../../nbs/test_utils.ipynb 47
@@ -197,6 +215,9 @@ def read_pymodules_in_repo(
     lib_folder: str = "nbmodular",
     print_as_list: bool = False,
     print: bool = False,
+    previous_text: str = "",
+    posterior_text: str = "",
+    interactive_notebook: bool = True,
 ):
     """
     Read Python modules in a repository.
@@ -213,6 +234,8 @@ def read_pymodules_in_repo(
         Whether to print the files as a list, by default False.
     print : bool, optional
         Whether to print the files, by default False.
+    interactive_notebook : bool, optional
+        Whether the notebook is run in VSC interactive mode, by default True.
 
     Returns:
     -------
@@ -222,8 +245,16 @@ def read_pymodules_in_repo(
     """
     py_paths = derive_py_paths(nb_paths, new_root, lib_folder=lib_folder)
     content = read_text_files(py_paths)
+    if interactive_notebook:
+        content = [x.replace("%%", "@%%") for x in content]
     if print:
-        print_files(content, print_as_list=print_as_list, paths=py_paths)
+        print_files(
+            content,
+            print_as_list=print_as_list,
+            paths=py_paths,
+            previous_text=previous_text,
+            posterior_text=posterior_text,
+        )
     return content
 
 # %% ../../nbs/test_utils.ipynb 49
@@ -236,6 +267,7 @@ def read_content_in_repo(
     lib_folder: Optional[str] = "nbmodular",
     print_as_list: bool = False,
     print: bool = True,
+    interactive_notebook: bool = True,
 ) -> Tuple[List[str], List[str]]:
     """
     Read the content in a repository.
@@ -264,11 +296,34 @@ def read_content_in_repo(
     Tuple[List[str], List[str]]
         A tuple containing two lists - the nbs content and the py_modules content.
     """
+    if interactive_notebook and not print_as_list:
+        raise ValueError(
+            "interactive_notebook can only be True if print_as_list is True"
+        )
+    if print_as_list:
+        previous_text = "expected_nbs = "
     nbs = read_nbs_in_repo(
-        nb_paths, new_root, nbm_folder, tmp_folder, nbs_folder, print_as_list, print
+        nb_paths,
+        new_root,
+        nbm_folder,
+        tmp_folder,
+        nbs_folder,
+        print_as_list,
+        print,
+        previous_text=previous_text,
     )
+    if print_as_list:
+        previous_text = "expected_py_modules = "
     py_modules = (
-        read_pymodules_in_repo(nb_paths, new_root, lib_folder, print_as_list, print)
+        read_pymodules_in_repo(
+            nb_paths,
+            new_root,
+            lib_folder,
+            print_as_list,
+            print,
+            previous_text=previous_text,
+            interactive_notebook=interactive_notebook,
+        )
         if lib_folder is not None
         else []
     )
@@ -446,14 +501,18 @@ def print_files(
     files: List[str],
     print_as_list: bool = False,
     paths: Optional[List[str] | List[Path]] = None,
+    previous_text: str = "",
+    posterior_text: str = "",
 ) -> None:
+    print(previous_text, end="")
     if print_as_list:
-        print(f"[")
+        print("[")
+    suffix_path = "# " if print_as_list else ""
     for idx, file in enumerate(files):
         if not print_as_list:
             print(f"{'-'*50}")
         if paths is not None:
-            print(paths[idx])
+            print(f"{suffix_path}{paths[idx]}")
         print('"""')
         print(file)
         print('"""', end="")
@@ -463,6 +522,7 @@ def print_files(
             print()
     if print_as_list:
         print("]")
+    print(posterior_text, end="")
 
 # %% ../../nbs/test_utils.ipynb 78
 def read_and_print(
@@ -527,6 +587,7 @@ def check_py_modules(
     expected: List[str],
     new_root: str,  # type: ignore
     lib_folder: str = "nbmodular",
+    interactive_notebook: bool = True,
 ):
     """
     Check if the Python modules in the given notebook paths match the expected modules.
@@ -541,13 +602,15 @@ def check_py_modules(
         The new root directory.
     lib_folder : str, optional
         The name of the library folder, by default "nbmodular".
+    interactive_notebook: bool, optional
+        Whether the notebook is run in VSC interactive mode, by default True.
 
     Raises
     ------
     AssertionError
         If the actual Python modules do not match the expected modules.
     """
-    actual = read_pymodules_in_repo(nb_paths, new_root, lib_folder=lib_folder)
+    actual = read_pymodules_in_repo(nb_paths, new_root, lib_folder=lib_folder, interactive_notebook=interactive_notebook)
     assert compare_texts(actual, expected)
 
 # %% ../../nbs/test_utils.ipynb 85
