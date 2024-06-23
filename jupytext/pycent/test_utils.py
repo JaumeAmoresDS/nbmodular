@@ -24,16 +24,18 @@
 # |export
 # standard
 import logging
+from math import log
 import os
 import shutil
 from pathlib import Path
 from token import OP
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Union
 import re
 
 # 3rd party
 from execnb.nbio import new_nb, write_nb, mk_cell, read_nb
 from plum import Val
+from requests import post
 
 # ours
 from nbmodular.core.utils import cd_root
@@ -379,11 +381,14 @@ def strip_nb(nb: str) -> str:
 def read_nbs_in_repo(
     nb_paths: List[str],  # type: ignore
     new_root: str = "new_test",
-    nbm_folder: str = "nbm",
-    tmp_folder: str = ".nbs",
-    nbs_folder: str = "nbs",
+    nbm_folder: Optional[str] = "nbm",
+    tmp_folder: Optional[str] = ".nbs",
+    nbs_folder: Optional[str] = "nbs",
     print_as_list: bool = False,
     print: bool = False,
+    logger: logging.Logger = None,
+    previous_text: str = "",
+    posterior_text: str = "",
 ):
     """
     Read notebooks in a repository.
@@ -404,6 +409,10 @@ def read_nbs_in_repo(
         Whether to print the files as a list, by default False.
     print : bool, optional
         Whether to print the files, by default False.
+    previous_text : str, optional
+        Text to print before the files, by default "".
+    posterior_text : str, optional
+        Text to print after the files, by default "".
 
     Returns
     -------
@@ -417,9 +426,17 @@ def read_nbs_in_repo(
         tmp_folder=tmp_folder,
         nbs_folder=nbs_folder,
     )
+    if logger is not None:
+        logger.debug(f"Reading notebooks in {nb_paths}")
     content = read_nbs(nb_paths)
     if print:
-        print_files(content, print_as_list=print_as_list, paths=nb_paths)
+        print_files(
+            content,
+            print_as_list=print_as_list,
+            paths=nb_paths,
+            previous_text=previous_text,
+            posterior_text=posterior_text,
+        )
     return content
 
 
@@ -435,6 +452,9 @@ def read_pymodules_in_repo(
     lib_folder: str = "nbmodular",
     print_as_list: bool = False,
     print: bool = False,
+    previous_text: str = "",
+    posterior_text: str = "",
+    interactive_notebook: bool = True,
 ):
     """
     Read Python modules in a repository.
@@ -451,6 +471,8 @@ def read_pymodules_in_repo(
         Whether to print the files as a list, by default False.
     print : bool, optional
         Whether to print the files, by default False.
+    interactive_notebook : bool, optional
+        Whether the notebook is run in VSC interactive mode, by default True.
 
     Returns:
     -------
@@ -458,10 +480,22 @@ def read_pymodules_in_repo(
         Content of the Python modules.
 
     """
+    if interactive_notebook and not print_as_list:
+        raise ValueError(
+            "interactive_notebook can only be True if print_as_list is True"
+        )
     py_paths = derive_py_paths(nb_paths, new_root, lib_folder=lib_folder)
     content = read_text_files(py_paths)
+    if interactive_notebook:
+        content = [x.replace("%%", "@%%") for x in content]
     if print:
-        print_files(content, print_as_list=print_as_list, paths=py_paths)
+        print_files(
+            content,
+            print_as_list=print_as_list,
+            paths=py_paths,
+            previous_text=previous_text,
+            posterior_text=posterior_text,
+        )
     return content
 
 
@@ -474,33 +508,34 @@ def read_pymodules_in_repo(
 def read_content_in_repo(
     nb_paths: List[str],
     new_root: Union[str, Path],
-    nbm_folder: str = "nbm",
-    tmp_folder: str = ".nbs",
-    nbs_folder: str = "nbs",
-    lib_folder: str = "nbmodular",
+    nbm_folder: Optional[str] = "nbm",
+    tmp_folder: Optional[str] = ".nbs",
+    nbs_folder: Optional[str] = "nbs",
+    lib_folder: Optional[str] = "nbmodular",
     print_as_list: bool = False,
     print: bool = True,
+    interactive_notebook: bool = True,
 ) -> Tuple[List[str], List[str]]:
     """
     Read the content in a repository.
 
     Parameters:
     ----------
-    nb_paths: List[str]
+    nb_paths : List[str]
         List of notebook paths.
-    new_root: Union[str, Path]
+    new_root : Union[str, Path]
         New root directory.
-    nbm_folder: str, optional
+    nbm_folder : str, optional
         Folder name for nbm files. Defaults to "nbm".
-    tmp_folder: str, optional
+    tmp_folder : str, optional
         Temporary folder name. Defaults to ".nbs".
-    nbs_folder: str, optional
+    nbs_folder : str, optional
         Folder name for nbs files. Defaults to "nbs".
-    lib_folder: str, optional
+    lib_folder : str, optional
         Folder name for nbmodular files. Defaults to "nbmodular".
-    print_as_list: bool, optional
+    print_as_list : bool, optional
         Whether to print the content as a list. Defaults to False.
-    print: bool, optional
+    print : bool, optional
         Whether to print the content. Defaults to True.
 
     Returns:
@@ -508,12 +543,36 @@ def read_content_in_repo(
     Tuple[List[str], List[str]]
         A tuple containing two lists - the nbs content and the py_modules content.
     """
-
+    if interactive_notebook and not print_as_list:
+        raise ValueError(
+            "interactive_notebook can only be True if print_as_list is True"
+        )
+    if print_as_list:
+        previous_text = "expected_nbs = "
     nbs = read_nbs_in_repo(
-        nb_paths, new_root, nbm_folder, tmp_folder, nbs_folder, print_as_list, print
+        nb_paths,
+        new_root,
+        nbm_folder,
+        tmp_folder,
+        nbs_folder,
+        print_as_list,
+        print,
+        previous_text=previous_text,
     )
-    py_modules = read_pymodules_in_repo(
-        nb_paths, new_root, lib_folder, print_as_list, print
+    if print_as_list:
+        previous_text = "expected_py_modules = "
+    py_modules = (
+        read_pymodules_in_repo(
+            nb_paths,
+            new_root,
+            lib_folder,
+            print_as_list,
+            print,
+            previous_text=previous_text,
+            interactive_notebook=interactive_notebook,
+        )
+        if lib_folder is not None
+        else []
     )
     return nbs, py_modules
 
@@ -528,21 +587,49 @@ def read_content_in_repo(
 
 # %%
 # | export
+from typing import List, Optional
+from pathlib import Path
+
+
 def derive_nb_paths(
     nb_paths: List[str],
     new_root: str | Path,
-    nbm_folder: str = "nbm",
-    tmp_folder: str = ".nbs",
-    nbs_folder: str = "nbs",
-):
+    nbm_folder: Optional[str] = "nbm",
+    tmp_folder: Optional[str] = ".nbs",
+    nbs_folder: Optional[str] = "nbs",
+) -> List[Path]:
+    """
+    Derives the paths of notebooks based on the given parameters.
+
+    Parameters
+    ----------
+    nb_paths : List[str]
+        A list of notebook paths.
+    new_root : str | Path
+        The new root directory where the notebooks will be located.
+    nbm_folder : Optional[str], optional
+        The folder name for nbm files. Defaults to "nbm".
+    tmp_folder : Optional[str], optional
+        The temporary folder name. Defaults to ".nbs".
+    nbs_folder : Optional[str], optional
+        The folder name for nbs files. Defaults to "nbs".
+
+    Returns
+    -------
+    List[Path]
+        A list of derived notebook paths.
+    """
     all_nb_paths = []
     for nb_path in nb_paths:
-        all_nb_paths.append(Path(new_root) / nbm_folder / nb_path)
-        all_nb_paths.append(Path(new_root) / nbs_folder / nb_path)
-        tmp_nb = Path(new_root) / tmp_folder / nb_path
-        all_nb_paths.append(tmp_nb)
-        tmp_test_nb = tmp_nb.parent / f"test_{tmp_nb.name}"
-        all_nb_paths.append(tmp_test_nb)
+        if nbm_folder is not None:
+            all_nb_paths.append(Path(new_root) / nbm_folder / nb_path)
+        if nbs_folder is not None:
+            all_nb_paths.append(Path(new_root) / nbs_folder / nb_path)
+        if tmp_folder is not None:
+            tmp_nb = Path(new_root) / tmp_folder / nb_path
+            all_nb_paths.append(tmp_nb)
+            tmp_test_nb = tmp_nb.parent / f"test_{tmp_nb.name}"
+            all_nb_paths.append(tmp_test_nb)
 
     return all_nb_paths
 
@@ -586,10 +673,10 @@ def derive_py_paths(
 def derive_all_paths(
     nb_paths: List[str],
     new_root: str | Path,
-    nbm_folder: str = "nbm",
-    tmp_folder: str = ".nbs",
-    nbs_folder: str = "nbs",
-    lib_folder: str = "nbmodular",
+    nbm_folder: Optional[str] = "nbm",
+    tmp_folder: Optional[str] = ".nbs",
+    nbs_folder: Optional[str] = "nbs",
+    lib_folder: Optional[str] = "nbmodular",
 ):
     all_nb_paths = derive_nb_paths(
         nb_paths,
@@ -598,7 +685,11 @@ def derive_all_paths(
         tmp_folder=tmp_folder,
         nbs_folder=nbs_folder,
     )
-    py_paths = derive_py_paths(nb_paths, new_root, lib_folder=lib_folder)
+    py_paths = (
+        derive_py_paths(nb_paths, new_root, lib_folder=lib_folder)
+        if lib_folder is not None
+        else []
+    )
     return all_nb_paths, py_paths
 
 
@@ -778,14 +869,18 @@ def print_files(
     files: List[str],
     print_as_list: bool = False,
     paths: Optional[List[str] | List[Path]] = None,
+    previous_text: str = "",
+    posterior_text: str = "",
 ) -> None:
+    print(previous_text, end="")
     if print_as_list:
-        print(f"[")
+        print("[")
+    suffix_path = "# " if print_as_list else ""
     for idx, file in enumerate(files):
         if not print_as_list:
             print(f"{'-'*50}")
         if paths is not None:
-            print(paths[idx])
+            print(f"{suffix_path}{paths[idx]}")
         print('"""')
         print(file)
         print('"""', end="")
@@ -795,6 +890,7 @@ def print_files(
             print()
     if print_as_list:
         print("]")
+    print(posterior_text, end="")
 
 
 # %%
@@ -827,9 +923,9 @@ def check_nbs(
     nb_paths: List[str],  # type: ignore
     expected: List[str],
     new_root: str,  # type: ignore
-    nbm_folder: str = "nbm",
-    tmp_folder: str = ".nbs",
-    nbs_folder: str = "nbs",
+    nbm_folder: Optional[str] = "nbm",
+    tmp_folder: Optional[str] = ".nbs",
+    nbs_folder: Optional[str] = "nbs",
 ):
     """
     Check if the notebooks in the given paths match the expected notebooks.
@@ -876,6 +972,7 @@ def check_py_modules(
     expected: List[str],
     new_root: str,  # type: ignore
     lib_folder: str = "nbmodular",
+    interactive_notebook: bool = True,
 ):
     """
     Check if the Python modules in the given notebook paths match the expected modules.
@@ -890,6 +987,8 @@ def check_py_modules(
         The new root directory.
     lib_folder : str, optional
         The name of the library folder, by default "nbmodular".
+    interactive_notebook: bool, optional
+        Whether the notebook is run in VSC interactive mode, by default True.
 
     Raises
     ------
@@ -897,6 +996,8 @@ def check_py_modules(
         If the actual Python modules do not match the expected modules.
     """
     actual = read_pymodules_in_repo(nb_paths, new_root, lib_folder=lib_folder)
+    if interactive_notebook:
+        actual = [x.replace("%%", "@%%") for x in actual]
     assert compare_texts(actual, expected)
 
 
@@ -912,10 +1013,10 @@ def check_test_repo_content(
     expected_py_modules: Optional[List[str]] = None,
     current_root: Optional[str] = None,
     new_root: Optional[str] = None,
-    nbm_folder: str = "nbm",
-    tmp_folder: str = ".nbs",
-    nbs_folder: str = "nbs",
-    lib_folder: str = "nbmodular",
+    nbm_folder: Optional[str] = "nbm",
+    tmp_folder: Optional[str] = ".nbs",
+    nbs_folder: Optional[str] = "nbs",
+    lib_folder: Optional[str] = "nbmodular",
     clean: bool = False,
     keep_cwd: bool = False,
 ):
@@ -937,13 +1038,13 @@ def check_test_repo_content(
         The current root directory of the test repository, by default None.
     new_root : Optional[str], optional
         The new root directory of the test repository, by default None.
-    nbm_folder : str, optional
+    nbm_folder : str | None, optional
         The name of the folder containing the notebook modules, by default "nbm".
-    tmp_folder : str, optional
+    tmp_folder : str | None, optional
         The name of the temporary folder, by default ".nbs".
-    nbs_folder : str, optional
+    nbs_folder : str | None, optional
         The name of the folder containing the notebooks, by default "nbs".
-    lib_folder : str, optional
+    lib_folder : str | None, optional
         The name of the folder containing the Python modules, by default "nbmodular".
     clean : bool, optional
         Whether to clean the new root directory after checking, by default False.
@@ -953,7 +1054,7 @@ def check_test_repo_content(
     Raises
     ------
     ValueError
-        If a validation error occurs during the checking process.
+        Raised when both clean and keep_cwd are set to True.
     """
     if current_root is not None:
         assert Path(current_root).name == "nbmodular"
@@ -1112,5 +1213,8 @@ check_test_repo_content(
     expected_nbs=[nb1, nb2],
     current_root=current_root,
     new_root=new_root,
+    nbs_folder=None,
+    tmp_folder=None,
+    lib_folder=None,
     clean=True,
 )

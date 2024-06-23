@@ -727,79 +727,96 @@ nbm_export(path=f"{nb_folder}/{nb_path}")
 
 # %% [markdown]
 # #### checks
-# ```
-# create_test_content
-#
-# run
-#
-#
-# check:
-# cd new root
-#
-# nb_paths and py_paths => generate
-#
-# for nb, py:
-# 	read
-#
-# 	print => check manually and copy content
-#
-# 	compare with copied
-#
-# remove
-#
-# # --------------------------
-# #no cd o
-# os.chdir(current_root)
-# nb_paths, py_paths = tst.derive_nb_paths_and_py_paths ([nb_path], new_root)
-# nbs = tst.read_nbs (nb_paths)
-# tst.printnb(nbs, titles=[str(p) for p in nb_paths])
-# ```
+
 
 # %%
 
-nb_paths = [
-    Path(nb_folder) / nb_path,
-    Path(".nbs") / nb_path,
-    Path(".nbs") / Path(nb_path).parent / f"test_{Path(nb_path).name}",
+# check original content
+# nbs, py_modules = tst.read_content_in_repo ([nb_path], "./", print_as_list=True)
+expected_nbs = [
+    # nbm/mixed/mixed_cells.ipynb
+    """
+[code]
+%%function
+def first():
+    pass
+
+[markdown]
+comment
+
+[code]
+%%function --test
+def second ():
+    pass
+""",
+    # nbs/mixed/mixed_cells.ipynb
+    """
+[code]
+#|export
+def first():
+    pass
+
+[markdown]
+comment2
+
+[code]
+pass
+""",
+    # .nbs/mixed/mixed_cells.ipynb
+    """
+[code]
+#|default_exp mixed.mixed_cells
+
+[code]
+#|export
+#@@function
+def first():
+    pass
+""",
+    # .nbs/mixed/test_mixed_cells.ipynb
+    """
+[code]
+#|default_exp tests.mixed.test_mixed_cells
+
+[code]
+#|export
+#@@function --test
+def second():
+    pass
+""",
 ]
-py_paths = [
-    Path("nbmodular") / Path(nb_path).parent / f"{Path(nb_path).stem}.py",
-    Path("nbmodular")
-    / "tests"
-    / Path(nb_path).parent
-    / f"test_{Path(nb_path).stem}.py",
+py_modules = [
+    # nbmodular/mixed/mixed_cells.py
+    """
+# %% auto 0
+__all__ = ['first']
+
+# %% ../../nbs/mixed/mixed_cells.ipynb 1
+#@@function
+def first():
+    pass
+""",
+    # nbmodular/tests/mixed/test_mixed_cells.py
+    """
+# %% auto 0
+__all__ = ['second']
+
+# %% ../../../nbs/mixed/test_mixed_cells.ipynb 1
+#@@function --test
+def second():
+    pass
+""",
 ]
 
 tst.check_test_repo_content(
+    [nb_path],
+    expected_nbs=expected_nbs,
+    expected_py_modules=py_modules,
     current_root=current_root,
     new_root=new_root,
-    nb_folder=nb_folder,
-    nb_paths=[nb_path],
-    nbs=[tst.mixed_nb1],
-    show_content=True,
+    clean=False,
+    keep_cwd=True,
 )
-
-# %%
-nbs = []
-for nb_path in nb_paths:
-    assert nb_path.exists()
-    nbs.append(read_nb(nb_path))
-
-
-# %%
-pymods = []
-for py_path in py_paths:
-    assert py_path.exists()
-    pymods.append(open(py_path, "rt").read())
-
-assert pymods == [
-    "\n\n# %% auto 0\n__all__ = ['first']\n\n# %% ../../nbs/test_nbs/nb.ipynb 1\n#@@function\ndef first():\n    pass\n\n",
-    "\n\n# %% auto 0\n__all__ = ['second']\n\n# %% ../../../nbs/test_nbs/test_nb.ipynb 1\n#@@function --test\ndef second():\n    pass\n\n",
-]
-
-# %%
-## clean
-clean_nbm_export_test()
 
 
 # %% [markdown]
