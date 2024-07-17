@@ -1,9 +1,28 @@
+# ---
+# jupyter:
+#   jupytext:
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.2
+#   kernelspec:
+#     display_name: python3
+#     language: python
+#     name: python3
+# ---
 
+# %% [markdown]
+# # Utils
+#
+# > Exporting to python module
 
-# %% auto 0
-__all__ = ['imported_jupytext', 'set_log_level', 'get_repo_root_folder', 'cd_root', 'get_config']
+# %%
+# | default_exp core.utils
 
-# %% ../../nbs/utils.ipynb 2
+# %%
+# |export
 # standard
 import logging
 import os
@@ -26,14 +45,24 @@ try:
 except ImportError:
     pass
 
-# %% ../../nbs/utils.ipynb 4
+
+# %% [markdown]
+# ## Logging
+
+# %%
+# |export
 def set_log_level(logger, log_level):
     logger.setLevel(log_level)
     ch = logging.StreamHandler()
     ch.setLevel(log_level)
     logger.addHandler(ch)
 
-# %% ../../nbs/utils.ipynb 6
+
+# %% [markdown]
+# ## cd_root
+
+# %%
+# | export
 def get_repo_root_folder(
     file_to_look_for_in_root_folder="settings.ini",
     max_parent_levels_to_traverse=10,
@@ -55,20 +84,40 @@ def get_repo_root_folder(
     repo_root_folder = Path(".").resolve()
     return repo_root_folder
 
-# %% ../../nbs/utils.ipynb 7
+
+# %%
+# | export
 def _cd_root_nbdev_impl():
     config = nbdev.config.get_config()
     os.chdir(config.config_path)
 
-# %% ../../nbs/utils.ipynb 8
+
+# %%
+# | export
 def cd_root():
     repo_root_path = get_repo_root_folder()
     os.chdir(repo_root_path)
 
-# %% ../../nbs/utils.ipynb 10
+
+# %% [markdown]
+# ## get_config
+
+# %%
+# | export
 def get_config(path: str = "settings.ini"):
     config = ConfigParser(delimiters=["="])
     config.read(path, encoding="utf-8")
     cfg = config["DEFAULT"]
     cfg.config_path = Path(path).resolve()
     return cfg
+
+
+# %% [markdown]
+# ### Example usage
+
+# %%
+cd_root()
+
+cfg = get_config()
+
+print(cfg.config_path)

@@ -1,13 +1,28 @@
+# ---
+# jupyter:
+#   jupytext:
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.2
+#   kernelspec:
+#     display_name: python3
+#     language: python
+#     name: python3
+# ---
 
+# %% [markdown]
+# # Test Utils
+#
+# > Utilities for writting tests.
 
-# %% auto 0
-__all__ = ['nb1', 'mixed_nb1', 'py1', 'convert_nested_nb_cells_to_dicts', 'parse_nb_sections', 'text2nb', 'texts2nbs', 'nb2text',
-           'nbs2text', 'printnb', 'strip_nb', 'read_nbs_in_repo', 'read_pymodules_in_repo', 'read_content_in_repo',
-           'derive_nb_paths', 'derive_py_paths', 'derive_all_paths', 'read_nbs', 'compare_nb', 'compare_nbs',
-           'read_text_files', 'write_text_files', 'compare_texts', 'print_files', 'read_and_print', 'check_nbs',
-           'check_py_modules', 'check_test_repo_content', 'create_and_cd_to_new_root_folder', 'create_test_content']
+# %%
+# | default_exp testing.utils
 
-# %% ../../nbs/test_utils.ipynb 2
+# %%
+# |export
 # standard
 from code import interact
 import logging
@@ -25,9 +40,18 @@ from plum import Val
 from requests import post
 
 # ours
-from ..core.utils import cd_root
+from nbmodular.core.utils import cd_root
 
-# %% ../../nbs/test_utils.ipynb 5
+# %% [markdown]
+# ## Notebook examples
+#
+# > Example notebooks used for testing
+
+# %% [markdown]
+# ### Simple example 1
+
+# %%
+# | export
 nb1 = """
 [markdown]
 # First notebook
@@ -42,7 +66,29 @@ a=1+1
 print (a)
 """
 
-# %% ../../nbs/test_utils.ipynb 9
+# %% [markdown]
+# ### Simple example 2
+
+# %%
+nb2 = """
+[markdown]
+# Second notebook
+
+[code]
+%%function bye
+print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+"""
+
+# %% [markdown]
+# ### Mixed Cells Example
+
+# %%
+# | export
 mixed_nb1 = """
 [code]
 %%function
@@ -58,7 +104,16 @@ def second ():
     pass
 """
 
-# %% ../../nbs/test_utils.ipynb 12
+# %% [markdown]
+# ## Python module examples
+#
+# > Example python modules used here
+
+# %% [markdown]
+# ### Example 1
+
+# %%
+# | export
 py1 = """
 def hello ():
     print ('hello')
@@ -68,7 +123,30 @@ def one_plus_one ():
     print (a)
 """
 
-# %% ../../nbs/test_utils.ipynb 17
+# %% [markdown]
+# ### Simple example 2
+
+# %%
+py2 = """
+def bye ():
+    print ('bye')
+
+def two_plus_two ():
+    a=2+2
+    print (a)
+"""
+
+# %% [markdown]
+# ## Notebook structure
+#
+# > Utilities for building a dictionary with notebook structure. Useful for testing purposes.
+
+# %% [markdown]
+# ### convert_nested_nb_cells_to_dicts
+
+
+# %%
+# | export
 def convert_nested_nb_cells_to_dicts(dict_like_with_nbcells: dict) -> dict:
     """Convert nested NbCells to dicts.
 
@@ -86,7 +164,13 @@ def convert_nested_nb_cells_to_dicts(dict_like_with_nbcells: dict) -> dict:
     new_dict["cells"] = [dict(**cell) for cell in new_dict["cells"]]
     return new_dict
 
-# %% ../../nbs/test_utils.ipynb 19
+
+# %% [markdown]
+# ### parse_nb_sections
+
+
+# %%
+# | export
 def parse_nb_sections(nb):
     # Define the regex pattern to match sections
     pattern = "\[(markdown|code)\](.*?)((?=\[markdown\])|(?=\[code\])|$)"
@@ -99,20 +183,94 @@ def parse_nb_sections(nb):
 
     return result
 
-# %% ../../nbs/test_utils.ipynb 23
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+nb_text = parse_nb_sections(nb1)
+assert nb_text == [
+    ("markdown", "# First notebook"),
+    ("code", "%%function hello\nprint ('hello')"),
+    ("code", "%%function one_plus_one --test\na=1+1\nprint (a)"),
+]
+
+
+# %% [markdown]
+# ### text2nb
+
+
+# %%
+# | export
 def text2nb(nb: str):
     cells = [
         mk_cell(text, cell_type=cell_type) for cell_type, text in parse_nb_sections(nb)
     ]
     return new_nb(cells)
 
-# %% ../../nbs/test_utils.ipynb 29
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+nb_text = text2nb(nb1)
+
+# %% [markdown]
+# #### checks
+
+# %%
+expected = {
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "source": "# First notebook",
+            "directives_": {},
+            "metadata": {},
+            "idx_": 0,
+        },
+        {
+            "cell_type": "code",
+            "source": "%%function hello\nprint ('hello')",
+            "directives_": {},
+            "metadata": {},
+            "idx_": 1,
+        },
+        {
+            "cell_type": "code",
+            "source": "%%function one_plus_one --test\na=1+1\nprint (a)",
+            "directives_": {},
+            "metadata": {},
+            "idx_": 2,
+        },
+    ],
+    "metadata": {},
+    "nbformat": 4,
+    "nbformat_minor": 5,
+}
+actual = convert_nested_nb_cells_to_dicts(
+    nb_text
+)  # just for comparison purposes, we convert nested NbCells to dicts
+assert actual == expected
+
+
+# %% [markdown]
+# ### texts2nbs
+
+
+# %%
+# | export
 def texts2nbs(nbs: List[str] | str) -> List[dict]:
     if not isinstance(nbs, list):
         nbs = [nbs]
     return [text2nb(nb) for nb in nbs]
 
-# %% ../../nbs/test_utils.ipynb 31
+
+# %% [markdown]
+# ### nb2text
+
+
+# %%
+# | export
 def nb2text(nb: dict) -> str:
     return "\n\n".join(
         [f"[{cell['cell_type']}]\n{cell['source']}" for cell in nb["cells"]]
@@ -122,7 +280,51 @@ def nb2text(nb: dict) -> str:
 def nbs2text(nbs: List[dict]) -> List[str]:
     return [nb2text(nb) for nb in (nbs if isinstance(nbs, list) else [nbs])]
 
-# %% ../../nbs/test_utils.ipynb 37
+
+# %% [markdown]
+# #### Usage example
+
+# %%
+nb_text = text2nb(nb1)
+nb_text = nb2text(nb_text)
+assert (
+    nb_text
+    == """[markdown]
+# First notebook
+
+[code]
+%%function hello
+print ('hello')
+
+[code]
+%%function one_plus_one --test
+a=1+1
+print (a)"""
+)
+
+# %%
+nb_text
+
+# %%
+"""[markdown]
+# First notebook
+
+[code]
+%%function hello
+print ('hello')
+
+[code]
+%%function one_plus_one --test
+a=1+1
+print (a)"""
+
+
+# %% [markdown]
+# ### printnb
+
+
+# %%
+# | export
 def printnb(
     nb_text: str | dict | List[str] | List[dict], no_newlines: bool = False, titles=None
 ) -> None:
@@ -142,11 +344,42 @@ def printnb(
             nb_text = nb2text(nb_text)
         print(f'''"""{nb_text}"""''' if no_newlines else f'''"""\n{nb_text}\n"""''')
 
-# %% ../../nbs/test_utils.ipynb 43
+
+# %% [markdown]
+# #### Usage example
+
+# %%
+print("-" * 50)
+print("with new lines at beginning and end:")
+printnb(nb1)
+print()
+print("-" * 50)
+print("without new lines at beginning and end:")
+printnb(nb1, no_newlines=True)
+
+# %%
+printnb([nb1, nb1], titles=["Number 1", "Number 2"], no_newlines=True)
+
+
+# %% [markdown]
+# ## Check utilities
+
+# %% [markdown]
+# ### strip_nb
+
+
+# %%
+# | export
 def strip_nb(nb: str) -> str:
     return nb2text(text2nb(nb))
 
-# %% ../../nbs/test_utils.ipynb 45
+
+# %% [markdown]
+# ### read_nbs_in_repo
+
+
+# %%
+# | export
 def read_nbs_in_repo(
     nb_paths: List[str],  # type: ignore
     new_root: str = "new_test",
@@ -208,7 +441,13 @@ def read_nbs_in_repo(
         )
     return content
 
-# %% ../../nbs/test_utils.ipynb 47
+
+# %% [markdown]
+# ### read_pymodules_in_repo
+
+
+# %%
+# | export
 def read_pymodules_in_repo(
     nb_paths: List[str],  # type: ignore
     new_root: str = "new_test",
@@ -257,7 +496,13 @@ def read_pymodules_in_repo(
         )
     return content
 
-# %% ../../nbs/test_utils.ipynb 49
+
+# %% [markdown]
+# ### read_content_in_repo
+
+
+# %%
+# | export
 def read_content_in_repo(
     nb_paths: List[str],
     new_root: Union[str, Path],
@@ -329,7 +574,17 @@ def read_content_in_repo(
     )
     return nbs, py_modules
 
-# %% ../../nbs/test_utils.ipynb 52
+
+# %% [markdown]
+# ### check_nbs
+
+
+# %% [markdown]
+# ### derive_nb_paths
+
+
+# %%
+# | export
 from typing import List, Optional
 from pathlib import Path
 
@@ -376,7 +631,13 @@ def derive_nb_paths(
 
     return all_nb_paths
 
-# %% ../../nbs/test_utils.ipynb 54
+
+# %% [markdown]
+# ### derive_py_paths
+
+
+# %%
+# | export
 def derive_py_paths(
     nb_paths: List[str],
     new_root: str | Path,
@@ -400,7 +661,13 @@ def derive_py_paths(
         )
     return py_paths
 
-# %% ../../nbs/test_utils.ipynb 56
+
+# %% [markdown]
+# ### derive_all_paths
+
+
+# %%
+# | export
 def derive_all_paths(
     nb_paths: List[str],
     new_root: str | Path,
@@ -423,7 +690,37 @@ def derive_all_paths(
     )
     return all_nb_paths, py_paths
 
-# %% ../../nbs/test_utils.ipynb 60
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+nb_paths, py_paths = derive_all_paths(
+    nb_paths=["folder_A/nb_A.ipynb", "folder_B/nb_B.ipynb"], new_root="tmp_repo"
+)
+assert nb_paths == [
+    Path("tmp_repo/nbm/folder_A/nb_A.ipynb"),
+    Path("tmp_repo/nbs/folder_A/nb_A.ipynb"),
+    Path("tmp_repo/.nbs/folder_A/nb_A.ipynb"),
+    Path("tmp_repo/.nbs/folder_A/test_nb_A.ipynb"),
+    Path("tmp_repo/nbm/folder_B/nb_B.ipynb"),
+    Path("tmp_repo/nbs/folder_B/nb_B.ipynb"),
+    Path("tmp_repo/.nbs/folder_B/nb_B.ipynb"),
+    Path("tmp_repo/.nbs/folder_B/test_nb_B.ipynb"),
+]
+assert py_paths == [
+    Path("tmp_repo/nbmodular/folder_A/nb_A.py"),
+    Path("tmp_repo/nbmodular/tests/folder_A/test_nb_A.py"),
+    Path("tmp_repo/nbmodular/folder_B/nb_B.py"),
+    Path("tmp_repo/nbmodular/tests/folder_B/test_nb_B.py"),
+]
+
+# %% [markdown]
+# ### read_nbs
+
+
+# %%
+# | export
 def read_nbs(paths: List[str], as_text: bool = True) -> List[str] | List[dict]:
     """
     Read notebooks from disk.
@@ -448,7 +745,23 @@ def read_nbs(paths: List[str], as_text: bool = True) -> List[str] | List[dict]:
 
     return [strip_nb(nb2text(nb)) for nb in nbs_in_disk] if as_text else nbs_in_disk
 
-# %% ../../nbs/test_utils.ipynb 64
+
+# %% [markdown]
+# ### write_nbs
+
+
+# %%
+def write_nbs(nbs: List[str], nb_paths: List[str]) -> None:
+    for nb, path in zip(nbs, nb_paths):
+        write_nb(text2nb(nb), path)
+
+
+# %% [markdown]
+# ### compare_nbs
+
+
+# %%
+# | export
 def compare_nb(nb1: str, nb2: str) -> bool:
     return strip_nb(nb1) == strip_nb(nb2)
 
@@ -456,7 +769,25 @@ def compare_nb(nb1: str, nb2: str) -> bool:
 def compare_nbs(nbs1: List[str], nbs2: List[str]) -> bool:
     return all(map(compare_nb, nbs1, nbs2))
 
-# %% ../../nbs/test_utils.ipynb 68
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+nbs = [nb1, nb2]
+nb_paths = ["first.ipynb", "second.ipynb"]
+write_nbs(nbs, nb_paths)
+nbs_in_disk = read_nbs(nb_paths)
+assert compare_nbs(nbs_in_disk, nbs)
+for nb_path in nb_paths:
+    Path(nb_path).unlink()
+
+# %% [markdown]
+# ### read_pymodules
+
+
+# %%
+# | export
 def read_text_files(paths: List[str]) -> List[str]:
     """
     Read the contents of Python modules from the given paths.
@@ -486,17 +817,52 @@ def read_text_files(paths: List[str]) -> List[str]:
             text_files.append(file.read())
     return text_files
 
-# %% ../../nbs/test_utils.ipynb 70
+
+# %% [markdown]
+# ### write_text_files
+
+
+# %%
+# | export
 def write_text_files(texts: List[str], paths: List[str]) -> None:
     for text, path in zip(texts, paths):
         with open(path, "wt") as file:
             file.write(text)
 
-# %% ../../nbs/test_utils.ipynb 72
+
+# %% [markdown]
+# ### compare_texts
+
+
+# %%
+# | export
 def compare_texts(texts1: List[str], texts2: List[str]) -> bool:
     return all(map(lambda x, y: x.strip() == y.strip(), texts1, texts2))
 
-# %% ../../nbs/test_utils.ipynb 77
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+texts = [py1, py2]
+paths = ["first.py", "second.py"]
+write_text_files(texts, paths)
+texts_in_disk = read_text_files(paths)
+assert compare_texts(texts_in_disk, texts)
+
+# clean
+for path in paths:
+    Path(path).unlink()
+
+# %% [markdown]
+# ### read_and_print
+
+# %% [markdown]
+# ### print_files
+
+
+# %%
+# | export
 def print_files(
     files: List[str],
     print_as_list: bool = False,
@@ -524,7 +890,9 @@ def print_files(
         print("]")
     print(posterior_text, end="")
 
-# %% ../../nbs/test_utils.ipynb 78
+
+# %%
+# | export
 def read_and_print(
     paths: List[str], file_type: str, print_as_list: bool = False
 ) -> None:
@@ -539,7 +907,16 @@ def read_and_print(
         files, print_as_list=print_as_list, paths=None if not print_as_list else paths
     )
 
-# %% ../../nbs/test_utils.ipynb 81
+
+# %% [markdown]
+# ## check generated notebooks and python modules
+
+# %% [markdown]
+# ### check_py_modules
+
+
+# %%
+# | export
 def check_nbs(
     nb_paths: List[str],  # type: ignore
     expected: List[str],
@@ -581,7 +958,13 @@ def check_nbs(
     )
     assert compare_nbs(actual, expected)
 
-# %% ../../nbs/test_utils.ipynb 83
+
+# %% [markdown]
+# ### check_py_modules
+
+
+# %%
+# | export
 def check_py_modules(
     nb_paths: List[str],  # type: ignore
     expected: List[str],
@@ -613,7 +996,13 @@ def check_py_modules(
     actual = read_pymodules_in_repo(nb_paths, new_root, lib_folder=lib_folder, interactive_notebook=interactive_notebook)
     assert compare_texts(actual, expected)
 
-# %% ../../nbs/test_utils.ipynb 85
+
+# %% [markdown]
+# ### check_test_repo_content
+
+
+# %%
+# | export
 def check_test_repo_content(
     nb_paths: List[str],
     expected_nbs: Optional[List[str]] = None,
@@ -687,7 +1076,23 @@ def check_test_repo_content(
             raise ValueError("keep_cwd can't be True if clean is True")
         os.chdir(new_root)
 
-# %% ../../nbs/test_utils.ipynb 90
+
+# %% [markdown]
+# ##### Example usage
+
+# %% [markdown]
+# See checks after example usage for `create_test_content`
+
+
+# %% [markdown]
+# ## Create tests
+
+# %% [markdown]
+# ### create_and_cd_to_new_root_folder
+
+
+# %%
+# | export
 def create_and_cd_to_new_root_folder(
     root_folder: str | Path,
     config_path: str | Path = "settings.ini",
@@ -720,7 +1125,13 @@ def create_and_cd_to_new_root_folder(
 
     return root_folder
 
-# %% ../../nbs/test_utils.ipynb 92
+
+# %% [markdown]
+# ### create_test_content
+
+
+# %%
+# | export
 def create_test_content(
     nbs: List[str] | str,
     nb_paths: Optional[List[str] | List[Path] | str | Path] = None,
@@ -770,3 +1181,36 @@ def create_test_content(
     _ = create_and_cd_to_new_root_folder(new_root, config_path)
 
     return current_root, nb_paths
+
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+# just for checking later
+cwd = os.getcwd()
+
+# usage
+new_root = "test_create_test_content"
+nb_folder = "nbm"
+current_root, nb_paths = create_test_content(
+    nbs=[nb1, nb2],
+    nb_paths=["first_folder/first.ipynb", "second_folder/second.ipynb"],
+    nb_folder=nb_folder,
+    new_root=new_root,
+)
+
+# %% [markdown]
+# #### checks and cleaning
+
+# %%
+check_test_repo_content(
+    nb_paths,
+    expected_nbs=[nb1, nb2],
+    current_root=current_root,
+    new_root=new_root,
+    nbs_folder=None,
+    tmp_folder=None,
+    lib_folder=None,
+    clean=True,
+)

@@ -1,16 +1,30 @@
+# ---
+# jupyter:
+#   jupytext:
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.2
+#   kernelspec:
+#     display_name: python3
+#     language: python
+#     name: python3
+# ---
 
+# %% [markdown]
+# # cell2func
+#
+# > Convert desired notebook cells to functions. 
+#
+# Detects function inputs automatically and function outputs semi-automatically. In the latter case, hints are provided to the developer to refine the list of outputs per each cell.
 
-# %% auto 0
-__all__ = ['bunch_io', 'get_non_callable_ipython', 'get_non_callable', 'get_ast', 'remove_duplicates_from_list',
-           'VariableClassifier', 'add_dict_values', 'run_cell_and_cache', 'FunctionProcessor', 'update_cell_code',
-           'add_function_to_list', 'get_args_and_defaults', 'get_args_and_defaults_from_ast',
-           'get_args_and_defaults_from_function_in_cell', 'derive_paths', 'CellProcessor', 'CellProcessorMagic',
-           'load_ipython_extension', 'retrieve_function_values_through_disk', 'retrieve_function_values_through_memory',
-           'copy_values_and_run_code_in_nb', 'copy_values_in_nb', 'transfer_variables_to_nb',
-           'retrieve_nb_locals_through_disk', 'retrieve_nb_locals_through_memory', 'remove_name_from_nb',
-           'acceptable_variable', 'store_variables']
+# %%
+#| default_exp core.cell2func
 
-# %% ../../nbs/cell2func.ipynb 2
+# %%
+#| export
 import pdb
 from typing import List, Optional, cast
 from xxlimited import Str
@@ -48,11 +62,25 @@ from sklearn.utils import Bunch
 from fastcore.all import argnames
 import nbdev
 
-from . import function_io
-from .utils import set_log_level, get_config
+from nbmodular.core import function_io
+from nbmodular.core.utils import set_log_level, get_config
 
 
-# %% ../../nbs/cell2func.ipynb 6
+# %%
+# used for tests and examples
+import pytest
+import shutil
+from nbmodular.core.utils import cd_root
+
+# %%
+cd_root()
+
+
+# %% [markdown]
+# ## bunch_io
+
+# %%
+#| export
 def bunch_io(func):
     def bunch_wrapper(*args, **kwargs):
         if (len(args) > 1) or ((len(args) == 1) and not isinstance(args[0], Bunch)):
@@ -83,7 +111,15 @@ def bunch_io(func):
     return bunch_wrapper
 
 
-# %% ../../nbs/cell2func.ipynb 9
+
+# %% [markdown]
+# ## get_non_callable
+
+# %% [markdown]
+# ### get_non_callable_ipython
+
+# %%
+#| export
 import pdb
 
 
@@ -117,7 +153,12 @@ def get_non_callable_ipython(variables_to_inspect, locals_, self=None):
         self[variables_to_inspect] = self[non_callable_variables].copy()
 
 
-# %% ../../nbs/cell2func.ipynb 11
+
+# %% [markdown]
+# ### get_non_callable
+
+# %%
+#| export
 def get_non_callable(variables):
     non_callable = []
     for name in variables:
@@ -130,7 +171,12 @@ def get_non_callable(variables):
     return non_callable
 
 
-# %% ../../nbs/cell2func.ipynb 13
+
+# %% [markdown]
+# ## get_ast
+
+# %%
+#| export
 def get_ast(code):
     print(ast.dump(ast.parse(code), indent=2))
 
@@ -143,7 +189,12 @@ def remove_duplicates_from_list(list_with_potential_duplicates):
     return list_without_duplicates
 
 
-# %% ../../nbs/cell2func.ipynb 15
+
+# %% [markdown]
+# ## VariableClassifier
+
+# %%
+#| export
 class VariableClassifier(NodeVisitor):
     def __init__(self, *args, **kwargs):
         self.created_variables = []
@@ -165,12 +216,22 @@ class VariableClassifier(NodeVisitor):
         super().generic_visit(node)
 
 
-# %% ../../nbs/cell2func.ipynb 17
+
+# %% [markdown]
+# ## add_dict_values
+
+# %%
+#| export
 def add_dict_values(d: dict):
     return reduce(lambda x, y: ("+", x[1] + y[1]), d.items())[1]
 
 
-# %% ../../nbs/cell2func.ipynb 19
+
+# %% [markdown]
+# ## cache output
+
+# %%
+#| export
 def run_cell_and_cache(
     cell: str,
     load_disk: bool = False,
@@ -217,7 +278,157 @@ def run_cell_and_cache(
     return output
 
 
-# %% ../../nbs/cell2func.ipynb 44
+
+# %% [markdown]
+# ### Example usage
+
+# %%
+memory={}
+cell=(
+"""
+import matplotlib.pyplot as plt
+plt.plot ([1, 100, 1000])
+"""
+)
+run_cell_and_cache (
+    cell,
+    save_memory=True,
+    memory=memory,
+    memory_key="previous_plot",
+);
+
+# %% [markdown]
+# or a simple computation:
+
+# %%
+cell=(
+"""
+3+4
+"""
+)
+output=run_cell_and_cache (
+    cell,
+    save_memory=True,
+    memory=memory,
+    memory_key="previous_sum",
+)
+
+# %% [markdown]
+# The returned object is of class CapturedIO:
+
+# %%
+assert output.__class__.__name__ == "CapturedIO"
+
+# %% [markdown]
+# When printing to console or notebook, the returned object contains information about the printed text:
+
+# %%
+assert len(output.outputs)==1 and output.outputs[0].data["text/plain"]=="7"
+assert sorted(memory) == sorted (["previous_sum", "previous_plot"])
+
+# %% [markdown]
+# Subsequent calls can load a previous capture from memory, without needing to run the code in the cell. We check this by passing a code that should not be run:
+
+# %%
+should_not_run_cell=(
+"""
+raise RuntimeError("cell should not run")
+"""
+)
+run_cell_and_cache (
+    should_not_run_cell,
+    load_memory=True,
+    memory=memory,
+    memory_key="previous_plot",
+);
+
+# %%
+assert memory.get("previous_plot").__class__.__name__ == "CapturedIO"
+
+# %% [markdown]
+# Raises error if couln't load and error_if_not_loaded is True:
+
+# %%
+with pytest.raises (RuntimeError):
+    run_cell_and_cache (
+        cell,
+        load_memory=True,
+        memory=memory,
+        memory_key="previous_plot_bis",
+        error_if_not_loaded=True,
+    );
+
+# %% [markdown]
+# Can also save to disk:
+
+# %%
+memory={}
+test_result_folder=Path("test_run_cell_and_cache")
+output_path=test_result_folder / "previous_sum.pk"
+run_cell_and_cache (
+    cell,
+    save_memory=True,
+    save_disk=True,
+    output_path=output_path,
+    memory=memory,
+    memory_key="previous_sum",
+);
+
+# %%
+assert "previous_sum" in memory
+assert output_path.exists()
+shutil.rmtree (output_path.parent, ignore_errors=True)
+
+# %% [markdown]
+# or save only to disk but not to memory:
+
+# %%
+memory={}
+run_cell_and_cache (
+    cell,
+    save_disk=True,
+    output_path=output_path,
+    memory=memory,
+    memory_key="previous_sum",
+);
+
+# %%
+assert "previous_sum" not in memory
+assert output_path.exists()
+
+# %% [markdown]
+# It doesn't save into disk if loaded from disk...
+
+# %%
+# run 2+8 computation
+_=run_cell_and_cache (cell="2+8", load_disk=True, save_disk=True, output_path=output_path )
+
+# check that saved capture is still 7
+output=joblib.load (output_path)
+assert len(output.outputs)==1 and output.outputs[0].data["text/plain"]=="7"
+
+# %% [markdown]
+# But it does save if not loaded, even if the output existed before
+
+# %%
+# run 2+8 computation
+_=run_cell_and_cache (cell="2+8", save_disk=True, output_path=output_path )
+
+# check that saved capture is 10
+output=joblib.load (output_path)
+assert len(output.outputs)==1 and output.outputs[0].data["text/plain"]=="10"
+
+# clean results
+shutil.rmtree (output_path.parent, ignore_errors=True)
+
+
+# %% [markdown]
+# ::: {.content-hidden}
+# ## FunctionProcessor
+# :::
+
+# %%
+#|export
 class FunctionProcessor(Bunch):
     """
     Function processor.
@@ -1005,7 +1216,59 @@ for k, v in variables_to_insert.items():
         )
 
 
-# %% ../../nbs/cell2func.ipynb 51
+
+# %%
+# Trick used for forcing FunctionProcessor class be the same as the one imported from cell2func
+CurrentFunctionProcessor=FunctionProcessor
+import nbmodular.core.cell2func as cf
+cf.FunctionProcessor = CurrentFunctionProcessor
+
+# %% [markdown]
+# ### Example
+
+# %%
+cell_captures_path_to_folder=Path('.cell_captures/core/cell2func')
+fp=FunctionProcessor (
+    name="myf", 
+    cell_processor=Bunch(cell_captures_path_to_folder=cell_captures_path_to_folder),
+    save_capture_disk=True,
+)
+fp.run_cell_and_cache ("1+3")
+cell_captures_path_to_file = cell_captures_path_to_folder / f"{fp.name}.pk"
+assert cell_captures_path_to_file.exists()
+output = joblib.load (cell_captures_path_to_file)
+assert len(output.outputs)==1 and output.outputs[0].data["text/plain"]=="4"
+# clean
+shutil.rmtree (cell_captures_path_to_folder, ignore_errors=True)
+
+# %%
+# Set attributes in fp object that are used by the method
+# `run_code_and_store_its_local_values`:
+logger=logging.getLogger("testing_function_processor_logger")
+fp.update(previous_values={}, current_values={}, logger=logger)
+
+# Call the method without and with code:
+fp.run_code_and_store_its_local_values("previous_values", code="", store_values=True)
+fp.run_code_and_store_its_local_values("current_values", code="1+3\n", store_values=True)
+
+# Check results:
+assert cell_captures_path_to_file.exists()
+output = joblib.load (cell_captures_path_to_file)
+assert len(output.outputs)==1 and output.outputs[0].data["text/plain"]=="4"
+# clean
+shutil.rmtree (cell_captures_path_to_folder, ignore_errors=True)
+
+
+# %% [markdown]
+# ::: {.content-hidden}
+# ## CellProcessor
+# :::
+
+# %% [markdown]
+# ### update_cell_code
+
+# %%
+#| export
 def update_cell_code(cell, defined=False):
     original_code = ""
     for line in cell.splitlines():
@@ -1026,7 +1289,12 @@ def update_cell_code(cell, defined=False):
     return cell
 
 
-# %% ../../nbs/cell2func.ipynb 53
+
+# %% [markdown]
+# ### add_function_to_list
+
+# %%
+#|export
 def add_function_to_list(function, function_list, idx=None, position=None):
     if idx is None:
         function_list.append(function)
@@ -1049,7 +1317,15 @@ def add_function_to_list(function, function_list, idx=None, position=None):
     return function_list
 
 
-# %% ../../nbs/cell2func.ipynb 56
+
+# %% [markdown]
+# ### get_args_and_defaults_from_function_in_cell
+
+# %% [markdown]
+# #### get_args_and_defaults
+
+# %%
+#| export
 def get_args_and_defaults(list_args, list_defaults):
     if len(list_defaults) == 0:
         args_without_defaults = [arg.arg for arg in list_args]
@@ -1092,7 +1368,12 @@ def get_args_and_defaults(list_args, list_defaults):
     return args_without_defaults, args_with_defaults, default_values
 
 
-# %% ../../nbs/cell2func.ipynb 58
+
+# %% [markdown]
+# #### get_args_and_defaults_from_function_in_cell
+
+# %%
+#| export
 def get_args_and_defaults_from_ast(root):
     args_without_defaults, args_with_defaults1, default_values1 = get_args_and_defaults(
         root.body[0].args.posonlyargs + root.body[0].args.args,
@@ -1116,7 +1397,12 @@ def get_args_and_defaults_from_function_in_cell():
     return get_args_and_defaults_from_ast(root)
 
 
-# %% ../../nbs/cell2func.ipynb 60
+
+# %% [markdown]
+# ### derive_paths
+
+# %%
+#| export
 def derive_paths(
     original_path: Path,
     folder: str,
@@ -1173,7 +1459,32 @@ def derive_paths(
     cell_processor.path_to_code_cells_file.parent.mkdir(parents=True, exist_ok=True)
 
 
-# %% ../../nbs/cell2func.ipynb 64
+
+# %% [markdown]
+# #### Example
+
+# %%
+cell_processor=Bunch()
+derive_paths (
+    original_path=Path("root/folder_with_nb/subfolder/myfile.ipynb"),
+    folder="folder_with_nb",
+    lib_folder="mylib",
+    file_name="hello.py",
+    cell_processor=cell_processor,
+    code_cells_path=Path(".nbmodular"),
+)
+assert cell_processor=={'file_path': Path('root/mylib/subfolder/hello.py'),
+ 'test_file_path': Path('root/tests/subfolder/test_hello.py'),
+ 'cell_captures_path_to_folder': Path('root/.cell_captures/subfolder/hello'),
+ 'path_to_code_cells_file': Path('root/.nbmodular/subfolder/hello.pk'),
+ 'code_cells_path': Path('root/.nbmodular/subfolder')}
+
+
+# %% [markdown]
+# ### CellProcessor
+
+# %%
+# | export
 class CellProcessor:
     """
     Processes the cell's code according to the magic command.
@@ -3054,7 +3365,82 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
         self.run_io(io_action="save", **kwargs)
 
 
-# %% ../../nbs/cell2func.ipynb 73
+
+# %% [markdown]
+# #### Examples of usage
+#
+# > See README.md for more examples
+
+# %%
+cp = CellProcessor()
+cp.set_file_path ("nbmodular/core/cell2func.py")
+
+assert cp.file_path==Path('nbmodular/core/cell2func.py')
+assert cp.test_file_path==Path('tests/core/test_cell2func.py')
+assert cp.cell_captures_path_to_folder==Path('.cell_captures/core/cell2func')
+assert cp.path_to_code_cells_file==Path('.nbmodular/core/cell2func.pk')
+assert cp.code_cells_path==Path('.nbmodular/core')
+
+# %%
+function_name, kwargs = cp.parse_signature ("example")
+assert kwargs['write'] is False
+function_name, kwargs = cp.parse_signature ("example --write")
+assert kwargs['write'] is True
+
+# %%
+
+# %%
+# run simple computation
+cell=(
+"""
+1+2
+"""
+)
+cp.process_function_call ("plus_1_2 --save-capture-disk", cell)
+
+
+#check outputs
+cell_captures_path_to_file = cell_captures_path_to_folder / "plus_1_2.pk"
+assert cell_captures_path_to_file.exists()
+output = joblib.load (cell_captures_path_to_file)
+assert len(output.outputs)==1 and output.outputs[0].data["text/plain"]=="3"
+
+# check that the following code is not run
+# because a previous run has been cached in disk
+should_not_run_cell=(
+"""
+raise RuntimeError ("should not run")
+"""
+)
+cp.process_function_call ("plus_1_2 --load-capture-disk", should_not_run_cell)
+
+# clean
+shutil.rmtree (cell_captures_path_to_folder, ignore_errors=True)
+
+# %% [markdown]
+# We can also use cache the output to and load it from memory:
+
+# %%
+cell=(
+"""
+4+5
+"""
+)
+cp.process_function_call ("plus_4_5 --save-capture-memory", cell)
+output = cp.function_info["plus_4_5"].capture
+assert len(output.outputs)==1 and output.outputs[0].data["text/plain"]=="9"
+
+# load it: we make sure the cell doesn't run:
+cp.process_function_call ("plus_4_5 --load-capture-memory", should_not_run_cell)
+
+
+# %% [markdown]
+# ::: {.content-hidden}
+# ## CellProcessorMagic
+# :::
+
+# %%
+#| export
 @magics_class
 class CellProcessorMagic(Magics):
     """
@@ -3240,7 +3626,15 @@ class CellProcessorMagic(Magics):
         self.processor.set_value(attr, value)
 
 
-# %% ../../nbs/cell2func.ipynb 75
+
+# %% [markdown]
+# ::: {.content-hidden}
+# ## load_ipython_extension
+# :::
+
+# %%
+#| export
+#| hide
 def load_ipython_extension(ipython):
     """
     This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
@@ -3249,7 +3643,20 @@ def load_ipython_extension(ipython):
     ipython.register_magics(magics)
 
 
-# %% ../../nbs/cell2func.ipynb 79
+
+# %% [markdown]
+# ## managing and sharing variables with notebook
+
+# %% [markdown]
+# ### 1. From function to notebook
+
+# %% [markdown]
+# ::: {.content-hidden}
+# #### retrieve_function_values_through_disk
+# :::
+
+# %%
+#| export
 def retrieve_function_values_through_disk(filename="variable_values.pk"):
     """
     Store `variables` in disk
@@ -3265,7 +3672,14 @@ def retrieve_function_values_through_disk(filename="variable_values.pk"):
     return variable_values
 
 
-# %% ../../nbs/cell2func.ipynb 81
+
+# %% [markdown]
+# ::: {.content-hidden}
+# #### retrieve_function_values_through_memory
+# :::
+
+# %%
+#| export
 def retrieve_function_values_through_memory(field):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -3298,7 +3712,14 @@ def retrieve_function_values_through_memory(field):
     return None
 
 
-# %% ../../nbs/cell2func.ipynb 83
+
+# %% [markdown]
+# ::: {.content-hidden}
+# #### copy_values_in_nb
+# :::
+
+# %%
+#| export
 def copy_values_and_run_code_in_nb(self, field="shared_variables", code=""):
     """
     Makes desired variables available in notebook context.
@@ -3333,7 +3754,9 @@ os.remove ('variable_values.pk')
         get_ipython().run_cell(code_to_run2)
 
 
-# %% ../../nbs/cell2func.ipynb 84
+
+# %%
+#| export
 def copy_values_in_nb(self, field="shared_variables"):
     copy_values_code = """
 for k, v in variables_to_insert.items():
@@ -3345,7 +3768,9 @@ for k, v in variables_to_insert.items():
     copy_values_and_run_code_in_nb(self, field=field, code=copy_values_code)
 
 
-# %% ../../nbs/cell2func.ipynb 85
+
+# %%
+#| export
 def transfer_variables_to_nb(**kwargs):
     communicator = Bunch()
     communicator.shared_variables = kwargs
@@ -3353,7 +3778,31 @@ def transfer_variables_to_nb(**kwargs):
     copy_values_in_nb(communicator)
 
 
-# %% ../../nbs/cell2func.ipynb 91
+
+# %% [markdown]
+# #### Example use
+
+# %%
+def transfer_value_vector():
+    vector = ["hello", 1]
+    transfer_variables_to_nb(vector=vector)
+
+
+# %%
+transfer_value_vector()
+assert vector == ["hello", 1]
+
+
+# %% [markdown]
+# ### 2. From notebook to function
+
+# %% [markdown]
+# ::: {.content-hidden}
+# #### retrieve_nb_locals_through_disk
+# :::
+
+# %%
+#| export
 def retrieve_nb_locals_through_disk(variable_values, filename="variable_values.pk"):
     """
     Store `variables` in disk
@@ -3368,7 +3817,14 @@ def retrieve_nb_locals_through_disk(variable_values, filename="variable_values.p
     joblib.dump(variable_values, filename)
 
 
-# %% ../../nbs/cell2func.ipynb 93
+
+# %% [markdown]
+# ::: {.content-hidden}
+# #### retrieve_nb_locals_through_memory
+# :::
+
+# %%
+#| export
 def retrieve_nb_locals_through_memory(field, variable_values):
     """
     Store `variables` in dictionary entry `self[field]`
@@ -3396,12 +3852,24 @@ def retrieve_nb_locals_through_memory(field, variable_values):
         # del variable_values['created_current_values']
 
 
-# %% ../../nbs/cell2func.ipynb 95
+
+# %% [markdown]
+# ### remove_name_from_nb
+
+# %%
+#| export
 def remove_name_from_nb(name):
     get_ipython().run_cell(f'exec("del {name}")')
 
 
-# %% ../../nbs/cell2func.ipynb 97
+
+# %% [markdown]
+# ::: {.content-hidden}
+# ### acceptable_variable
+# :::
+
+# %%
+#|export
 def acceptable_variable(variable_values, k):
     return (
         not k.startswith("_")
@@ -3412,7 +3880,12 @@ def acceptable_variable(variable_values, k):
     )
 
 
-# %% ../../nbs/cell2func.ipynb 99
+
+# %% [markdown]
+# ## store_variables
+
+# %%
+#| export
 def store_variables(
     path_variables,
     locals_,

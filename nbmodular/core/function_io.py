@@ -1,10 +1,28 @@
+# ---
+# jupyter:
+#   jupytext:
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.2
+#   kernelspec:
+#     display_name: python3
+#     language: python
+#     name: python3
+# ---
 
+# %% [markdown]
+# # function_io
+#
+# > I/O functions used for loading / saving results and local variables from function.
 
-# %% auto 0
-__all__ = ['load_df', 'save_df', 'load_pickle', 'save_pickle', 'load_csv', 'save_csv', 'load_parquet', 'save_parquet',
-           'load_structured', 'save_structured', 'load', 'save']
+# %%
+#| default_exp core.function_io
 
-# %% ../../nbs/function_io.ipynb 2
+# %%
+#| export
 import pdb
 import joblib
 import os
@@ -32,7 +50,12 @@ from sklearn.utils import Bunch
 from fastcore.all import argnames
 import nbdev
 
-# %% ../../nbs/function_io.ipynb 4
+
+# %% [markdown]
+# ## df
+
+# %%
+#| export
 def load_df (path, **kwargs):
     path=Path(path)
     path_without_extension=path.parent / path.name[:-len('.df')]
@@ -46,7 +69,9 @@ def load_df (path, **kwargs):
         raise RuntimeError (f'File {path} not found')
     return df
 
-# %% ../../nbs/function_io.ipynb 5
+
+# %%
+#| export
 def save_df (df, path, **kwargs):
     path=Path(path)
     path.parent.mkdir (parents=True, exist_ok=True)
@@ -65,31 +90,57 @@ def save_df (df, path, **kwargs):
     with open (path, 'wt') as f: 
         f.write (extension)
 
-# %% ../../nbs/function_io.ipynb 7
+
+# %% [markdown]
+# ## pickle
+
+# %%
+#| export
 def load_pickle (path, **kwargs):
     return joblib.load (path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 8
+
+# %%
+#| export
 def save_pickle (data, path, **kwargs):
     joblib.dump (data, path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 10
+
+# %% [markdown]
+# ## csv
+
+# %%
+#| export
 def load_csv (path, **kwargs):
     return pd.read_csv (path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 11
+
+# %%
+#| export
 def save_csv (df, path, **kwargs):
     df.to_csv (path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 13
+
+# %% [markdown]
+# ## parquet
+
+# %%
+#| export
 def load_parquet (path, **kwargs):
     return pd.read_parquet (path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 14
+
+# %%
+#| export
 def save_parquet (df, path, **kwargs):
     df.to_parquet (path, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 16
+
+# %% [markdown]
+# ## structured
+
+# %%
+#| export
 def _load_structured (structure, io_type_load_args={}):
     if structure['single']:
         io_type = structure['io_type']
@@ -132,7 +183,9 @@ def load_structured (path, **kwargs):
         structure = json.load (f)
     return _load_structured (structure)
 
-# %% ../../nbs/function_io.ipynb 17
+
+# %%
+#| export
 def _is_inhomogeneous (data, max_length=100, types=[pd.DataFrame]):
     inhomogeneous=False
     try:
@@ -236,7 +289,12 @@ def save_structured (
     with open (path / 'structure.json', 'wt') as f:
         json.dump (structure, f, indent=4)
 
-# %% ../../nbs/function_io.ipynb 19
+
+# %% [markdown]
+# ## load
+
+# %%
+#| export
 def load (
     path_variables,
     io_type='pickle',
@@ -245,7 +303,12 @@ def load (
     load_function = eval (f'load_{io_type}')
     return load_function (path_variables, **kwargs)
 
-# %% ../../nbs/function_io.ipynb 21
+
+# %% [markdown]
+# ## save
+
+# %%
+#| export
 def save (
     data,
     path_variables,
@@ -255,3 +318,34 @@ def save (
     Path(path_variables).parent.mkdir (parents=True, exist_ok=True)
     save_function = eval (f'save_{io_type}')
     save_function (data, path_variables, **kwargs)
+
+
+# %% [markdown]
+# ## Example usage structured data
+
+# %%
+data = [{
+        'numbers' :[1,2,3],
+        'table': pd.DataFrame ([[1,2],[3,4]], columns=['a','b'], index=['this','that']),
+        'vector': np.array ([10,20,30]),
+    },
+    pd.DataFrame ([[11,21,31],[31,41,51]], columns=['c','d','e'], index=['i0','i1']),
+    [1000,2000,3000],
+    pd.DataFrame ([[101,201],[301,401]], columns=['e','f']),
+]
+save_structured (data, 'test_structured')
+assert sorted(os.listdir('test_structured'))==['0', '1', '2', '3', 'structure.json']
+assert sorted(os.listdir('test_structured/0'))==sorted(['table', 'vector', 'numbers'])
+assert sorted(os.listdir('test_structured/0/table'))==sorted(['data.parquet', 'data.df'])
+assert os.listdir('test_structured/0/vector')==['data.pickle']
+assert os.listdir('test_structured/0/numbers')==['data.pickle']
+assert sorted(os.listdir('test_structured/1')) == sorted(['data.parquet', 'data.df'])
+assert os.listdir('test_structured/2')==['data.pickle']
+assert sorted(os.listdir('test_structured/3'))==sorted(['data.parquet', 'data.df'])
+data2 = load_structured ('test_structured')
+assert data2[0]['numbers']==data[0]['numbers']
+pd.testing.assert_frame_equal (data2[0]['table'], data[0]['table'])
+np.testing.assert_array_equal (data2[0]['vector'], data[0]['vector'])
+pd.testing.assert_frame_equal (data2[1], data[1])
+assert data2[2]==data[2]
+pd.testing.assert_frame_equal (data2[3], data[3])

@@ -1,12 +1,28 @@
+# ---
+# jupyter:
+#   jupytext:
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.2
+#   kernelspec:
+#     display_name: python3
+#     language: python
+#     name: python3
+# ---
 
+# %% [markdown]
+# # Export
+#
+# > Exporting to python module
 
-# %% auto 0
-__all__ = ['obtain_function_name_and_test_flag', 'transform_test_source_for_docs', 'replace_folder_in_path',
-           'set_paths_nb_processor', 'NbMagicProcessor', 'NbMagicExporter', 'nbm_export', 'nbm_export_all_paths',
-           'parse_argv_and_run_nbm_export_all_paths', 'nbm_export_cli', 'process_cell_for_nbm_update', 'nbm_update',
-           'nbm_update_all_paths', 'parse_argv_and_run_nbm_update_all_paths', 'nbm_update_cli']
+# %%
+# | default_exp sync.export
 
-# %% ../../nbs/export.ipynb 2
+# %%
+# |export
 # Standard
 import shlex
 import os
@@ -29,11 +45,27 @@ from execnb.nbio import mk_cell, read_nb, write_nb, NbCell
 from fastcore.all import globtastic
 
 # nbmodular
-from ..core.utils import set_log_level, get_config
+from nbmodular.core.utils import set_log_level, get_config
 import nbmodular.testing.utils as tst
-from ..core.cell2func import CellProcessor
+from nbmodular.core.cell2func import CellProcessor
 
-# %% ../../nbs/export.ipynb 5
+# %%
+# libraries used for tests
+# standard
+import shutil
+
+# ours
+from nbmodular.core.utils import cd_root
+import nbmodular.core.utils
+
+# %% [markdown]
+# ::: {.content-hidden}
+# ## obtain_function_name_and_test_flag
+# :::
+
+
+# %%
+# |export
 def obtain_function_name_and_test_flag(line, cell):
     root = ast.parse(cell)
     name = [x.name for x in ast.walk(root) if isinstance(x, ast.FunctionDef)]
@@ -52,7 +84,43 @@ def obtain_function_name_and_test_flag(line, cell):
 
     return function_name, is_test
 
-# %% ../../nbs/export.ipynb 9
+
+# %% [markdown]
+# ### Example usage
+
+# %%
+# first example: function name as part of function definition
+line = "%%function"
+source = "def hello():\n    print ('hello')"
+name, is_test = obtain_function_name_and_test_flag(line, source)
+assert name == "hello" and not is_test
+
+# second example: with test flag
+line = "%%function --test"
+source = "def hello():\n    print ('hello')"
+name, is_test = obtain_function_name_and_test_flag(line, source)
+assert name == "hello" and is_test
+
+
+# third example: function name as part of line magic
+line = "%%function hello"
+source = "print ('hello')"
+name, is_test = obtain_function_name_and_test_flag(line, source)
+assert name == "hello" and not is_test
+
+# fourth example: with test flag
+line = "%%function hello --test"
+source = "print ('hello')"
+name, is_test = obtain_function_name_and_test_flag(line, source)
+assert name == "hello" and is_test
+
+
+# %% [markdown]
+# ## transform_test_source_for_docs
+
+
+# %%
+# |export
 def transform_test_source_for_docs(source: str, idx: int, tab_size: int) -> str:
     """Transforms cell code in order to be exported to test notebook.
 
@@ -85,7 +153,29 @@ def transform_test_source_for_docs(source: str, idx: int, tab_size: int) -> str:
         )
     return "\n".join(transformed_lines)
 
-# %% ../../nbs/export.ipynb 14
+
+# %% [markdown]
+# ### Example usage
+
+# %%
+actual = transform_test_source_for_docs(
+    source="def one_plus_one():\n    a=1+1\n    print (a)\n",
+    idx=0,
+    tab_size=4,
+)
+expected = "a=1+1\nprint (a)"
+assert actual == expected
+
+
+# %% [markdown]
+# ## set_paths_nb_processor
+
+# %% [markdown]
+# ### replace_folder_in_path
+
+
+# %%
+# | export
 from pathlib import Path
 
 
@@ -121,7 +211,24 @@ def replace_folder_in_path(
         new_path = path
     return new_path
 
-# %% ../../nbs/export.ipynb 18
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+assert replace_folder_in_path(
+    Path("/home/jaumeamllo/workspace/mine/nbmodular/test_data/nbm/test_nbs/nb.ipynb"),
+    "nbm",
+    "nbs",
+) == Path("/home/jaumeamllo/workspace/mine/nbmodular/test_data/nbs/test_nbs/nb.ipynb")
+
+
+# %% [markdown]
+# ### set_paths_nb_processor
+
+
+# %%
+# | export
 def set_paths_nb_processor(
     nb_processor: "NbMagicExporter",
     path: None,
@@ -221,7 +328,79 @@ def set_paths_nb_processor(
         + f"test_{nb_processor.file_name_without_extension}"
     )
 
-# %% ../../nbs/export.ipynb 27
+
+# %% [markdown]
+# #### Example usage
+
+# %% [markdown]
+# ##### Set up to run example
+
+# %%
+# firt cd to the root of the current repo
+cd_root()
+current_root = os.getcwd()
+# create and cd to new root
+new_root = tst.create_and_cd_to_new_root_folder("test_set_paths")
+
+# %% [markdown]
+# ##### Example usage
+
+# %%
+# dummy nb_processor
+nb_processor = Bunch()
+
+# example call
+set_paths_nb_processor(
+    nb_processor,
+    new_root / "nbm/test_nbs/nb.ipynb",
+)
+
+# %% [markdown]
+# ##### check result
+
+# %%
+actual = nb_processor
+expected = Bunch(
+    **{
+        "path": new_root / "nbm/test_nbs/nb.ipynb",
+        "file_name_without_extension": "nb",
+        "root_path": new_root,
+        "nbs_path": "nbs",
+        "nbm_path": "nbm",
+        "lib_path": "nbmodular",
+        "dest_nb_path": new_root / "nbs/test_nbs/nb.ipynb",
+        "test_dest_nb_path": new_root / "nbs/test_nbs/test_nb.ipynb",
+        "tmp_nb_path": new_root / ".nbs/test_nbs/nb.ipynb",
+        "duplicate_tmp_path": new_root / ".nbs/test_nbs/_nb.ipynb",
+        "tmp_dest_nb_path": new_root / ".nbs/test_nbs/nb.ipynb",
+        "tmp_test_dest_nb_path": new_root / ".nbs/test_nbs/test_nb.ipynb",
+        "duplicate_dest_nb_path": new_root / Path("nbs/test_nbs/_nb.ipynb"),
+        "dest_python_path": new_root / Path("nbmodular/test_nbs/nb.py"),
+        "test_dest_python_path": new_root / Path("nbmodular/tests/test_nbs/test_nb.py"),
+        "dest_module_path": "test_nbs.nb",
+        "test_dest_module_path": "tests.test_nbs.test_nb",
+    }
+)
+assert actual == expected
+
+# check that new root folders and file have been created
+new_folders = [new_root / folder for folder in [".nbs", "nbmodular", "nbs"]]
+new_file = new_root / "settings.ini"
+assert new_file.exists() and new_file.is_file()
+for new_folder in new_folders:
+    assert new_folder.exists() and new_folder.is_dir()
+
+# clean
+os.chdir(current_root)
+shutil.rmtree(new_root)
+
+
+# %% [markdown]
+# ## NbMagicProcessor
+
+
+# %%
+# | export
 class NbMagicProcessor(Processor):
     """
     Processor class that stores information and code for cells using the magic
@@ -276,7 +455,51 @@ class NbMagicProcessor(Processor):
                     is_class=command == "class",
                 )
 
-# %% ../../nbs/export.ipynb 33
+
+# %% [markdown]
+# ### Usage example
+
+# %%
+# Run example
+path = "no_nb"
+nb = tst.text2nb(tst.nb1)
+nb_magic_processor = NbMagicProcessor(
+    path=path,
+    nb=nb,
+)
+NBProcessor(path, nb_magic_processor, rm_directives=False, nb=nb).process()
+
+# %% [markdown]
+# #### Checks
+
+# %%
+# Check that the processor has stored information about
+# the %%functions in the notebook
+stored_functions = sorted(nb_magic_processor.cell_processor.function_info)
+assert stored_functions == ["default_pipeline", "hello"]
+assert len(nb_magic_processor.cell_processor.function_list) == len(stored_functions) - 1
+assert nb_magic_processor.cell_processor.test_function_info[
+    "one_plus_one"
+].created_variables == ["a"]
+
+# ... and about the test functions (those with flag test)
+stored_test_functions = sorted(nb_magic_processor.cell_processor.test_function_info)
+assert stored_test_functions == ["default_test_pipeline", "one_plus_one"]
+assert (
+    len(nb_magic_processor.cell_processor.test_function_list)
+    == len(stored_test_functions) - 1
+)
+
+# check that functions were not run and therefore the local variables are empty
+assert nb_magic_processor.cell_processor.test_function_info["one_plus_one"].a is None
+
+
+# %% [markdown]
+# ## NbMagicExporter
+
+
+# %%
+# | export
 class NbMagicExporter(Processor):
     """
     Processor class for exporting notebooks with magic commands.
@@ -455,7 +678,13 @@ class NbMagicExporter(Processor):
         # step 2 (end) in diagram
         self.duplicate_tmp_path.rename(self.dest_nb_path)
 
-# %% ../../nbs/export.ipynb 35
+
+# %% [markdown]
+# ## nbm_export
+
+
+# %%
+# | export
 def nbm_export(
     path,
     **kwargs,
@@ -469,7 +698,135 @@ def nbm_export(
     )
     NBProcessor(path, processor, rm_directives=False, nb=nb).process()
 
-# %% ../../nbs/export.ipynb 44
+
+# %% [markdown]
+# ### Example usage
+
+# %% [markdown]
+# #### Set up before running example
+
+# %%
+new_root = "test_nbm_export"
+nb_folder = "nbm"
+nb_path = "mixed/mixed_cells.ipynb"
+# Create notebook in "new repo", and cd to it
+current_root, nb_paths = tst.create_test_content(
+    nbs=tst.mixed_nb1,
+    nb_paths=nb_path,
+    nb_folder=nb_folder,
+    new_root=new_root,
+)
+
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+#
+nbm_export(path=f"{nb_folder}/{nb_path}")
+
+
+# %% [markdown]
+# #### checks
+
+
+# %%
+
+# check original content
+# nbs, py_modules = tst.read_content_in_repo ([nb_path], "./", print_as_list=True)
+expected_nbs = [
+    # nbm/mixed/mixed_cells.ipynb
+    """
+[code]
+%%function
+def first():
+    pass
+
+[markdown]
+comment
+
+[code]
+%%function --test
+def second ():
+    pass
+""",
+    # nbs/mixed/mixed_cells.ipynb
+    """
+[code]
+#|export
+def first():
+    pass
+
+[markdown]
+comment
+
+[code]
+pass
+""",
+    # .nbs/mixed/mixed_cells.ipynb
+    """
+[code]
+#|default_exp mixed.mixed_cells
+
+[code]
+#|export
+#@@function
+def first():
+    pass
+""",
+    # .nbs/mixed/test_mixed_cells.ipynb
+    """
+[code]
+#|default_exp tests.mixed.test_mixed_cells
+
+[code]
+#|export
+#@@function --test
+def second():
+    pass
+""",
+]
+expected_py_modules = [
+    # nbmodular/mixed/mixed_cells.py
+    """
+# @%% auto 0
+__all__ = ['first']
+
+# @%% ../../nbs/mixed/mixed_cells.ipynb 1
+
+#@@function
+def first():
+    pass
+""",
+    # nbmodular/tests/mixed/test_mixed_cells.py
+    """
+# @%% auto 0
+__all__ = ['second']
+
+# @%% ../../../nbs/mixed/test_mixed_cells.ipynb 1
+#@@function --test
+def second():
+    pass
+""",
+]
+
+tst.check_test_repo_content(
+    [nb_path],
+    expected_nbs=expected_nbs,
+    expected_py_modules=expected_py_modules,
+    current_root=current_root,
+    new_root=new_root,
+    clean=False,
+    keep_cwd=True,
+)
+
+
+# %% [markdown]
+# ## nbm_export_cli
+
+
+# %%
+# | export
 def nbm_export_all_paths(path):
     files = nbglob(path=path, as_path=True).sorted("name")
     for f in files:
@@ -488,7 +845,51 @@ def parse_argv_and_run_nbm_export_all_paths(argv: List[str]):
 def nbm_export_cli():
     parse_argv_and_run_nbm_export_all_paths(sys.argv)
 
-# %% ../../nbs/export.ipynb 54
+
+# %% [markdown]
+# ### Example usage
+
+# %% [markdown]
+# #### Example set-up
+
+# %%
+new_root = "test_parse_argv_and_run_nbm_export_all_paths"
+nb_folder = "nbm"
+nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
+current_root, nb_paths = tst.create_test_content(
+    nbs=[tst.nb1, tst.nb2],
+    nb_paths=nb_paths,
+    nb_folder=nb_folder,
+    new_root=new_root,
+)
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+parse_argv_and_run_nbm_export_all_paths(["--path", os.getcwd()])
+
+# %% [markdown]
+# #### Checks & Cleaning
+
+# %%
+# check original content
+# nbs, py_modules = tst.read_content_in_repo (nb_paths, "./", print_as_list=True)
+
+
+# %%
+# clean
+shutil.rmtree(new_root, ignore_errors=True)
+
+
+# %% [markdown]
+# ::: {.content-hidden}
+# ## process_cell_for_nbm_update
+# :::
+
+
+# %%
+# |export
 def process_cell_for_nbm_update(cell: NbCell):
     source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
     found_directive = False
@@ -525,7 +926,13 @@ def process_cell_for_nbm_update(cell: NbCell):
         raise ValueError("Magic line not found at beginning of cell")
     cell.source = "\n".join([line] + source_lines[line_number + 1 :])
 
-# %% ../../nbs/export.ipynb 56
+
+# %% [markdown]
+# ## nbm_update
+
+
+# %%
+# | export
 def nbm_update(
     path,
     code_cells_path=".nbmodular",
@@ -582,7 +989,47 @@ def nbm_update(
     original_nb.cells = nb_processor.cells
     write_nb(original_nb, path)
 
-# %% ../../nbs/export.ipynb 66
+
+# %% [markdown]
+# ### Example usage
+
+# %% [markdown]
+# #### Set up before running example
+
+# %%
+os.makedirs("nbmodular/test_nbs", exist_ok=True)
+os.makedirs("nbmodular/tests/test_nbs", exist_ok=True)
+shutil.copy("test_data/nb.py", "nbmodular/test_nbs/nb.py")
+shutil.copy("test_data/test_nb.py", "nbmodular/tests/test_nbs/test_nb.py")
+shutil.copy("nbm/test_nbs/nb.ipynb", "nbm/test_nbs/_nb.ipynb")
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+nbm_update(path)
+
+# %% [markdown]
+# #### Checks
+
+# %%
+[c["source"] for c in read_nb(path).cells]
+assert [c["source"] for c in read_nb(path).cells] == [
+    "%%function\ndef first():\n    x = 3 + 1",
+    "comment",
+    '%%function --test\ndef second():\n    print("hello")',
+]
+
+# %%
+shutil.move("nbm/test_nbs/_nb.ipynb", "nbm/test_nbs/nb.ipynb")
+
+
+# %% [markdown]
+# ## nbm_update_cli
+
+
+# %%
+# | export
 def nbm_update_all_paths(args):
     files = nbglob(path=args.path, as_path=True).sorted("name")
     cfg = get_config()
@@ -606,3 +1053,101 @@ def parse_argv_and_run_nbm_update_all_paths(argv: List[str]):
 
 def nbm_update_cli():
     parse_argv_and_run_nbm_update_all_paths(sys.argv)
+
+
+# %% [markdown]
+# ### Example usage
+
+# %% [markdown]
+# #### Example set-up
+
+# %%
+# we start from the root folder of our repo
+cd_root()
+
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+parse_argv_and_run_nbm_export_all_paths(["--path", os.getcwd()])
+
+# %% [markdown]
+# #### Checks & Cleaning
+
+# %%
+nb_paths = [
+    Path(f"{new_root}/nbm/first_folder/first.ipynb"),
+    Path(f"{new_root}/nbm/second_folder/second.ipynb"),
+    Path(f"{new_root}/.nbs/first_folder/first.ipynb"),
+    Path(f"{new_root}/.nbs/first_folder/test_first.ipynb"),
+    Path(f"{new_root}/.nbs/second_folder/second.ipynb"),
+    Path(f"{new_root}/.nbs/second_folder/test_second.ipynb"),
+    Path(f"{new_root}/nbs/first_folder/first.ipynb"),
+    Path(f"{new_root}/nbs/second_folder/second.ipynb"),
+]
+py_paths = [
+    Path(f"{new_root}/nbmodular/first_folder/first.py"),
+    Path(f"{new_root}/nbmodular/second_folder/second.py"),
+    Path(f"{new_root}/nbmodular/tests/first_folder/test_first.py"),
+    Path(f"{new_root}/nbmodular/tests/second_folder/test_second.py"),
+]
+nbs = []
+for nb_path in nb_paths:
+    assert nb_path.exists()
+    nbs.append(read_nb(nb_path))
+
+assert [[c["source"] for c in nb.cells] for nb in nbs] == [
+    [
+        "## First notebook",
+        "%%function hello\nprint ('hello')",
+        "%%function one_plus_one --test\na=1+1\nprint (a)",
+    ],
+    [
+        "## Second notebook",
+        "%%function bye\nprint ('bye')",
+        "%%function two_plus_two --test\na=2+2\nprint (a)",
+    ],
+    [
+        "#|default_exp first_folder.first",
+        "#|export\n#@@function hello\ndef hello():\n    print ('hello')\n",
+    ],
+    [
+        "#|default_exp tests.first_folder.test_first",
+        "#|export\n#@@function one_plus_one --test\ndef one_plus_one():\n    a=1+1\n    print (a)\n",
+    ],
+    [
+        "#|default_exp second_folder.second",
+        "#|export\n#@@function bye\ndef bye():\n    print ('bye')\n",
+    ],
+    [
+        "#|default_exp tests.second_folder.test_second",
+        "#|export\n#@@function two_plus_two --test\ndef two_plus_two():\n    a=2+2\n    print (a)\n",
+    ],
+    [
+        "## First notebook",
+        "#|export\ndef hello():\n    print ('hello')\n",
+        "a=1+1\nprint (a)",
+    ],
+    [
+        "## Second notebook",
+        "#|export\ndef bye():\n    print ('bye')\n",
+        "a=2+2\nprint (a)",
+    ],
+]
+pymods = []
+for py_path in py_paths:
+    assert py_path.exists()
+    pymods.append(open(py_path, "rt").read())
+
+
+assert pymods == [
+    "\n\n# %% auto 0\n__all__ = ['hello']\n\n# %% ../../nbs/first_folder/first.ipynb 1\n#@@function hello\ndef hello():\n    print ('hello')\n\n",
+    "\n\n# %% auto 0\n__all__ = ['bye']\n\n# %% ../../nbs/second_folder/second.ipynb 1\n#@@function bye\ndef bye():\n    print ('bye')\n\n",
+    "\n\n# %% auto 0\n__all__ = ['one_plus_one']\n\n# %% ../../../nbs/first_folder/test_first.ipynb 1\n#@@function one_plus_one --test\ndef one_plus_one():\n    a=1+1\n    print (a)\n\n",
+    "\n\n# %% auto 0\n__all__ = ['two_plus_two']\n\n# %% ../../../nbs/second_folder/test_second.ipynb 1\n#@@function two_plus_two --test\ndef two_plus_two():\n    a=2+2\n    print (a)\n\n",
+]
+
+# %%
+# clean
+shutil.rmtree(new_root, ignore_errors=True)

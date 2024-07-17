@@ -1,3 +1,0 @@
-[formats]
-"nbs/" = "ipynb"
-"jupytext/pycent" = "py:percent"
