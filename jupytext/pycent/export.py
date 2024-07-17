@@ -792,6 +792,7 @@ expected_py_modules = [
 __all__ = ['first']
 
 # @%% ../../nbs/mixed/mixed_cells.ipynb 1
+
 #@@function
 def first():
     pass
@@ -851,86 +852,15 @@ def nbm_export_cli():
 # #### Example set-up
 
 # %%
-# we start from the root folder of our repo
-cd_root()
-
-current_root = os.getcwd()
-
-# then define a folder inside as the new root folder.
-# We will move to it before running our example
-new_root = "test_nbm_export_cli"
-
-# ******************************************************
-# Create two notebooks
-# ******************************************************
-
-# ------------------------------------
-# first notebook
-nb = make_nb_from_cell_list(
-    [
-        markdown_cell(
-            """
-## First notebook
-"""
-        ),
-        code_cell(
-            """
-%%function hello
-print ('hello')
-"""
-        ),
-        code_cell(
-            """
-%%function one_plus_one --test
-a=1+1
-print (a)
-"""
-        ),
-    ]
+new_root = "test_parse_argv_and_run_nbm_export_all_paths"
+nb_folder = "nbm"
+nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
+current_root, nb_paths = tst.create_test_content(
+    nbs=[tst.nb1, tst.nb2],
+    nb_paths=nb_paths,
+    nb_folder=nb_folder,
+    new_root=new_root,
 )
-
-nb_path = Path(new_root) / "nbm" / "first_folder" / "first.ipynb"
-nb_path.parent.mkdir(parents=True, exist_ok=True)
-write_nb(nb, nb_path)
-
-# ------------------------------------
-# second notebook
-nb = make_nb_from_cell_list(
-    [
-        markdown_cell(
-            """
-## Second notebook
-"""
-        ),
-        code_cell(
-            """
-%%function bye
-print ('bye')
-"""
-        ),
-        code_cell(
-            """
-%%function two_plus_two --test
-a=2+2
-print (a)
-"""
-        ),
-    ]
-)
-
-nb_path = Path(new_root) / "nbm" / "second_folder" / "second.ipynb"
-nb_path.parent.mkdir(parents=True, exist_ok=True)
-write_nb(nb, nb_path)
-
-# ******************************************************
-# final set-up
-# ******************************************************
-# # copy settings.ini in new folder => this will
-# be read by our get_config utility
-shutil.copy("settings.ini", new_root)
-
-# move to our new root folder
-os.chdir(new_root)
 
 # %% [markdown]
 # #### Example usage
@@ -942,77 +872,9 @@ parse_argv_and_run_nbm_export_all_paths(["--path", os.getcwd()])
 # #### Checks & Cleaning
 
 # %%
-nb_paths = [
-    Path(f"{new_root}/nbm/first_folder/first.ipynb"),
-    Path(f"{new_root}/nbm/second_folder/second.ipynb"),
-    Path(f"{new_root}/.nbs/first_folder/first.ipynb"),
-    Path(f"{new_root}/.nbs/first_folder/test_first.ipynb"),
-    Path(f"{new_root}/.nbs/second_folder/second.ipynb"),
-    Path(f"{new_root}/.nbs/second_folder/test_second.ipynb"),
-    Path(f"{new_root}/nbs/first_folder/first.ipynb"),
-    Path(f"{new_root}/nbs/second_folder/second.ipynb"),
-]
-py_paths = [
-    Path(f"{new_root}/nbmodular/first_folder/first.py"),
-    Path(f"{new_root}/nbmodular/second_folder/second.py"),
-    Path(f"{new_root}/nbmodular/tests/first_folder/test_first.py"),
-    Path(f"{new_root}/nbmodular/tests/second_folder/test_second.py"),
-]
-nbs = []
-for nb_path in nb_paths:
-    assert nb_path.exists()
-    nbs.append(read_nb(nb_path))
+# check original content
+# nbs, py_modules = tst.read_content_in_repo (nb_paths, "./", print_as_list=True)
 
-assert [[c["source"] for c in nb.cells] for nb in nbs] == [
-    [
-        "## First notebook",
-        "%%function hello\nprint ('hello')",
-        "%%function one_plus_one --test\na=1+1\nprint (a)",
-    ],
-    [
-        "## Second notebook",
-        "%%function bye\nprint ('bye')",
-        "%%function two_plus_two --test\na=2+2\nprint (a)",
-    ],
-    [
-        "#|default_exp first_folder.first",
-        "#|export\n#@@function hello\ndef hello():\n    print ('hello')\n",
-    ],
-    [
-        "#|default_exp tests.first_folder.test_first",
-        "#|export\n#@@function one_plus_one --test\ndef one_plus_one():\n    a=1+1\n    print (a)\n",
-    ],
-    [
-        "#|default_exp second_folder.second",
-        "#|export\n#@@function bye\ndef bye():\n    print ('bye')\n",
-    ],
-    [
-        "#|default_exp tests.second_folder.test_second",
-        "#|export\n#@@function two_plus_two --test\ndef two_plus_two():\n    a=2+2\n    print (a)\n",
-    ],
-    [
-        "## First notebook",
-        "#|export\ndef hello():\n    print ('hello')\n",
-        "a=1+1\nprint (a)",
-    ],
-    [
-        "## Second notebook",
-        "#|export\ndef bye():\n    print ('bye')\n",
-        "a=2+2\nprint (a)",
-    ],
-]
-pymods = []
-for py_path in py_paths:
-    assert py_path.exists()
-    pymods.append(open(py_path, "rt").read())
-
-
-assert pymods == [
-    "\n\n# %% auto 0\n__all__ = ['hello']\n\n# %% ../../nbs/first_folder/first.ipynb 1\n#@@function hello\ndef hello():\n    print ('hello')\n\n",
-    "\n\n# %% auto 0\n__all__ = ['bye']\n\n# %% ../../nbs/second_folder/second.ipynb 1\n#@@function bye\ndef bye():\n    print ('bye')\n\n",
-    "\n\n# %% auto 0\n__all__ = ['one_plus_one']\n\n# %% ../../../nbs/first_folder/test_first.ipynb 1\n#@@function one_plus_one --test\ndef one_plus_one():\n    a=1+1\n    print (a)\n\n",
-    "\n\n# %% auto 0\n__all__ = ['two_plus_two']\n\n# %% ../../../nbs/second_folder/test_second.ipynb 1\n#@@function two_plus_two --test\ndef two_plus_two():\n    a=2+2\n    print (a)\n\n",
-]
 
 # %%
 # clean
