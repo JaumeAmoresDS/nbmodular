@@ -21,7 +21,7 @@
 # Detects function inputs automatically and function outputs semi-automatically. In the latter case, hints are provided to the developer to refine the list of outputs per each cell.
 
 # %%
-#| default_exp core.cell2func
+#| default_exp cell2func
 
 # %%
 #| export
@@ -63,14 +63,14 @@ from fastcore.all import argnames
 import nbdev
 
 from nbmodular.core import function_io
-from nbmodular.core.utils import set_log_level, get_config
+from nbmodular.utils import set_log_level, get_config
 
 
 # %%
 # used for tests and examples
 import pytest
 import shutil
-from nbmodular.core.utils import cd_root
+from nbmodular.utils import cd_root
 
 # %%
 cd_root()
@@ -773,11 +773,11 @@ class FunctionProcessor(Bunch):
     ):
         """Runs code and stores local variables in field `field`of self"""
         code_to_run1 = f"""
-from nbmodular.core.cell2func import retrieve_nb_locals_through_memory
+from nbmodular.cell2func import retrieve_nb_locals_through_memory
 retrieve_nb_locals_through_memory ("{field}", locals ())
 """
         code_to_run2 = """
-from nbmodular.core.cell2func import retrieve_nb_locals_through_disk
+from nbmodular.cell2func import retrieve_nb_locals_through_disk
 retrieve_nb_locals_through_disk (locals ())
 """
         if code != "":
@@ -816,8 +816,8 @@ retrieve_nb_locals_through_disk (locals ())
         # pdb.no_set_trace()
         keys_update_code = f"""
 import joblib
-from nbmodular.core.cell2func import FunctionProcessor
-from nbmodular.core.cell2func import get_non_callable
+from nbmodular.cell2func import FunctionProcessor
+from nbmodular.cell2func import get_non_callable
 
 {self.name}_info = joblib.load ('function_processor.pk')
 {self.name}_info = FunctionProcessor (**{self.name}_info)
@@ -832,8 +832,8 @@ keys = joblib.load ('function_processor_keys.pk')
     def _create_function_info_object(self):
         info_object_code = f"""
 import joblib
-from nbmodular.core.cell2func import FunctionProcessor
-from nbmodular.core.cell2func import acceptable_variable
+from nbmodular.cell2func import FunctionProcessor
+from nbmodular.cell2func import acceptable_variable
 
 variable_values = locals()
 variable_values = {{k: variable_values[k] for k in variable_values if acceptable_variable(variable_values, k)}}
@@ -924,10 +924,10 @@ keys = joblib.load ('function_processor_keys.pk')
                 self.current_values = {k: None for k in self.created_variables}
         else:
             get_ipython().run_cell(
-                'from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("previous_variables", locals())'
+                'from nbmodular.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("previous_variables", locals())'
             )
             get_ipython().run_cell(
-                'from nbmodular.core.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("created_variables", locals())'
+                'from nbmodular.cell2func import get_non_callable_ipython\nget_non_callable_ipython ("created_variables", locals())'
             )
             self.previous_values = {k: None for k in self.previous_variables}
             self.current_values = {k: None for k in self.created_variables}
@@ -1072,7 +1072,7 @@ keys = joblib.load ('function_processor_keys.pk')
         io_locals,
         load_args,
     ):
-        store_variables_code = f'\nfrom nbmodular.core.cell2func import store_variables\nstore_variables ("{path_variables}", locals (), "{io_type}", {io_locals}, {load_args}, {self.return_values})'
+        store_variables_code = f'\nfrom nbmodular.cell2func import store_variables\nstore_variables ("{path_variables}", locals (), "{io_type}", {io_locals}, {load_args}, {self.return_values})'
         get_ipython().run_cell(store_variables_code)
 
     def get_cell_function_code(self, unique=True, first=False, last=False):
@@ -1175,7 +1175,7 @@ if load and path_variables.exists():
         code_with_tabs = "\n".join(code_with_tabs)
 
         code_to_run1 = f"""
-from nbmodular.core.cell2func import retrieve_function_values_through_memory
+from nbmodular.cell2func import retrieve_function_values_through_memory
 
 variables_to_insert = retrieve_function_values_through_memory ("{field}")
 if "retrieve_function_values_through_memory" in variables_to_insert:
@@ -1184,7 +1184,7 @@ if "retrieve_function_values_through_memory" in variables_to_insert:
 """
 
         code_to_run2 = f"""
-from nbmodular.core.cell2func import retrieve_function_values_through_disk
+from nbmodular.cell2func import retrieve_function_values_through_disk
 
 variables_to_insert = retrieve_function_values_through_disk ()
 {code}
@@ -1220,7 +1220,7 @@ for k, v in variables_to_insert.items():
 # %%
 # Trick used for forcing FunctionProcessor class be the same as the one imported from cell2func
 CurrentFunctionProcessor=FunctionProcessor
-import nbmodular.core.cell2func as cf
+import nbmodular.cell2func as cf
 cf.FunctionProcessor = CurrentFunctionProcessor
 
 # %% [markdown]
@@ -2304,7 +2304,7 @@ exec ("{self.last_class}.{method_name} = {method_name}")
     def _evaluate_kwargs_defaults(self, cell):
         joblib.dump(cell, "cell.pk")
         argument_initialization_code = f"""
-from nbmodular.core.cell2func import get_args_and_defaults_from_function_in_cell
+from nbmodular.cell2func import get_args_and_defaults_from_function_in_cell
 
 _, args_with_defaults, default_values = get_args_and_defaults_from_function_in_cell ()
 for arg, val in zip (args_with_defaults, default_values):
@@ -3637,7 +3637,7 @@ class CellProcessorMagic(Magics):
 #| hide
 def load_ipython_extension(ipython):
     """
-    This module can be loaded via `%load_ext core.cell2func` or be configured to be autoloaded by IPython at startup time.
+    This module can be loaded via `%load_ext cell2func` or be configured to be autoloaded by IPython at startup time.
     """
     magics = CellProcessorMagic(ipython)
     ipython.register_magics(magics)
@@ -3733,7 +3733,7 @@ def copy_values_and_run_code_in_nb(self, field="shared_variables", code=""):
     code_with_tabs = "\n".join(code_with_tabs)
 
     code_to_run1 = f"""
-from nbmodular.core.cell2func import retrieve_function_values_through_memory
+from nbmodular.cell2func import retrieve_function_values_through_memory
 
 variables_to_insert = retrieve_function_values_through_memory ("{field}")
 if "retrieve_function_values_through_memory" in variables_to_insert:
@@ -3742,7 +3742,7 @@ if "retrieve_function_values_through_memory" in variables_to_insert:
 """
 
     code_to_run2 = f"""
-from nbmodular.core.cell2func import retrieve_function_values_through_disk
+from nbmodular.cell2func import retrieve_function_values_through_disk
 
 variables_to_insert = retrieve_function_values_through_disk ()
 {code}

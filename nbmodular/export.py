@@ -19,7 +19,7 @@
 # > Exporting to python module
 
 # %%
-# | default_exp sync.export
+# | default_exp export
 
 # %%
 # |export
@@ -49,9 +49,9 @@ from execnb.nbio import mk_cell, read_nb, write_nb, NbCell
 from fastcore.all import globtastic
 
 # nbmodular
-from nbmodular.core.utils import set_log_level, get_config
-import nbmodular.testing.utils as tst
-from nbmodular.core.cell2func import CellProcessor
+from nbmodular.utils import set_log_level, get_config
+import nbmodular.test_utils as tst
+from nbmodular.cell2func import CellProcessor
 
 # %%
 # libraries used for tests
@@ -59,8 +59,8 @@ from nbmodular.core.cell2func import CellProcessor
 import shutil
 
 # ours
-from nbmodular.core.utils import cd_root
-import nbmodular.core.utils
+from nbmodular.utils import cd_root
+import nbmodular.utils
 
 # %% [markdown]
 # ::: {.content-hidden}

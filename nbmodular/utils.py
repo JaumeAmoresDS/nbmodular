@@ -19,7 +19,7 @@
 # > Utilities for writting tests.
 
 # %%
-# | default_exp testing.utils
+# | default_exp test_utils
 
 # %%
 # |export
@@ -40,7 +40,7 @@ from plum import Val
 from requests import post
 
 # ours
-from nbmodular.core.utils import cd_root
+from nbmodular.utils import cd_root
 
 # %% [markdown]
 # ## Notebook examples

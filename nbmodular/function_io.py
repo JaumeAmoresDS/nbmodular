@@ -19,7 +19,7 @@
 # > I/O functions used for loading / saving results and local variables from function.
 
 # %%
-#| default_exp core.function_io
+#| default_exp function_io
 
 # %%
 #| export
