@@ -62,7 +62,7 @@ from sklearn.utils import Bunch
 from fastcore.all import argnames
 import nbdev
 
-from nbmodular.core import function_io
+from nbmodular import function_io
 from nbmodular.utils import set_log_level, get_config
 
 
@@ -2508,10 +2508,10 @@ for arg, val in zip (args_with_defaults, default_values):
         if this_function.io_code and not self._added_io_imports:
             if this_function.test:
                 self.test_imports += "from pathlib import Path\n"
-                self.test_imports += "from nbmodular.core import function_io\n"
+                self.test_imports += "from nbmodular import function_io\n"
             else:
                 self.imports += "from pathlib import Path\n"
-                self.imports += "from nbmodular.core import function_io\n"
+                self.imports += "from nbmodular import function_io\n"
             self._added_io_imports = True
 
     def get_function_kwargs(self, kwargs: dict, test: bool = False) -> dict:
@@ -3899,7 +3899,7 @@ def store_variables(
     Store `variables` in dictionary entry `self.variables_field[function]`
     """
     ##pdb.no_set_trace()
-    from nbmodular.core import function_io
+    from nbmodular import function_io
 
     current_values = function_io.load(path_variables, io_type=io_type, **load_args)
     if not io_locals:
