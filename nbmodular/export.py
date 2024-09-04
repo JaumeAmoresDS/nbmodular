@@ -234,8 +234,8 @@ assert replace_folder_in_path(
 # %%
 # | export
 def set_paths_nb_processor(
-    nb_processor: "NbMagicExporter",
-    path: None,
+    nb_processor: "NbMagicExporter | Bunch",
+    path: str | Path,
 ) -> None:
     """
     Set the paths for the notebook processor.
@@ -673,14 +673,18 @@ class NbMagicExporter(Processor):
             nb_export(self.test_dest_nb_path, lib_path=lib_path)
 
         # step 2 (beginning) in diagram
-        self.tmp_nb_path.rename(self.duplicate_tmp_path)
+        if self.tmp_nb_path.exists():
+            self.tmp_nb_path.rename(self.duplicate_tmp_path)
 
         # step 3 in diagram
-        self.dest_nb_path.rename(self.tmp_dest_nb_path)
-        self.test_dest_nb_path.rename(self.tmp_test_dest_nb_path)
+        if self.dest_nb_path.exists():
+            self.dest_nb_path.rename(self.tmp_dest_nb_path)
+        if self.test_dest_nb_path.exists():
+            self.test_dest_nb_path.rename(self.tmp_test_dest_nb_path)
 
         # step 2 (end) in diagram
-        self.duplicate_tmp_path.rename(self.dest_nb_path)
+        if self.duplicate_tmp_path.exists():
+            self.duplicate_tmp_path.rename(self.dest_nb_path)
 
 
 # %% [markdown]
@@ -797,7 +801,6 @@ expected_py_modules = [
 __all__ = ['first']
 
 # @%% ../../nbs/mixed/mixed_cells.ipynb 1
-
 #@@function
 def first():
     pass
@@ -820,8 +823,8 @@ tst.check_test_repo_content(
     expected_py_modules=expected_py_modules,
     current_root=current_root,
     new_root=new_root,
-    clean=False,
-    keep_cwd=True,
+    clean=True,
+    keep_cwd=False,
 )
 
 
@@ -876,14 +879,163 @@ parse_argv_and_run_nbm_export_all_paths(["--path", os.getcwd()])
 # %% [markdown]
 # #### Checks & Cleaning
 
+
 # %%
 # check original content
-# nbs, py_modules = tst.read_content_in_repo (nb_paths, "./", print_as_list=True)
+# nbs, py_modules = tst.read_content_in_repo(nb_paths, "./", print_as_list=True)
+
+# %%
+expected_nbs = [
+    # nbm/first_folder/first.ipynb
+    """
+[markdown]
+# First notebook
+
+[code]
+%%function hello
+print ('hello')
+
+[code]
+%%function one_plus_one --test
+a=1+1
+print (a)
+""",
+    # nbs/first_folder/first.ipynb
+    """
+[markdown]
+# First notebook
+
+[code]
+#|export
+def hello():
+    print ('hello')
+
+[code]
+a=1+1
+print (a)
+""",
+    # .nbs/first_folder/first.ipynb
+    """
+[code]
+#|default_exp first_folder.first
+
+[code]
+#|export
+#@@function hello
+def hello():
+    print ('hello')
+""",
+    # .nbs/first_folder/test_first.ipynb
+    """
+[code]
+#|default_exp tests.first_folder.test_first
+
+[code]
+#|export
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a)
+""",
+    # nbm/second_folder/second.ipynb
+    """
+[markdown]
+# Second notebook
+
+[code]
+%%function bye
+print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+""",
+    # nbs/second_folder/second.ipynb
+    """
+[markdown]
+# Second notebook
+
+[code]
+#|export
+def bye():
+    print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+""",
+    # .nbs/second_folder/second.ipynb
+    """
+[code]
+#|default_exp second_folder.second
+
+[code]
+#|export
+#@@function bye
+def bye():
+    print ('bye')
+""",
+]
+expected_py_modules = [
+    # nbmodular/first_folder/first.py
+    """
+
+
+# @%% auto 0
+__all__ = ['hello']
+
+# @%% ../../nbs/first_folder/first.ipynb 1
+#@@function hello
+def hello():
+    print ('hello')
+
+
+""",
+    # nbmodular/tests/first_folder/test_first.py
+    """
+
+
+# @%% auto 0
+__all__ = ['one_plus_one']
+
+# @%% ../../../nbs/first_folder/test_first.ipynb 1
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a)
+
+
+""",
+    # nbmodular/second_folder/second.py
+    """
+
+
+# @%% auto 0
+__all__ = ['bye']
+
+# @%% ../../nbs/second_folder/second.ipynb 1
+#@@function bye
+def bye():
+    print ('bye')
+
+
+""",
+]
 
 
 # %%
-# clean
-shutil.rmtree(new_root, ignore_errors=True)
+# Finally we check that the result is the same as the expected
+tst.check_test_repo_content(
+    nb_paths,
+    expected_nbs=expected_nbs,
+    expected_py_modules=expected_py_modules,
+    current_root=current_root,
+    new_root=new_root,
+    clean=True,
+    keep_cwd=False,
+)
 
 
 # %% [markdown]
@@ -938,12 +1090,13 @@ def process_cell_for_nbm_update(cell: NbCell):
 # %%
 # | export
 def nbm_update(
-    path,
-    code_cells_path=".nbmodular",
-    logger=None,
-    log_level="INFO",
+    path: str | Path,
+    code_cells_path: str | Path = ".nbmodular",
+    logger: logging.Logger | None = None,
+    log_level: str = "INFO",
 ):
     nb_processor = Bunch()
+    path = Path(path)
     nb_processor.code_cells_path = Path(code_cells_path)
 
     nb_processor.logger = logging.getLogger("nb_importer") if logger is None else logger
@@ -952,18 +1105,25 @@ def nbm_update(
 
     # prior to step 5 in diagram:
     # nbs/nb.ipynb => nbs/_nb.ipynb
-    nb_processor.dest_nb_path.rename(nb_processor.duplicate_dest_nb_path)
+    if nb_processor.dest_nb_path.exists():
+        nb_processor.dest_nb_path.rename(nb_processor.duplicate_dest_nb_path)
 
     # step 5 in diagram:
     # .nbs/nb.ipynb => nbs/nb.ipynb
-    nb_processor.tmp_dest_nb_path.rename(nb_processor.dest_nb_path)
+    if nb_processor.tmp_dest_nb_path.exists():
+        nb_processor.tmp_dest_nb_path.rename(nb_processor.dest_nb_path)
     # .nbs/test_nb.ipynb => nbs/test_nb.ipynb
-    nb_processor.tmp_test_dest_nb_path.rename(nb_processor.test_dest_nb_path)
+    if nb_processor.tmp_test_dest_nb_path.exists():
+        nb_processor.tmp_test_dest_nb_path.rename(nb_processor.test_dest_nb_path)
 
     # step 5 in diagram: nbdev_update
-    _update_mod(nb_processor.dest_python_path, lib_dir=nb_processor.lib_path.parent)
     _update_mod(
-        nb_processor.test_dest_python_path, lib_dir=nb_processor.lib_path.parent
+        nb_processor.dest_python_path,
+        lib_dir=Path(nb_processor.lib_path).parent.resolve(),
+    )
+    _update_mod(
+        nb_processor.test_dest_python_path,
+        lib_dir=Path(nb_processor.lib_path).parent.resolve(),
     )
 
     # obtain cell types and read them from notebooks
@@ -997,36 +1157,102 @@ def nbm_update(
 # %% [markdown]
 # ### Example usage
 
+
+# %%
+new_root = "test_nbm_update/"
+nb_folder = "nbm"
+nb_path = "mixed/mixed_cells.ipynb"
+# Create notebook in "new repo", and cd to it
+current_root, nb_paths = tst.create_test_content(
+    nbs=tst.mixed_nb1,
+    nb_paths=nb_path,
+    nb_folder=nb_folder,
+    new_root=new_root,
+)
+nbm_export(path=f"{nb_folder}/{nb_path}")
+
+# %%
+# Simulate the exporting
+if False:
+    new_root = "test_nbm_export"
+    nb_folder = "nbm"
+    nb_path = "mixed/mixed_cells.ipynb"
+    # Create notebook in "new repo", and cd to it
+    current_root, nb_paths = tst.create_test_content(
+        nbs=tst.mixed_nb1,
+        nb_paths=nb_path,
+        nb_folder=nb_folder,
+        new_root=new_root,
+    )
+
+    nbm_export(path=f"{nb_folder}/{nb_path}")
+
+    exported_nbs, updated_py_modules = tst.read_content_in_repo(
+        [nb_path], "./", print_as_list=True
+    )
+    # joblib.load("test_nbm_update/.nbmodular/cell_types.pk")
+
+    # manually updated the py modules
+    # updated_py_modules = [...]
+
+    # copy and paste into test_utils module:
+    # - content of exported_nbs and paths
+    # - content of updated_py_modules and paths
+
 # %% [markdown]
 # #### Set up before running example
 
+
 # %%
-os.makedirs("nbmodular/test_nbs", exist_ok=True)
-os.makedirs("nbmodular/tests/test_nbs", exist_ok=True)
-shutil.copy("test_data/nb.py", "nbmodular/test_nbs/nb.py")
-shutil.copy("test_data/test_nb.py", "nbmodular/tests/test_nbs/test_nb.py")
-shutil.copy("nbm/test_nbs/nb.ipynb", "nbm/test_nbs/_nb.ipynb")
+updated_py_modules = [x.replace("@%%", "%%") for x in tst.updated_py_modules]
+new_root = "test_nbm_update"
+nb_folder = "nbm"
+lib_folder = "nbmodular"
+# Create notebook in "new repo", and cd to it
+current_root, nb_paths = tst.create_test_content(
+    nbs=tst.exported_nbs,
+    nb_paths=tst.exported_nb_paths,
+    py_modules=updated_py_modules,
+    py_paths=tst.updated_py_paths,
+    nb_folder="",
+    lib_folder="",
+    new_root=new_root,
+)
+cell_types = ["code", "original", "test"]
+joblib.dump(cell_types, f"{new_root}/.nbmodular/cell_types.pk")
 
 # %% [markdown]
 # #### Example usage
 
 # %%
-nbm_update(path)
+
+nb_path = "mixed/mixed_cells.ipynb"
+nbm_update(path=f"{nb_folder}/{nb_path}")
 
 # %% [markdown]
 # #### Checks
 
 # %%
-[c["source"] for c in read_nb(path).cells]
-assert [c["source"] for c in read_nb(path).cells] == [
-    "%%function\ndef first():\n    x = 3 + 1",
-    "comment",
-    '%%function --test\ndef second():\n    print("hello")',
-]
+if False:
+    # 3) read result and manually check if it's correct
+    expected_nbs, expected_py_modules = tst.read_content_in_repo(
+        [nb_path], "./", print_as_list=True
+    )
 
-# %%
-shutil.move("nbm/test_nbs/_nb.ipynb", "nbm/test_nbs/nb.ipynb")
+    # copy and paste the result:
+    # expected_nbs = [...]
+    # expected_py_modules = [...]
 
+    # Finally we check that the result is the same as the expected
+    tst.check_test_repo_content(
+        nb_paths,
+        expected_nbs=expected_nbs,
+        expected_py_modules=expected_py_modules,
+        current_root=current_root,
+        new_root=new_root,
+        clean=False,
+        keep_cwd=True,
+    )
 
 # %% [markdown]
 # ## nbm_update_cli

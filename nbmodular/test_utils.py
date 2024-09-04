@@ -31,13 +31,14 @@ import os
 import shutil
 from pathlib import Path
 from token import OP
-from typing import List, Tuple, Optional, Union
+from typing import List, Tuple, Optional, Union, Dict
 import re
 
 # 3rd party
 from execnb.nbio import new_nb, write_nb, mk_cell, read_nb
 from plum import Val
 from requests import post
+from fastcore.basics import AttrDict
 
 # ours
 from nbmodular.utils import cd_root
@@ -136,6 +137,99 @@ def two_plus_two ():
     print (a)
 """
 
+
+# %% [markdown]
+# ### Updated example 1
+
+# %%
+exported_nbs = [
+    # nbm/mixed/mixed_cells.ipynb
+    """
+[code]
+%%function
+def first():
+    pass
+
+[markdown]
+comment
+
+[code]
+%%function --test
+def second ():
+    pass
+""",
+    # nbs/mixed/mixed_cells.ipynb
+    """
+[code]
+#|export
+def first():
+    pass
+
+[markdown]
+comment
+
+[code]
+pass
+""",
+    # .nbs/mixed/mixed_cells.ipynb
+    """
+[code]
+#|default_exp mixed.mixed_cells
+
+[code]
+#|export
+#@@function
+def first():
+    pass
+""",
+    # .nbs/mixed/test_mixed_cells.ipynb
+    """
+[code]
+#|default_exp tests.mixed.test_mixed_cells
+
+[code]
+#|export
+#@@function --test
+def second():
+    pass
+""",
+]
+
+exported_nb_paths = [
+    "nbm/mixed/mixed_cells.ipynb",
+    "nbs/mixed/mixed_cells.ipynb",
+    ".nbs/mixed/mixed_cells.ipynb",
+    ".nbs/mixed/test_mixed_cells.ipynb",
+]
+
+updated_py_modules = [
+    # nbmodular/mixed/mixed_cells.py
+    """
+# @%% auto 0
+__all__ = ['first']
+
+# @%% ../../nbs/mixed/mixed_cells.ipynb 1
+#@@function
+def first():
+    x = 3 + 1
+""",
+    # nbmodular/tests/mixed/test_mixed_cells.py
+    """
+# @%% auto 0
+__all__ = ['second']
+
+# @%% ../../../nbs/mixed/test_mixed_cells.ipynb 1
+#@@function --test
+def second():
+    print("hello")
+""",
+]
+updated_py_paths = [
+    "nbmodular/mixed/mixed_cells.py",
+    "nbmodular/tests/mixed/test_mixed_cells.py",
+]
+
+
 # %% [markdown]
 # ## Notebook structure
 #
@@ -202,11 +296,11 @@ assert nb_text == [
 
 # %%
 # | export
-def text2nb(nb: str):
+def text2nb(nb: str) -> dict | AttrDict:
     cells = [
         mk_cell(text, cell_type=cell_type) for cell_type, text in parse_nb_sections(nb)
     ]
-    return new_nb(cells)
+    return new_nb(cells)  # type: ignore
 
 
 # %% [markdown]
@@ -622,7 +716,10 @@ def derive_nb_paths(
         if nbm_folder is not None:
             all_nb_paths.append(Path(new_root) / nbm_folder / nb_path)
         if nbs_folder is not None:
-            all_nb_paths.append(Path(new_root) / nbs_folder / nb_path)
+            nb_code_path = Path(new_root) / nbs_folder / nb_path
+            all_nb_paths.append(nb_code_path)
+            nb_test_path = nb_code_path.parent / f"test_{nb_code_path.name}"
+            all_nb_paths.append(nb_test_path)
         if tmp_folder is not None:
             tmp_nb = Path(new_root) / tmp_folder / nb_path
             all_nb_paths.append(tmp_nb)
@@ -721,7 +818,9 @@ assert py_paths == [
 
 # %%
 # | export
-def read_nbs(paths: List[str], as_text: bool = True) -> List[str] | List[dict]:
+def read_nbs(
+    paths: List[str] | List[Path], must_exist: dict = {}, as_text: bool = True
+) -> List[str] | List[dict]:
     """
     Read notebooks from disk.
 
@@ -737,11 +836,14 @@ def read_nbs(paths: List[str], as_text: bool = True) -> List[str] | List[dict]:
             returned as dictionaries.
     """
     nbs_in_disk = []
+    paths = [Path(path) for path in paths]
     for path in paths:
         # Check that file exists. useful for being called inside a test utility
         # to see where it fails.
-        assert os.path.exists(path)
-        nbs_in_disk.append(read_nb(path))
+        if path.exists():
+            nbs_in_disk.append(read_nb(path))
+        elif must_exist.get(path, False):
+            raise FileNotFoundError(f"File {path} does not exist")
 
     return [strip_nb(nb2text(nb)) for nb in nbs_in_disk] if as_text else nbs_in_disk
 
@@ -788,7 +890,9 @@ for nb_path in nb_paths:
 
 # %%
 # | export
-def read_text_files(paths: List[str]) -> List[str]:
+def read_text_files(
+    paths: List[str | Path], must_exist: Dict[str | Path, bool] = {}
+) -> List[str]:
     """
     Read the contents of Python modules from the given paths.
 
@@ -809,12 +913,15 @@ def read_text_files(paths: List[str]) -> List[str]:
 
     """
     text_files = []
+    paths = [Path(path) for path in paths]
     for path in paths:
         # Check that file exists. useful for being called inside a test utility
         # to see where it fails.
-        assert os.path.exists(path)
-        with open(path, "rt") as file:
-            text_files.append(file.read())
+        if path.exists():
+            text_files.append(path.read_text())
+        elif must_exist.get(path, False):
+            raise FileNotFoundError(f"File {path} does not exist")
+
     return text_files
 
 
@@ -993,7 +1100,12 @@ def check_py_modules(
     AssertionError
         If the actual Python modules do not match the expected modules.
     """
-    actual = read_pymodules_in_repo(nb_paths, new_root, lib_folder=lib_folder, interactive_notebook=interactive_notebook)
+    actual = read_pymodules_in_repo(
+        nb_paths,
+        new_root,
+        lib_folder=lib_folder,
+        interactive_notebook=interactive_notebook,
+    )
     assert compare_texts(actual, expected)
 
 
@@ -1052,27 +1164,46 @@ def check_test_repo_content(
     ValueError
         Raised when both clean and keep_cwd are set to True.
     """
+    changed_dir = False
     if current_root is not None:
         assert Path(current_root).name == "nbmodular"
         new_wd = os.getcwd()
 
         assert Path(new_wd).resolve() == Path(f"{current_root}/{new_root}").resolve()
         os.chdir(current_root)
+        changed_dir = True
     if new_root is not None:
-        assert (Path(new_root) / "settings.ini").exists()
+        if not (Path(new_root) / "settings.ini").exists():
+            if changed_dir:
+                os.chdir(new_wd)
+            raise FileNotFoundError(f"settings.ini not found in {new_root}")
         use_new_root = True
     else:
         new_root = "./"
         use_new_root = False
 
     if expected_nbs is not None:
-        check_nbs(nb_paths, expected_nbs, new_root, nbm_folder, tmp_folder, nbs_folder)
+        try:
+            check_nbs(
+                nb_paths, expected_nbs, new_root, nbm_folder, tmp_folder, nbs_folder
+            )
+        except AssertionError as e:
+            if changed_dir:
+                os.chdir(new_wd)
+            raise e
     if expected_py_modules is not None:
-        check_py_modules(nb_paths, expected_py_modules, new_root, lib_folder)
+        try:
+            check_py_modules(nb_paths, expected_py_modules, new_root, lib_folder)
+        except AssertionError as e:
+            if changed_dir:
+                os.chdir(new_wd)
+            raise e
     if clean and use_new_root:
         shutil.rmtree(new_root)
     if keep_cwd and use_new_root:
         if clean:
+            if changed_dir:
+                os.chdir(new_wd)
             raise ValueError("keep_cwd can't be True if clean is True")
         os.chdir(new_root)
 
@@ -1133,9 +1264,12 @@ def create_and_cd_to_new_root_folder(
 # %%
 # | export
 def create_test_content(
-    nbs: List[str] | str,
+    nbs: List[str] | str | None = None,
     nb_paths: Optional[List[str] | List[Path] | str | Path] = None,
+    py_modules: List[str] | str | None = None,
+    py_paths: Optional[List[str] | List[Path] | str | Path] = None,
     nb_folder: str = "nbm",
+    lib_folder: Optional[str] = "nbmodular",
     new_root: str = "new_test",
     config_path: str = "settings.ini",
 ) -> Tuple[str, List[str]]:
@@ -1159,7 +1293,7 @@ def create_test_content(
     current_root = os.getcwd()
 
     # Convert input texts into corresponding dicts with notebook structure
-    nbs = texts2nbs(nbs)
+    nbs = texts2nbs(nbs) if nbs is not None else []
 
     # Generate list of nb_paths if None
     if nb_paths is None:
@@ -1174,6 +1308,23 @@ def create_test_content(
         full_nb_path = Path(new_root) / nb_folder / nb_path
         full_nb_path.parent.mkdir(parents=True, exist_ok=True)
         write_nb(nb, full_nb_path)
+
+    if py_modules is not None:
+        py_modules = [py_modules] if isinstance(py_modules, str) else py_modules
+        if py_paths is None:
+            py_paths = [f"f{idx}" for idx in range(len(py_modules))]
+        else:
+            if not isinstance(py_paths, list):
+                py_paths = [py_paths]
+            if len(py_paths) != len(py_modules):
+                raise ValueError(
+                    "py_paths must have same number of items as py_modules"
+                )
+
+        for py_module, py_path in zip(py_modules, py_paths):
+            full_py_path = Path(new_root) / lib_folder / py_path
+            full_py_path.parent.mkdir(parents=True, exist_ok=True)
+            full_py_path.write_text(py_module)
 
     # Copy settings.ini in new root folder, so that this file
     # can be read later on by our export / import functions.
