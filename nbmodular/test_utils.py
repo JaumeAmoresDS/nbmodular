@@ -39,6 +39,7 @@ from execnb.nbio import new_nb, write_nb, mk_cell, read_nb
 from plum import Val
 from requests import post
 from fastcore.basics import AttrDict
+import joblib
 
 # ours
 from nbmodular.utils import cd_root
@@ -228,6 +229,172 @@ updated_py_paths = [
     "nbmodular/mixed/mixed_cells.py",
     "nbmodular/tests/mixed/test_mixed_cells.py",
 ]
+updated_cell_types = ["code", "original", "test"]
+
+
+# %% [markdown]
+# ## Multiple updated examples
+
+# %%
+multiple_exported_nbs = [
+    # nbm/first_folder/first.ipynb
+    """
+[markdown]
+# First notebook
+
+[code]
+%%function hello
+print ('hello')
+
+[code]
+%%function one_plus_one --test
+a=1+1
+print (a)
+""",
+    # nbs/first_folder/first.ipynb
+    """
+[markdown]
+# First notebook
+
+[code]
+#|export
+def hello():
+    print ('hello')
+
+[code]
+a=1+1
+print (a)
+""",
+    # nbs/first_folder/test_first.ipynb
+    """
+[code]
+#|default_exp first_folder.first
+
+[code]
+#|export
+#@@function hello
+def hello():
+    print ('hello')
+""",
+    # .nbs/first_folder/first.ipynb
+    """
+[code]
+#|default_exp tests.first_folder.test_first
+
+[code]
+#|export
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a)
+""",
+    # .nbs/first_folder/test_first.ipynb
+    """
+[markdown]
+# Second notebook
+
+[code]
+%%function bye
+print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+""",
+    # nbm/second_folder/second.ipynb
+    """
+[markdown]
+# Second notebook
+
+[code]
+#|export
+def bye():
+    print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+""",
+    # nbs/second_folder/second.ipynb
+    """
+[code]
+#|default_exp second_folder.second
+
+[code]
+#|export
+#@@function bye
+def bye():
+    print ('bye')
+""",
+]
+
+multiple_exported_nb_paths = [
+    "nbm/first_folder/first.ipynb",
+    "nbs/first_folder/first.ipynb",
+    "nbs/first_folder/test_first.ipynb",
+    ".nbs/first_folder/first.ipynb",
+    ".nbs/first_folder/test_first.ipynb",
+    "nbm/second_folder/second.ipynb",
+    "nbs/second_folder/second.ipynb",
+]
+
+multiple_updated_py_modules = [
+    # nbmodular/first_folder/first.py
+    """
+
+
+# @%% auto 0
+__all__ = ['hello']
+
+# @%% ../../nbs/first_folder/first.ipynb 1
+#@@function hello
+def hello():
+    print ('hello')
+
+
+""",
+    # nbmodular/tests/first_folder/test_first.py
+    """
+
+
+# @%% auto 0
+__all__ = ['one_plus_one']
+
+# @%% ../../../nbs/first_folder/test_first.ipynb 1
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a)
+
+
+""",
+    # nbmodular/second_folder/second.py
+    """
+
+
+# @%% auto 0
+__all__ = ['bye']
+
+# @%% ../../nbs/second_folder/second.ipynb 1
+#@@function bye
+def bye():
+    print ('bye')
+
+
+""",
+]
+
+multiple_updated_py_paths = [
+    "nbmodular/first_folder/first.py",
+    "nbmodular/tests/first_folder/test_first.py",
+    "nbmodular/second_folder/second.py",
+]
+
+multiple_updated_cell_types = []
+
+# %%
 
 
 # %% [markdown]
@@ -592,6 +759,98 @@ def read_pymodules_in_repo(
 
 
 # %% [markdown]
+# ### read_cell_types_lists
+
+
+# %%
+# | export
+def read_cell_types_lists(
+    paths: List[str | Path], must_exist: Dict[str | Path, bool] = {}
+) -> List[str]:
+    """
+    Read the contents of Python modules from the given paths.
+
+    Parameters
+    ----------
+    paths : List[str]
+        A list of file paths to Python modules.
+
+    Returns
+    -------
+    List[str]
+        A list of strings containing the contents of the Python modules.
+
+    Raises
+    ------
+    AssertionError
+        If a file path does not exist.
+
+    """
+    cell_types_lists = []
+    paths = [Path(path) for path in paths]
+    for path in paths:
+        # Check that file exists. useful for being called inside a test utility
+        # to see where it fails.
+        if path.exists():
+            cell_types_lists.append(joblib.load(path))
+        elif must_exist.get(path, False):
+            raise FileNotFoundError(f"File {path} does not exist")
+
+    return cell_types_lists
+
+
+# %% [markdown]
+# ### read_cell_types_lists_in_repo
+
+
+# %%
+# | export
+def read_cell_types_lists_in_repo(
+    nb_paths: List[str],  # type: ignore
+    new_root: str = "new_test",
+    cell_types_folder: str = ".nbmodular",
+    print_as_list: bool = False,
+    tab_size: int = 4,
+) -> List[List[str]]:
+    """
+    Read Python modules in a repository.
+
+    Parameters:
+    ----------
+    nb_paths : List[str]
+        List of paths to Jupyter notebooks.
+    new_root : str, optional
+        New root directory for the notebooks, by default "new_test".
+    lib_folder : str, optional
+        Name of the library folder, by default "nbmodular".
+    print_as_list : bool, optional
+        Whether to print the files as a list, by default False.
+    print : bool, optional
+        Whether to print the files, by default False.
+    interactive_notebook : bool, optional
+        Whether the notebook is run in VSC interactive mode, by default True.
+
+    Returns:
+    -------
+    content : str
+        Content of the Python modules.
+
+    """
+    cell_types_paths = derive_cell_types_paths(
+        nb_paths, new_root, cell_types_folder=cell_types_folder
+    )
+    cell_types_lists = read_cell_types_lists(cell_types_paths)
+
+    if print_as_list:
+        print("cell_types_lists = [")
+        for x in cell_types_lists:
+            print(f"{' '*tab_size}{x},")
+        print("]")
+        print(f"cell_types_paths={cell_types_paths}")
+    return cell_types_lists
+
+
+# %% [markdown]
 # ### read_content_in_repo
 
 
@@ -604,6 +863,7 @@ def read_content_in_repo(
     tmp_folder: Optional[str] = ".nbs",
     nbs_folder: Optional[str] = "nbs",
     lib_folder: Optional[str] = "nbmodular",
+    cell_types_folder: Optional[str] = ".nbmodular",
     print_as_list: bool = False,
     print: bool = True,
     interactive_notebook: bool = True,
@@ -666,7 +926,22 @@ def read_content_in_repo(
         if lib_folder is not None
         else []
     )
-    return nbs, py_modules
+
+    cell_types_lists = (
+        read_cell_types_lists_in_repo(
+            nb_paths,
+            new_root,
+            cell_types_folder,
+            print_as_list,
+        )
+        if cell_types_folder is not None
+        else []
+    )
+
+    if cell_types_folder is not None:
+        return nbs, py_modules, cell_types_lists
+    else:
+        return nbs, py_modules
 
 
 # %% [markdown]
@@ -760,6 +1035,29 @@ def derive_py_paths(
 
 
 # %% [markdown]
+# ### derive_cell_types_paths
+
+
+# %%
+# | export
+def derive_cell_types_paths(
+    nb_paths: List[str],
+    new_root: str | Path,
+    cell_types_folder: str = ".nbmodular",
+):
+    cell_types_paths = []
+    for nb_path in nb_paths:
+        original_nb_path = Path(nb_path)
+        cell_types_paths.append(
+            Path(new_root)
+            / cell_types_folder
+            / original_nb_path.parent
+            / f"cell_types_{original_nb_path.stem}.pk"
+        )
+    return cell_types_paths
+
+
+# %% [markdown]
 # ### derive_all_paths
 
 
@@ -772,6 +1070,7 @@ def derive_all_paths(
     tmp_folder: Optional[str] = ".nbs",
     nbs_folder: Optional[str] = "nbs",
     lib_folder: Optional[str] = "nbmodular",
+    cell_types_folder: Optional[str] = ".nbmodular",
 ):
     all_nb_paths = derive_nb_paths(
         nb_paths,
@@ -785,23 +1084,30 @@ def derive_all_paths(
         if lib_folder is not None
         else []
     )
-    return all_nb_paths, py_paths
+    cell_types_paths = (
+        derive_cell_types_paths(nb_paths, new_root, cell_types_folder=cell_types_folder)
+        if cell_types_folder is not None
+        else []
+    )
+    return all_nb_paths, py_paths, cell_types_paths
 
 
 # %% [markdown]
 # #### Example usage
 
 # %%
-nb_paths, py_paths = derive_all_paths(
+nb_paths, py_paths, _ = derive_all_paths(
     nb_paths=["folder_A/nb_A.ipynb", "folder_B/nb_B.ipynb"], new_root="tmp_repo"
 )
 assert nb_paths == [
     Path("tmp_repo/nbm/folder_A/nb_A.ipynb"),
     Path("tmp_repo/nbs/folder_A/nb_A.ipynb"),
+    Path("tmp_repo/nbs/folder_A/test_nb_A.ipynb"),
     Path("tmp_repo/.nbs/folder_A/nb_A.ipynb"),
     Path("tmp_repo/.nbs/folder_A/test_nb_A.ipynb"),
     Path("tmp_repo/nbm/folder_B/nb_B.ipynb"),
     Path("tmp_repo/nbs/folder_B/nb_B.ipynb"),
+    Path("tmp_repo/nbs/folder_B/test_nb_B.ipynb"),
     Path("tmp_repo/.nbs/folder_B/nb_B.ipynb"),
     Path("tmp_repo/.nbs/folder_B/test_nb_B.ipynb"),
 ]
@@ -885,7 +1191,7 @@ for nb_path in nb_paths:
     Path(nb_path).unlink()
 
 # %% [markdown]
-# ### read_pymodules
+# ### read_text_files
 
 
 # %%
@@ -1268,8 +1574,11 @@ def create_test_content(
     nb_paths: Optional[List[str] | List[Path] | str | Path] = None,
     py_modules: List[str] | str | None = None,
     py_paths: Optional[List[str] | List[Path] | str | Path] = None,
+    code_cells_paths: Optional[str | Path] = None,
+    cell_types_lists: List[List[str]] | None = None,
     nb_folder: str = "nbm",
     lib_folder: Optional[str] = "nbmodular",
+    code_cells_folder: str | Path = ".nbmodular",
     new_root: str = "new_test",
     config_path: str = "settings.ini",
 ) -> Tuple[str, List[str]]:
@@ -1325,6 +1634,20 @@ def create_test_content(
             full_py_path = Path(new_root) / lib_folder / py_path
             full_py_path.parent.mkdir(parents=True, exist_ok=True)
             full_py_path.write_text(py_module)
+
+    if cell_types_lists is not None:
+        if code_cells_paths is None:
+            code_cells_paths = [f"f{idx}" for idx in range(len(cell_types_lists))]
+        else:
+            if len(code_cells_paths) != len(cell_types_lists):
+                raise ValueError(
+                    "code_cells_paths must have same number of items as cell_types_lists"
+                )
+
+        for cell_types, code_cells_path in zip(cell_types_lists, code_cells_paths):
+            full_code_cells_path = Path(new_root) / code_cells_folder / code_cells_path
+            full_code_cells_path.parent.mkdir(parents=True, exist_ok=True)
+            joblib.dump(cell_types, full_code_cells_path)
 
     # Copy settings.ini in new root folder, so that this file
     # can be read later on by our export / import functions.

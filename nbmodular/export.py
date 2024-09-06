@@ -236,6 +236,7 @@ assert replace_folder_in_path(
 def set_paths_nb_processor(
     nb_processor: "NbMagicExporter | Bunch",
     path: str | Path,
+    code_cells_path: str | Path = ".nbmodular",
 ) -> None:
     """
     Set the paths for the notebook processor.
@@ -321,6 +322,19 @@ def set_paths_nb_processor(
         + ".py"
     )
     nb_processor.test_dest_python_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # cell_types
+    nb_processor.cell_types_file_path = nb_processor.root_path / (
+        code_cells_path
+        + "/"
+        + "/".join(parent_parts)
+        + "/"
+        + "cell_types_"
+        + nb_processor.file_name_without_extension
+        + ".pk"
+    )
+    nb_processor.cell_types_file_path.parent.mkdir(parents=True, exist_ok=True)
+
     # to be used in default_exp cell (see NBExporter)
     nb_processor.dest_module_path = (
         ".".join(parent_parts) + "." + nb_processor.file_name_without_extension
@@ -366,21 +380,44 @@ set_paths_nb_processor(
 actual = nb_processor
 expected = Bunch(
     **{
-        "path": new_root / "nbm/test_nbs/nb.ipynb",
+        "path": Path(
+            "/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/nbm/test_nbs/nb.ipynb"
+        ),
         "file_name_without_extension": "nb",
-        "root_path": new_root,
+        "root_path": Path("/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths"),
         "nbs_path": "nbs",
         "nbm_path": "nbm",
         "lib_path": "nbmodular",
-        "dest_nb_path": new_root / "nbs/test_nbs/nb.ipynb",
-        "test_dest_nb_path": new_root / "nbs/test_nbs/test_nb.ipynb",
-        "tmp_nb_path": new_root / ".nbs/test_nbs/nb.ipynb",
-        "duplicate_tmp_path": new_root / ".nbs/test_nbs/_nb.ipynb",
-        "tmp_dest_nb_path": new_root / ".nbs/test_nbs/nb.ipynb",
-        "tmp_test_dest_nb_path": new_root / ".nbs/test_nbs/test_nb.ipynb",
-        "duplicate_dest_nb_path": new_root / Path("nbs/test_nbs/_nb.ipynb"),
-        "dest_python_path": new_root / Path("nbmodular/test_nbs/nb.py"),
-        "test_dest_python_path": new_root / Path("nbmodular/tests/test_nbs/test_nb.py"),
+        "dest_nb_path": Path(
+            "/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/nbs/test_nbs/nb.ipynb"
+        ),
+        "test_dest_nb_path": Path(
+            "/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/nbs/test_nbs/test_nb.ipynb"
+        ),
+        "tmp_nb_path": Path(
+            "/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/.nbs/test_nbs/nb.ipynb"
+        ),
+        "duplicate_tmp_path": Path(
+            "/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/.nbs/test_nbs/_nb.ipynb"
+        ),
+        "tmp_dest_nb_path": Path(
+            "/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/.nbs/test_nbs/nb.ipynb"
+        ),
+        "tmp_test_dest_nb_path": Path(
+            "/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/.nbs/test_nbs/test_nb.ipynb"
+        ),
+        "duplicate_dest_nb_path": Path(
+            "/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/nbs/test_nbs/_nb.ipynb"
+        ),
+        "dest_python_path": Path(
+            "/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/nbmodular/test_nbs/nb.py"
+        ),
+        "test_dest_python_path": Path(
+            "/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/nbmodular/tests/test_nbs/test_nb.py"
+        ),
+        "cell_types_file_path": Path(
+            "/home/jaumeamllo/workspace/mine/nbmodular/test_set_paths/.nbmodular/test_nbs/cell_types_nb.pk"
+        ),
         "dest_module_path": "test_nbs.nb",
         "test_dest_module_path": "tests.test_nbs.test_nb",
     }
@@ -543,8 +580,7 @@ class NbMagicExporter(Processor):
         super().__init__(nb)
         self.logger = logging.getLogger("nb_exporter") if logger is None else logger
         set_log_level(self.logger, log_level)
-        set_paths_nb_processor(self, path)
-        self.code_cells_path = Path(code_cells_path)
+        set_paths_nb_processor(self, path, code_cells_path=code_cells_path)
         code_cells_file_name = (
             self.file_name_without_extension
             if code_cells_file_name is None
@@ -658,7 +694,7 @@ class NbMagicExporter(Processor):
         Perform final processing steps.
         """
         # store cell_types for later use by NBImporter
-        joblib.dump(self.cell_types, self.code_cells_path / "cell_types.pk")
+        joblib.dump(self.cell_types, self.cell_types_file_path)
 
         write_nb(self.nb, self.tmp_nb_path)
         self.nb.cells = self.cells
@@ -741,7 +777,7 @@ nbm_export(path=f"{nb_folder}/{nb_path}")
 # %%
 
 # check original content
-# nbs, py_modules = tst.read_content_in_repo ([nb_path], "./", print_as_list=True)
+# nbs, py_modules, cell_types_lists = tst.read_content_in_repo ([nb_path], "./", print_as_list=True)
 expected_nbs = [
     # nbm/mixed/mixed_cells.ipynb
     """
@@ -882,7 +918,7 @@ parse_argv_and_run_nbm_export_all_paths(["--path", os.getcwd()])
 
 # %%
 # check original content
-# nbs, py_modules = tst.read_content_in_repo(nb_paths, "./", print_as_list=True)
+# nbs, py_modules, cell_types_lists = tst.read_content_in_repo(nb_paths, "./", print_as_list=True)
 
 # %%
 expected_nbs = [
@@ -1097,11 +1133,10 @@ def nbm_update(
 ):
     nb_processor = Bunch()
     path = Path(path)
-    nb_processor.code_cells_path = Path(code_cells_path)
 
     nb_processor.logger = logging.getLogger("nb_importer") if logger is None else logger
     set_log_level(nb_processor.logger, log_level)
-    set_paths_nb_processor(nb_processor, path)
+    set_paths_nb_processor(nb_processor, path, code_cells_path=code_cells_path)
 
     # prior to step 5 in diagram:
     # nbs/nb.ipynb => nbs/_nb.ipynb
@@ -1127,9 +1162,7 @@ def nbm_update(
     )
 
     # obtain cell types and read them from notebooks
-    nb_processor.cell_types = joblib.load(
-        nb_processor.code_cells_path / "cell_types.pk"
-    )
+    nb_processor.cell_types = joblib.load(nb_processor.cell_types_file_path)
     original_nb = read_nb(path)
     dest_nb = read_nb(nb_processor.dest_nb_path)
     test_dest_nb = read_nb(nb_processor.test_dest_nb_path)
@@ -1159,7 +1192,8 @@ def nbm_update(
 
 
 # %%
-new_root = "test_nbm_update/"
+# to remove
+new_root = "test_nbm_update_simulation"
 nb_folder = "nbm"
 nb_path = "mixed/mixed_cells.ipynb"
 # Create notebook in "new repo", and cd to it
@@ -1169,12 +1203,18 @@ current_root, nb_paths = tst.create_test_content(
     nb_folder=nb_folder,
     new_root=new_root,
 )
+
 nbm_export(path=f"{nb_folder}/{nb_path}")
+
+exported_nbs, updated_py_modules, cell_types_lists = tst.read_content_in_repo(
+    [nb_path], "./", print_as_list=True
+)
+
 
 # %%
 # Simulate the exporting
 if False:
-    new_root = "test_nbm_export"
+    new_root = "test_nbm_update"
     nb_folder = "nbm"
     nb_path = "mixed/mixed_cells.ipynb"
     # Create notebook in "new repo", and cd to it
@@ -1187,9 +1227,14 @@ if False:
 
     nbm_export(path=f"{nb_folder}/{nb_path}")
 
-    exported_nbs, updated_py_modules = tst.read_content_in_repo(
+    exported_nbs, updated_py_modules, cell_types_lists = tst.read_content_in_repo(
         [nb_path], "./", print_as_list=True
     )
+
+    cell_types_paths = [Path(".nbmodular/mixed/cell_types_mixed_cells.pk")]
+    cell_types_lists = [
+        ["code", "original", "test"],
+    ]
     # joblib.load("test_nbm_update/.nbmodular/cell_types.pk")
 
     # manually updated the py modules
@@ -1219,7 +1264,8 @@ current_root, nb_paths = tst.create_test_content(
     new_root=new_root,
 )
 cell_types = ["code", "original", "test"]
-joblib.dump(cell_types, f"{new_root}/.nbmodular/cell_types.pk")
+os.makedirs(".nbmodular", exist_ok=True)
+joblib.dump(cell_types, ".nbmodular/cell_types.pk")
 
 # %% [markdown]
 # #### Example usage
@@ -1233,9 +1279,90 @@ nbm_update(path=f"{nb_folder}/{nb_path}")
 # #### Checks
 
 # %%
+expected_nbs = [
+    # nbm/mixed/mixed_cells.ipynb
+    """
+[code]
+%%function
+def first():
+    x = 3 + 1
+
+[markdown]
+comment
+
+[code]
+%%function --test
+def second():
+    print("hello")
+""",
+    # nbs/mixed/mixed_cells.ipynb
+    """
+[code]
+#|default_exp mixed.mixed_cells
+
+[code]
+#|export
+#@@function
+def first():
+    x = 3 + 1
+""",
+    # nbs/mixed/test_mixed_cells.ipynb
+    """
+[code]
+#|default_exp tests.mixed.test_mixed_cells
+
+[code]
+#|export
+#@@function --test
+def second():
+    print("hello")
+""",
+]
+expected_py_modules = [
+    # nbmodular/mixed/mixed_cells.py
+    """
+
+# @%% auto 0
+__all__ = ['first']
+
+# @%% ../../nbs/mixed/mixed_cells.ipynb 1
+#@@function
+def first():
+    x = 3 + 1
+
+""",
+    # nbmodular/tests/mixed/test_mixed_cells.py
+    """
+
+# @%% auto 0
+__all__ = ['second']
+
+# @%% ../../../nbs/mixed/test_mixed_cells.ipynb 1
+#@@function --test
+def second():
+    print("hello")
+
+""",
+]
+
+
+# %%
+tst.check_test_repo_content(
+    nb_paths,
+    expected_nbs=expected_nbs,
+    expected_py_modules=expected_py_modules,
+    current_root=current_root,
+    new_root=new_root,
+    clean=False,
+    keep_cwd=True,
+)
+
+
+# %%
+
 if False:
     # 3) read result and manually check if it's correct
-    expected_nbs, expected_py_modules = tst.read_content_in_repo(
+    expected_nbs, expected_py_modules, cell_types_lists = tst.read_content_in_repo(
         [nb_path], "./", print_as_list=True
     )
 
@@ -1244,15 +1371,7 @@ if False:
     # expected_py_modules = [...]
 
     # Finally we check that the result is the same as the expected
-    tst.check_test_repo_content(
-        nb_paths,
-        expected_nbs=expected_nbs,
-        expected_py_modules=expected_py_modules,
-        current_root=current_root,
-        new_root=new_root,
-        clean=False,
-        keep_cwd=True,
-    )
+
 
 # %% [markdown]
 # ## nbm_update_cli
