@@ -260,16 +260,6 @@ def set_paths_nb_processor(
     nb_processor.nbm_path = config["nbm_path"]
     nb_processor.lib_path = config["lib_path"]
 
-    if (
-        nb_processor.path.suffix == ".py" 
-        and nb_processor.lib_path in nb_processor.path.parent.parts
-    ):
-        # if we have passed a .py file, we replace it with the ipynb in nbm_path
-        nb_processor.path = replace_folder_in_path(
-            nb_processor.path, nb_processor.lib_path, nb_processor.nbm_path
-        )
-        nb_processor.path = nb_processor.path.with_suffix(".ipynb")
-
     # In diagram: nbs/nb.ipynb
     nb_processor.dest_nb_path = replace_folder_in_path(
         nb_processor.path, nb_processor.nbm_path, nb_processor.nbs_path
@@ -883,6 +873,11 @@ tst.check_test_repo_content(
 # %%
 # | export
 def nbm_export_all_paths(path):
+    # To test:
+    # original_path = Path(path)
+    # nbm_folder = config["nbm_path"]
+    # if nbm_folder not in original_path.parts and (original_path / nbm_folder).exists:
+    #     path = str (original_path / nbm_folder)
     files = nbglob(path=path, as_path=True).sorted("name")
     for f in files:
         nbm_export(f)
@@ -922,7 +917,8 @@ current_root, nb_paths = tst.create_test_content(
 # #### Example usage
 
 # %%
-parse_argv_and_run_nbm_export_all_paths(["--path", os.getcwd()])
+path_with_nb_folder = str(Path(os.getcwd()) / nb_folder)
+parse_argv_and_run_nbm_export_all_paths(["--path", path_with_nb_folder])
 
 # %% [markdown]
 # #### Checks & Cleaning
@@ -1366,15 +1362,15 @@ if False:
 # %%
 # | export
 def nbm_update_all_paths(path: str | Path):
+    config = get_config()
+    # To test:
+    # original_path = Path(path)
+    # nbm_folder = config["nbm_path"]
+    # if nbm_folder not in original_path.parts and (original_path / nbm_folder).exists:
+    #     path = str (original_path / nbm_folder)
     files = nbglob(path=path, as_path=True).sorted("name")
-    cfg = get_config()
-    path = Path(path or cfg.lib_path)
-    lib_dir = Path(cfg["lib_path"]).resolve()
-    files = globtastic(path, file_glob="*.py", skip_folder_re="^[_.]").filter(
-        lambda x: str(Path(x).absolute().relative_to(lib_dir) in _mod_files())
-    )
-    # files.map(nbm_update, path=lib_dir)
-    files.map(nbm_update)
+    for f in files:
+        nbm_update(f)
 
 
 def parse_argv_and_run_nbm_update_all_paths(argv: List[str]):
@@ -1426,7 +1422,8 @@ current_root, nb_paths = tst.create_test_content(
 # #### Example usage
 
 # %%
-parse_argv_and_run_nbm_update_all_paths(["--path", os.getcwd()])
+path_with_nb_folder = str(Path(os.getcwd()) / nb_folder)
+parse_argv_and_run_nbm_update_all_paths(["--path", path_with_nb_folder])
 
 # %% [markdown]
 # #### Checks & Cleaning
