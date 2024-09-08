@@ -206,7 +206,11 @@ def replace_folder_in_path(
         The modified path with the folder replaced.
     """
     if original_folder in path.parent.parts:
-        index = path.parent.parts.index(original_folder)
+        # we take the last index instead of the first one
+        # in case the folder is a subfolder of another one with same name
+        # this happens when testing our nbmodular library
+        index = -path.parent.parts[-1::-1].index(original_folder) - 1
+        index = len(path.parent.parts) + index
         parts = (
             path.parent.parts[:index] + (new_folder,) + path.parent.parts[index + 1 :]
         )
@@ -246,9 +250,7 @@ def set_paths_nb_processor(
         path (str): The path of the notebook file.
     """
     nb_processor.path = Path(path)
-    nb_processor.file_name_without_extension = nb_processor.path.name[: -len(".ipynb")]
-    nb_processor.path = Path(path)
-    nb_processor.file_name_without_extension = nb_processor.path.name[: -len(".ipynb")]
+    nb_processor.file_name_without_extension = nb_processor.path.stem
 
     # import ipdb
     # ipdb.set_trace()
@@ -257,6 +259,16 @@ def set_paths_nb_processor(
     nb_processor.nbs_path = config["nbs_path"]
     nb_processor.nbm_path = config["nbm_path"]
     nb_processor.lib_path = config["lib_path"]
+
+    if (
+        nb_processor.path.suffix == ".py" 
+        and nb_processor.lib_path in nb_processor.path.parent.parts
+    ):
+        # if we have passed a .py file, we replace it with the ipynb in nbm_path
+        nb_processor.path = replace_folder_in_path(
+            nb_processor.path, nb_processor.lib_path, nb_processor.nbm_path
+        )
+        nb_processor.path = nb_processor.path.with_suffix(".ipynb")
 
     # In diagram: nbs/nb.ipynb
     nb_processor.dest_nb_path = replace_folder_in_path(
@@ -1361,7 +1373,7 @@ def nbm_update_all_paths(path: str | Path):
     files = globtastic(path, file_glob="*.py", skip_folder_re="^[_.]").filter(
         lambda x: str(Path(x).absolute().relative_to(lib_dir) in _mod_files())
     )
-    #files.map(nbm_update, path=lib_dir)
+    # files.map(nbm_update, path=lib_dir)
     files.map(nbm_update)
 
 
