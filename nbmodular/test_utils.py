@@ -229,8 +229,10 @@ updated_py_paths = [
     "nbmodular/mixed/mixed_cells.py",
     "nbmodular/tests/mixed/test_mixed_cells.py",
 ]
-updated_cell_types = ["code", "original", "test"]
-
+updated_cell_types_lists = [
+    ["code", "original", "test"],
+]
+updated_cell_types_paths = [Path(".nbmodular/mixed/cell_types_mixed_cells.pk")]
 
 # %% [markdown]
 # ## Multiple updated examples
@@ -342,7 +344,7 @@ multiple_exported_nb_paths = [
 
 multiple_updated_py_modules = [
     # nbmodular/first_folder/first.py
-    """
+    f"""
 
 
 # @%% auto 0
@@ -350,23 +352,22 @@ __all__ = ['hello']
 
 # @%% ../../nbs/first_folder/first.ipynb 1
 #@@function hello
-def hello():
-    print ('hello')
-
+def hello(name):
+    print ('hello', name)
 
 """,
     # nbmodular/tests/first_folder/test_first.py
-    """
+    f"""
 
 
 # @%% auto 0
 __all__ = ['one_plus_one']
 
 # @%% ../../../nbs/first_folder/test_first.ipynb 1
-#@@function one_plus_one --test
-def one_plus_one():
-    a=1+1
-    print (a)
+#@@function x_plus_y --test
+def x_plus_y (x, y):
+    a=x+y
+    print (x, '+', y, '=', a)
 
 
 """,
@@ -379,8 +380,8 @@ __all__ = ['bye']
 
 # @%% ../../nbs/second_folder/second.ipynb 1
 #@@function bye
-def bye():
-    print ('bye')
+def bye(name):
+    print ('bye', name)
 
 
 """,
@@ -392,7 +393,16 @@ multiple_updated_py_paths = [
     "nbmodular/second_folder/second.py",
 ]
 
-multiple_updated_cell_types = []
+multiple_updated_cell_types_lists = [
+    ["original", "code", "test"],
+    ["original", "code", "original"],
+]
+
+multiple_updated_cell_types_paths = [
+    Path(".nbmodular/first_folder/cell_types_first.pk"),
+    Path(".nbmodular/second_folder/cell_types_second.pk"),
+]
+
 
 # %%
 
@@ -1572,13 +1582,13 @@ def create_and_cd_to_new_root_folder(
 def create_test_content(
     nbs: List[str] | str | None = None,
     nb_paths: Optional[List[str] | List[Path] | str | Path] = None,
+    nb_folder: str = "nbm",
     py_modules: List[str] | str | None = None,
     py_paths: Optional[List[str] | List[Path] | str | Path] = None,
-    code_cells_paths: Optional[str | Path] = None,
-    cell_types_lists: List[List[str]] | None = None,
-    nb_folder: str = "nbm",
     lib_folder: Optional[str] = "nbmodular",
-    code_cells_folder: str | Path = ".nbmodular",
+    cell_types_lists: List[List[str]] | None = None,
+    cell_types_paths: Optional[str | Path] = None,
+    cell_types_folder: str | Path = ".nbmodular",
     new_root: str = "new_test",
     config_path: str = "settings.ini",
 ) -> Tuple[str, List[str]]:
@@ -1636,18 +1646,18 @@ def create_test_content(
             full_py_path.write_text(py_module)
 
     if cell_types_lists is not None:
-        if code_cells_paths is None:
-            code_cells_paths = [f"f{idx}" for idx in range(len(cell_types_lists))]
+        if cell_types_paths is None:
+            cell_types_paths = [f"f{idx}" for idx in range(len(cell_types_lists))]
         else:
-            if len(code_cells_paths) != len(cell_types_lists):
+            if len(cell_types_paths) != len(cell_types_lists):
                 raise ValueError(
-                    "code_cells_paths must have same number of items as cell_types_lists"
+                    "cell_types_paths must have same number of items as cell_types_lists"
                 )
 
-        for cell_types, code_cells_path in zip(cell_types_lists, code_cells_paths):
-            full_code_cells_path = Path(new_root) / code_cells_folder / code_cells_path
-            full_code_cells_path.parent.mkdir(parents=True, exist_ok=True)
-            joblib.dump(cell_types, full_code_cells_path)
+        for cell_types, cell_types_path in zip(cell_types_lists, cell_types_paths):
+            full_cell_types_path = Path(new_root) / cell_types_folder / cell_types_path
+            full_cell_types_path.parent.mkdir(parents=True, exist_ok=True)
+            joblib.dump(cell_types, full_cell_types_path)
 
     # Copy settings.ini in new root folder, so that this file
     # can be read later on by our export / import functions.

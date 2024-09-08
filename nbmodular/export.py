@@ -1192,26 +1192,6 @@ def nbm_update(
 
 
 # %%
-# to remove
-new_root = "test_nbm_update_simulation"
-nb_folder = "nbm"
-nb_path = "mixed/mixed_cells.ipynb"
-# Create notebook in "new repo", and cd to it
-current_root, nb_paths = tst.create_test_content(
-    nbs=tst.mixed_nb1,
-    nb_paths=nb_path,
-    nb_folder=nb_folder,
-    new_root=new_root,
-)
-
-nbm_export(path=f"{nb_folder}/{nb_path}")
-
-exported_nbs, updated_py_modules, cell_types_lists = tst.read_content_in_repo(
-    [nb_path], "./", print_as_list=True
-)
-
-
-# %%
 # Simulate the exporting
 if False:
     new_root = "test_nbm_update"
@@ -1231,12 +1211,6 @@ if False:
         [nb_path], "./", print_as_list=True
     )
 
-    cell_types_paths = [Path(".nbmodular/mixed/cell_types_mixed_cells.pk")]
-    cell_types_lists = [
-        ["code", "original", "test"],
-    ]
-    # joblib.load("test_nbm_update/.nbmodular/cell_types.pk")
-
     # manually updated the py modules
     # updated_py_modules = [...]
 
@@ -1253,25 +1227,25 @@ updated_py_modules = [x.replace("@%%", "%%") for x in tst.updated_py_modules]
 new_root = "test_nbm_update"
 nb_folder = "nbm"
 lib_folder = "nbmodular"
+cell_types_folder = ".nbmodular"
 # Create notebook in "new repo", and cd to it
 current_root, nb_paths = tst.create_test_content(
     nbs=tst.exported_nbs,
     nb_paths=tst.exported_nb_paths,
+    nb_folder="",
     py_modules=updated_py_modules,
     py_paths=tst.updated_py_paths,
-    nb_folder="",
     lib_folder="",
+    cell_types_lists=tst.updated_cell_types_lists,
+    cell_types_paths=tst.updated_cell_types_paths,
+    cell_types_folder="",
     new_root=new_root,
 )
-cell_types = ["code", "original", "test"]
-os.makedirs(".nbmodular", exist_ok=True)
-joblib.dump(cell_types, ".nbmodular/cell_types.pk")
 
 # %% [markdown]
 # #### Example usage
 
 # %%
-
 nb_path = "mixed/mixed_cells.ipynb"
 nbm_update(path=f"{nb_folder}/{nb_path}")
 
@@ -1353,8 +1327,8 @@ tst.check_test_repo_content(
     expected_py_modules=expected_py_modules,
     current_root=current_root,
     new_root=new_root,
-    clean=False,
-    keep_cwd=True,
+    clean=True,
+    keep_cwd=False,
 )
 
 
@@ -1379,15 +1353,16 @@ if False:
 
 # %%
 # | export
-def nbm_update_all_paths(args):
-    files = nbglob(path=args.path, as_path=True).sorted("name")
+def nbm_update_all_paths(path: str | Path):
+    files = nbglob(path=path, as_path=True).sorted("name")
     cfg = get_config()
-    path = Path(args.path or cfg.lib_path)
-    lib_dir = cfg.lib_path.parent
+    path = Path(path or cfg.lib_path)
+    lib_dir = Path(cfg["lib_path"]).resolve()
     files = globtastic(path, file_glob="*.py", skip_folder_re="^[_.]").filter(
         lambda x: str(Path(x).absolute().relative_to(lib_dir) in _mod_files())
     )
-    files.map(nbm_update, lib_dir=lib_dir)
+    #files.map(nbm_update, path=lib_dir)
+    files.map(nbm_update)
 
 
 def parse_argv_and_run_nbm_update_all_paths(argv: List[str]):
@@ -1395,7 +1370,7 @@ def parse_argv_and_run_nbm_update_all_paths(argv: List[str]):
         description="Udpdate python modules from their corresponding notebooks."
     )
 
-    parser.add_argument("path", type=str, default=None, help="Path to python module")
+    parser.add_argument("--path", type=str, default=None, help="Path to python module")
     args = parser.parse_args(argv)
     nbm_update_all_paths(args.path)
 
@@ -1410,16 +1385,36 @@ def nbm_update_cli():
 # %% [markdown]
 # #### Example set-up
 
+
 # %%
 # we start from the root folder of our repo
-cd_root()
+multiple_updated_py_modules = [
+    x.replace("@%%", "%%") for x in tst.multiple_updated_py_modules
+]
+new_root = "test_parse_argv_and_run_nbm_update_all_paths"
+nb_folder = "nbm"
+lib_folder = "nbmodular"
+cell_types_folder = ".nbmodular"
+# Create notebook in "new repo", and cd to it
+current_root, nb_paths = tst.create_test_content(
+    nbs=tst.multiple_exported_nbs,
+    nb_paths=tst.multiple_exported_nb_paths,
+    nb_folder="",
+    py_modules=multiple_updated_py_modules,
+    py_paths=tst.multiple_updated_py_paths,
+    lib_folder="",
+    cell_types_lists=tst.multiple_updated_cell_types_lists,
+    cell_types_paths=tst.multiple_updated_cell_types_paths,
+    cell_types_folder="",
+    new_root=new_root,
+)
 
 
 # %% [markdown]
 # #### Example usage
 
 # %%
-parse_argv_and_run_nbm_export_all_paths(["--path", os.getcwd()])
+parse_argv_and_run_nbm_update_all_paths(["--path", os.getcwd()])
 
 # %% [markdown]
 # #### Checks & Cleaning
