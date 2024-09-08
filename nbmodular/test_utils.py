@@ -24,9 +24,7 @@
 # %%
 # |export
 # standard
-from code import interact
 import logging
-from math import log
 import os
 import shutil
 from pathlib import Path
@@ -36,8 +34,6 @@ import re
 
 # 3rd party
 from execnb.nbio import new_nb, write_nb, mk_cell, read_nb
-from plum import Val
-from requests import post
 from fastcore.basics import AttrDict
 import joblib
 
