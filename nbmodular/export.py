@@ -1215,9 +1215,13 @@ if False:
 
     nbm_export(path=f"{nb_folder}/{nb_path}")
 
-    exported_nbs, updated_py_modules, cell_types_lists = tst.read_content_in_repo(
-        [nb_path], "./", print_as_list=True
-    )
+    (
+        exported_nbs,
+        exported_py_paths,
+        updated_py_modules,
+        updated_py_paths,
+        cell_types_lists,
+    ) = tst.read_content_in_repo([nb_path], "./", print_as_list=True)
 
     # manually updated the py modules
     # updated_py_modules = [...]
@@ -1344,9 +1348,13 @@ tst.check_test_repo_content(
 
 if False:
     # 3) read result and manually check if it's correct
-    expected_nbs, expected_py_modules, cell_types_lists = tst.read_content_in_repo(
-        [nb_path], "./", print_as_list=True
-    )
+    (
+        expected_nbs,
+        expected_nbs_paths,
+        expected_py_modules,
+        expected_py_paths,
+        cell_types_lists,
+    ) = tst.read_content_in_repo([nb_path], "./", print_as_list=True)
 
     # copy and paste the result:
     # expected_nbs = [...]
@@ -1427,3 +1435,16 @@ parse_argv_and_run_nbm_update_all_paths(["--path", path_with_nb_folder])
 
 # %% [markdown]
 # #### Checks & Cleaning
+
+
+# %%
+import nbmodular.test_utils as tst
+
+# %%
+nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
+expected_nbs, expected_nbs_paths, expected_py_modules, expected_py_paths, cell_types_lists = tst.read_content_in_repo(
+    nb_paths,
+    "debug_tests/after_export_all/test_parse_argv_and_run_nbm_export_all_paths/",
+    print_as_list=True,
+)
+# %%

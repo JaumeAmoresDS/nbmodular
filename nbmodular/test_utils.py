@@ -263,7 +263,7 @@ def hello():
 a=1+1
 print (a)
 """,
-    # nbs/first_folder/test_first.ipynb
+    # .nbs/first_folder/first.ipynb
     """
 [code]
 #|default_exp first_folder.first
@@ -274,7 +274,7 @@ print (a)
 def hello():
     print ('hello')
 """,
-    # .nbs/first_folder/first.ipynb
+    # .nbs/first_folder/test_first.ipynb
     """
 [code]
 #|default_exp tests.first_folder.test_first
@@ -286,7 +286,7 @@ def one_plus_one():
     a=1+1
     print (a)
 """,
-    # .nbs/first_folder/test_first.ipynb
+    # nbm/second_folder/second.ipynb
     """
 [markdown]
 # Second notebook
@@ -300,7 +300,7 @@ print ('bye')
 a=2+2
 print (a)
 """,
-    # nbm/second_folder/second.ipynb
+    # nbs/second_folder/second.ipynb
     """
 [markdown]
 # Second notebook
@@ -315,7 +315,7 @@ def bye():
 a=2+2
 print (a)
 """,
-    # nbs/second_folder/second.ipynb
+    # .nbs/second_folder/second.ipynb
     """
 [code]
 #|default_exp second_folder.second
@@ -327,20 +327,18 @@ def bye():
     print ('bye')
 """,
 ]
-
 multiple_exported_nb_paths = [
-    "nbm/first_folder/first.ipynb",
-    "nbs/first_folder/first.ipynb",
-    "nbs/first_folder/test_first.ipynb",
-    ".nbs/first_folder/first.ipynb",
-    ".nbs/first_folder/test_first.ipynb",
-    "nbm/second_folder/second.ipynb",
-    "nbs/second_folder/second.ipynb",
+    Path("nbm/first_folder/first.ipynb"),
+    Path("nbs/first_folder/first.ipynb"),
+    Path(".nbs/first_folder/first.ipynb"),
+    Path(".nbs/first_folder/test_first.ipynb"),
+    Path("nbm/second_folder/second.ipynb"),
+    Path("nbs/second_folder/second.ipynb"),
+    Path(".nbs/second_folder/second.ipynb"),
 ]
-
 multiple_updated_py_modules = [
     # nbmodular/first_folder/first.py
-    f"""
+    """
 
 
 # @%% auto 0
@@ -348,22 +346,23 @@ __all__ = ['hello']
 
 # @%% ../../nbs/first_folder/first.ipynb 1
 #@@function hello
-def hello(name):
-    print ('hello', name)
+def hello():
+    print ('hello - modified 1')
+
 
 """,
     # nbmodular/tests/first_folder/test_first.py
-    f"""
+    """
 
 
 # @%% auto 0
 __all__ = ['one_plus_one']
 
 # @%% ../../../nbs/first_folder/test_first.ipynb 1
-#@@function x_plus_y --test
-def x_plus_y (x, y):
-    a=x+y
-    print (x, '+', y, '=', a)
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a, '- modified 1 test')
 
 
 """,
@@ -376,29 +375,25 @@ __all__ = ['bye']
 
 # @%% ../../nbs/second_folder/second.ipynb 1
 #@@function bye
-def bye(name):
-    print ('bye', name)
+def bye():
+    print ('bye - modified 2')
 
 
 """,
 ]
-
 multiple_updated_py_paths = [
-    "nbmodular/first_folder/first.py",
-    "nbmodular/tests/first_folder/test_first.py",
-    "nbmodular/second_folder/second.py",
+    Path("nbmodular/first_folder/first.py"),
+    Path("nbmodular/tests/first_folder/test_first.py"),
+    Path("nbmodular/second_folder/second.py"),
 ]
-
 multiple_updated_cell_types_lists = [
     ["original", "code", "test"],
     ["original", "code", "original"],
 ]
-
 multiple_updated_cell_types_paths = [
     Path(".nbmodular/first_folder/cell_types_first.pk"),
     Path(".nbmodular/second_folder/cell_types_second.pk"),
 ]
-
 
 # %%
 
@@ -654,7 +649,7 @@ def read_nbs_in_repo(
     tmp_folder: Optional[str] = ".nbs",
     nbs_folder: Optional[str] = "nbs",
     print_as_list: bool = False,
-    print: bool = False,
+    display: bool = False,
     logger: logging.Logger = None,
     previous_text: str = "",
     posterior_text: str = "",
@@ -697,8 +692,8 @@ def read_nbs_in_repo(
     )
     if logger is not None:
         logger.debug(f"Reading notebooks in {nb_paths}")
-    content = read_nbs(nb_paths)
-    if print:
+    content, nb_paths = read_nbs(nb_paths)
+    if display:
         print_files(
             content,
             print_as_list=print_as_list,
@@ -706,7 +701,7 @@ def read_nbs_in_repo(
             previous_text=previous_text,
             posterior_text=posterior_text,
         )
-    return content
+    return content, nb_paths
 
 
 # %% [markdown]
@@ -720,7 +715,7 @@ def read_pymodules_in_repo(
     new_root: str = "new_test",
     lib_folder: str = "nbmodular",
     print_as_list: bool = False,
-    print: bool = False,
+    display: bool = False,
     previous_text: str = "",
     posterior_text: str = "",
     interactive_notebook: bool = True,
@@ -750,10 +745,10 @@ def read_pymodules_in_repo(
 
     """
     py_paths = derive_py_paths(nb_paths, new_root, lib_folder=lib_folder)
-    content = read_text_files(py_paths)
+    content, py_paths = read_text_files(py_paths)
     if interactive_notebook:
         content = [x.replace("%%", "@%%") for x in content]
-    if print:
+    if display:
         print_files(
             content,
             print_as_list=print_as_list,
@@ -761,7 +756,7 @@ def read_pymodules_in_repo(
             previous_text=previous_text,
             posterior_text=posterior_text,
         )
-    return content
+    return content, py_paths
 
 
 # %% [markdown]
@@ -871,9 +866,9 @@ def read_content_in_repo(
     lib_folder: Optional[str] = "nbmodular",
     cell_types_folder: Optional[str] = ".nbmodular",
     print_as_list: bool = False,
-    print: bool = True,
+    display: bool = True,
     interactive_notebook: bool = True,
-) -> Tuple[List[str], List[str]]:
+):
     """
     Read the content in a repository.
 
@@ -907,31 +902,37 @@ def read_content_in_repo(
         )
     if print_as_list:
         previous_text = "expected_nbs = "
-    nbs = read_nbs_in_repo(
+    nbs, existing_nb_paths = read_nbs_in_repo(
         nb_paths,
         new_root,
         nbm_folder,
         tmp_folder,
         nbs_folder,
         print_as_list,
-        print,
+        display,
         previous_text=previous_text,
     )
     if print_as_list:
+        print(f"existing_nb_paths={existing_nb_paths}")
+
+    if print_as_list:
         previous_text = "expected_py_modules = "
-    py_modules = (
+    py_modules, existing_py_paths = (
         read_pymodules_in_repo(
             nb_paths,
             new_root,
             lib_folder,
             print_as_list,
-            print,
+            display,
             previous_text=previous_text,
             interactive_notebook=interactive_notebook,
         )
         if lib_folder is not None
         else []
     )
+
+    if print_as_list:
+        print(f"existing_py_paths={existing_py_paths}")
 
     cell_types_lists = (
         read_cell_types_lists_in_repo(
@@ -944,10 +945,7 @@ def read_content_in_repo(
         else []
     )
 
-    if cell_types_folder is not None:
-        return nbs, py_modules, cell_types_lists
-    else:
-        return nbs, py_modules
+    return nbs, existing_nb_paths, py_modules, existing_py_paths, cell_types_lists
 
 
 # %% [markdown]
@@ -1131,8 +1129,10 @@ assert py_paths == [
 # %%
 # | export
 def read_nbs(
-    paths: List[str] | List[Path], must_exist: dict = {}, as_text: bool = True
-) -> List[str] | List[dict]:
+    paths: List[str] | List[Path],
+    must_exist: dict = {},
+    as_text: bool = True,
+) -> Tuple[List[str] | List[dict], List[Path]]:
     """
     Read notebooks from disk.
 
@@ -1149,15 +1149,20 @@ def read_nbs(
     """
     nbs_in_disk = []
     paths = [Path(path) for path in paths]
+    existing_paths = []
     for path in paths:
         # Check that file exists. useful for being called inside a test utility
         # to see where it fails.
         if path.exists():
             nbs_in_disk.append(read_nb(path))
+            existing_paths.append(path)
         elif must_exist.get(path, False):
             raise FileNotFoundError(f"File {path} does not exist")
 
-    return [strip_nb(nb2text(nb)) for nb in nbs_in_disk] if as_text else nbs_in_disk
+    return (
+        [strip_nb(nb2text(nb)) for nb in nbs_in_disk] if as_text else nbs_in_disk,
+        existing_paths,
+    )
 
 
 # %% [markdown]
@@ -1191,7 +1196,7 @@ def compare_nbs(nbs1: List[str], nbs2: List[str]) -> bool:
 nbs = [nb1, nb2]
 nb_paths = ["first.ipynb", "second.ipynb"]
 write_nbs(nbs, nb_paths)
-nbs_in_disk = read_nbs(nb_paths)
+nbs_in_disk, nb_paths = read_nbs(nb_paths)
 assert compare_nbs(nbs_in_disk, nbs)
 for nb_path in nb_paths:
     Path(nb_path).unlink()
@@ -1226,15 +1231,17 @@ def read_text_files(
     """
     text_files = []
     paths = [Path(path) for path in paths]
+    existing_paths = []
     for path in paths:
         # Check that file exists. useful for being called inside a test utility
         # to see where it fails.
         if path.exists():
             text_files.append(path.read_text())
+            existing_paths.append(path)
         elif must_exist.get(path, False):
             raise FileNotFoundError(f"File {path} does not exist")
 
-    return text_files
+    return text_files, existing_paths
 
 
 # %% [markdown]
@@ -1266,7 +1273,7 @@ def compare_texts(texts1: List[str], texts2: List[str]) -> bool:
 texts = [py1, py2]
 paths = ["first.py", "second.py"]
 write_text_files(texts, paths)
-texts_in_disk = read_text_files(paths)
+texts_in_disk, paths = read_text_files(paths)
 assert compare_texts(texts_in_disk, texts)
 
 # clean
@@ -1316,9 +1323,9 @@ def read_and_print(
     paths: List[str], file_type: str, print_as_list: bool = False
 ) -> None:
     if file_type == "notebook":
-        files = read_nbs(paths)
+        files, paths = read_nbs(paths)
     elif file_type == "text":
-        files = read_text_files(paths)
+        files, paths = read_text_files(paths)
     else:
         raise ValueError(f"file_type {file_type} not recognized")
 
@@ -1368,7 +1375,7 @@ def check_nbs(
         If the actual notebooks do not match the expected notebooks.
 
     """
-    actual = read_nbs_in_repo(
+    actual, _ = read_nbs_in_repo(
         nb_paths,
         new_root,
         nbm_folder=nbm_folder,
@@ -1412,7 +1419,7 @@ def check_py_modules(
     AssertionError
         If the actual Python modules do not match the expected modules.
     """
-    actual = read_pymodules_in_repo(
+    actual, _ = read_pymodules_in_repo(
         nb_paths,
         new_root,
         lib_folder=lib_folder,
