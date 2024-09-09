@@ -28,7 +28,7 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from configparser import ConfigParser
 import re
 
@@ -49,17 +49,68 @@ except ImportError:
 # %% [markdown]
 # ## Logging
 
+# %% [markdown]
+# ### set_log_level
+
+
+# %%
+# |export
+def set_handle_and_log_level(
+    logger,
+    log_level,
+    handler: logging.StreamHandler | logging.FileHandler = logging.StreamHandler(),
+):
+    logger.setLevel(log_level)
+    handler.setLevel(log_level)
+    logger.addHandler(handler)
+
+
+# %% [markdown]
+# ### set_log_level
+
+
 # %%
 # |export
 def set_log_level(logger, log_level):
     logger.setLevel(log_level)
-    ch = logging.StreamHandler()
-    ch.setLevel(log_level)
-    logger.addHandler(ch)
+    for handler in logger.handlers:
+        handler.setLevel(log_level)
+
+
+# %% [markdown]
+# ### set_logger
+
+
+# %%
+# |export
+def create_or_get_logger(
+    name: str = "nbmodular",
+    log_level: Optional[str] = None,
+    log_path: Optional[str] = "logs",
+    file_name: str = "log.log",
+    to_file=True,
+):
+    logger = logging.getLogger(name)
+    if not logger.hasHandlers():
+        set_handle_and_log_level(
+            logger,
+            log_level,
+        )
+        if to_file:
+            full_log_path = (
+                Path(log_path) / file_name if log_path is not None else Path(file_name)
+            )
+            full_log_path.parent.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.FileHandler(full_log_path)
+            set_handle_and_log_level(logger, log_level, handler=file_handler)
+    elif log_level is not None:
+        set_log_level(logger, log_level)
+    return logger
 
 
 # %% [markdown]
 # ## cd_root
+
 
 # %%
 # | export
@@ -101,6 +152,7 @@ def cd_root():
 
 # %% [markdown]
 # ## get_config
+
 
 # %%
 # | export

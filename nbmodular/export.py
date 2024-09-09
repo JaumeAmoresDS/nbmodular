@@ -49,7 +49,7 @@ from execnb.nbio import mk_cell, read_nb, write_nb, NbCell
 from fastcore.all import globtastic
 
 # nbmodular
-from nbmodular.utils import set_log_level, get_config
+from nbmodular.utils import create_or_get_logger, get_config
 import nbmodular.test_utils as tst
 from nbmodular.cell2func import CellProcessor
 
@@ -465,14 +465,12 @@ class NbMagicProcessor(Processor):
         self,
         path,
         nb=None,
-        logger=None,
-        log_level="INFO",
         logger_name="nbmodular",
+        log_level="INFO",
     ):
         nb = read_nb(path) if nb is None else nb
         super().__init__(nb)
-        self.logger = logging.getLogger(logger_name) if logger is None else logger
-        set_log_level(self.logger, log_level)
+        self.logger = create_or_get_logger (logger_name, log_level)
         self.logger.info(f"Analyzing code from notebook {path}")
         self.cell_processor = CellProcessor(path=path)
         self.cell_processor.set_run_tests(False)
@@ -575,15 +573,13 @@ class NbMagicExporter(Processor):
         code_cells_file_name=None,
         code_cells_path=".nbmodular",
         execute=True,
-        logger=None,
+        logger_name="nbmodular",
         log_level="INFO",
         tab_size=4,
-        logger_name="nbmodular",
     ):
         nb = read_nb(path) if nb is None else nb
         super().__init__(nb)
-        self.logger = logging.getLogger(logger_name) if logger is None else logger
-        set_log_level(self.logger, log_level)
+        self.logger = create_or_get_logger(logger_name, log_level)
         set_paths_nb_processor(self, path, code_cells_path=code_cells_path)
         code_cells_file_name = (
             self.file_name_without_extension
@@ -593,7 +589,7 @@ class NbMagicExporter(Processor):
 
         self.logger.info(f"Analyzing code from notebook {self.path}")
         self.nb_magic_processor = NbMagicProcessor(
-            path, nb=nb, logger=logger, log_level=log_level
+            path, nb=nb, logger_name=logger_name, log_level=log_level
         )
         NBProcessor(path, self.nb_magic_processor, rm_directives=False, nb=nb).process()
 
@@ -1138,15 +1134,13 @@ def process_cell_for_nbm_update(cell: NbCell):
 def nbm_update(
     path: str | Path,
     code_cells_path: str | Path = ".nbmodular",
-    logger: logging.Logger | None = None,
-    log_level: str = "INFO",
     logger_name: str = "nbmodular",
+    log_level: str = "INFO",
 ):
     nb_processor = Bunch()
     path = Path(path)
 
-    nb_processor.logger = logging.getLogger(logger_name) if logger is None else logger
-    set_log_level(nb_processor.logger, log_level)
+    nb_processor.logger = create_or_get_logger (logger_name, log_level)
     set_paths_nb_processor(nb_processor, path, code_cells_path=code_cells_path)
 
     # prior to step 5 in diagram:

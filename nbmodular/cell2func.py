@@ -63,7 +63,7 @@ from fastcore.all import argnames
 import nbdev
 
 from nbmodular import function_io
-from nbmodular.utils import set_log_level, get_config
+from nbmodular.utils import set_handle_and_log_level, get_config
 
 
 # %%
@@ -120,7 +120,7 @@ def bunch_io(func):
 
 # %%
 # | export
-#import pdb
+# import pdb
 
 
 def get_non_callable_ipython(variables_to_inspect, locals_, self=None):
@@ -280,6 +280,7 @@ def run_cell_and_cache(
 
 # %% [markdown]
 # ### Example usage
+
 
 # %%
 def test_run_cell_and_cache():
@@ -1994,7 +1995,7 @@ except NameError:
                 )
 
     def set_log_level(self, log_level):
-        set_log_level(self.logger, log_level)
+        set_handle_and_log_level(self.logger, log_level)
 
     def set_pipe(self, function_name, pipeline_name):
         self.function_info[function_name].pipeline_name = pipeline_name
@@ -3371,8 +3372,9 @@ def test_{pipeline_name} (test=True, prev_result=None, result_file_name="{pipeli
 #
 # > See README.md for more examples
 
+
 # %%
-def test_cell_processor ():
+def test_cell_processor():
     cp = CellProcessor()
     cp.set_file_path("nbmodular/core/cell2func.py")
 
@@ -3396,7 +3398,6 @@ def test_cell_processor ():
     1+2
     """
     cp.process_function_call("plus_1_2 --save-capture-disk", cell)
-
 
     # check outputs
     cell_captures_path_to_file = cell_captures_path_to_folder / "plus_1_2.pk"
@@ -3777,19 +3778,18 @@ def transfer_variables_to_nb(**kwargs):
 
 
 # %%
-def test_transfer_variables_to_nb ():
+def test_transfer_variables_to_nb():
     def transfer_value_vector():
         vector = ["hello", 1]
         transfer_variables_to_nb(vector=vector)
-
 
     # %%
     transfer_value_vector()
     assert vector == ["hello", 1]
 
-
     # %% [markdown]
     # ### 2. From notebook to function
+
 
 # %% [markdown]
 # ::: {.content-hidden}
