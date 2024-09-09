@@ -467,10 +467,11 @@ class NbMagicProcessor(Processor):
         nb=None,
         logger=None,
         log_level="INFO",
+        logger_name="nbmodular",
     ):
         nb = read_nb(path) if nb is None else nb
         super().__init__(nb)
-        self.logger = logging.getLogger("nb_exporter") if logger is None else logger
+        self.logger = logging.getLogger(logger_name) if logger is None else logger
         set_log_level(self.logger, log_level)
         self.logger.info(f"Analyzing code from notebook {path}")
         self.cell_processor = CellProcessor(path=path)
@@ -577,10 +578,11 @@ class NbMagicExporter(Processor):
         logger=None,
         log_level="INFO",
         tab_size=4,
+        logger_name="nbmodular",
     ):
         nb = read_nb(path) if nb is None else nb
         super().__init__(nb)
-        self.logger = logging.getLogger("nb_exporter") if logger is None else logger
+        self.logger = logging.getLogger(logger_name) if logger is None else logger
         set_log_level(self.logger, log_level)
         set_paths_nb_processor(self, path, code_cells_path=code_cells_path)
         code_cells_file_name = (
@@ -1138,11 +1140,12 @@ def nbm_update(
     code_cells_path: str | Path = ".nbmodular",
     logger: logging.Logger | None = None,
     log_level: str = "INFO",
+    logger_name: str = "nbmodular",
 ):
     nb_processor = Bunch()
     path = Path(path)
 
-    nb_processor.logger = logging.getLogger("nb_importer") if logger is None else logger
+    nb_processor.logger = logging.getLogger(logger_name) if logger is None else logger
     set_log_level(nb_processor.logger, log_level)
     set_paths_nb_processor(nb_processor, path, code_cells_path=code_cells_path)
 
@@ -1160,20 +1163,36 @@ def nbm_update(
         nb_processor.tmp_test_dest_nb_path.rename(nb_processor.test_dest_nb_path)
 
     # step 5 in diagram: nbdev_update
-    _update_mod(
-        nb_processor.dest_python_path,
-        lib_dir=Path(nb_processor.lib_path).parent.resolve(),
-    )
-    _update_mod(
-        nb_processor.test_dest_python_path,
-        lib_dir=Path(nb_processor.lib_path).parent.resolve(),
-    )
+    if nb_processor.dest_python_path.exists():
+        _update_mod(
+            nb_processor.dest_python_path,
+            lib_dir=Path(nb_processor.lib_path).parent.resolve(),
+        )
+    else:
+        nb_processor.logger.info(
+            f"No python file to update {nb_processor.dest_python_path}"
+        )
+    if nb_processor.test_dest_python_path.exists():
+        _update_mod(
+            nb_processor.test_dest_python_path,
+            lib_dir=Path(nb_processor.lib_path).parent.resolve(),
+        )
+    else:
+        nb_processor.logger.info(
+            f"No test python file to update {nb_processor.test_dest_python_path}"
+        )
 
     # obtain cell types and read them from notebooks
     nb_processor.cell_types = joblib.load(nb_processor.cell_types_file_path)
     original_nb = read_nb(path)
-    dest_nb = read_nb(nb_processor.dest_nb_path)
-    test_dest_nb = read_nb(nb_processor.test_dest_nb_path)
+    if nb_processor.dest_nb_path.exists():
+        dest_nb = read_nb(nb_processor.dest_nb_path)
+    else:
+        nb_processor.logger.info(f"File {nb_processor.dest_nb_path} not found")
+    if nb_processor.test_dest_nb_path.exists():
+        test_dest_nb = read_nb(nb_processor.test_dest_nb_path)
+    else:
+        nb_processor.logger.info(f"File {nb_processor.test_dest_nb_path} not found")
     nb_processor.cells = []
     code_idx, test_idx = 1, 1
     for original_idx, cell_type in enumerate(nb_processor.cell_types):
@@ -1438,13 +1457,168 @@ parse_argv_and_run_nbm_update_all_paths(["--path", path_with_nb_folder])
 
 
 # %%
-import nbmodular.test_utils as tst
+if False:
+    nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
+    (
+        expected_nbs,
+        expected_nbs_paths,
+        expected_py_modules,
+        expected_py_paths,
+        expected_cell_types_lists,
+    ) = tst.read_content_in_repo(
+        nb_paths,
+        "./",
+        print_as_list=True,
+    )
+# %%
+expected_nbs = [
+    # nbm/first_folder/first.ipynb
+    """
+[markdown]
+# First notebook
+
+[code]
+%%function hello
+def hello():
+    print ('hello - modified 1')
+
+[code]
+%%function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a, '- modified 1 test')
+""",
+    # nbs/first_folder/first.ipynb
+    """
+[code]
+#|default_exp first_folder.first
+
+[code]
+#|export
+#@@function hello
+def hello():
+    print ('hello - modified 1')
+""",
+    # nbs/first_folder/test_first.ipynb
+    """
+[code]
+#|default_exp tests.first_folder.test_first
+
+[code]
+#|export
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a, '- modified 1 test')
+""",
+    # nbm/second_folder/second.ipynb
+    """
+[markdown]
+# Second notebook
+
+[code]
+%%function bye
+def bye():
+    print ('bye - modified 2')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+""",
+    # nbs/second_folder/second.ipynb
+    """
+[code]
+#|default_exp second_folder.second
+
+[code]
+#|export
+#@@function bye
+def bye():
+    print ('bye - modified 2')
+""",
+]
+expected_nbs_paths = [
+    Path("nbm/first_folder/first.ipynb"),
+    Path("nbs/first_folder/first.ipynb"),
+    Path("nbs/first_folder/test_first.ipynb"),
+    Path("nbm/second_folder/second.ipynb"),
+    Path("nbs/second_folder/second.ipynb"),
+]
+expected_py_modules = [
+    # nbmodular/first_folder/first.py
+    """
+
+
+
+# @%% auto 0
+__all__ = ['hello']
+
+# @%% ../../nbs/first_folder/first.ipynb 1
+#@@function hello
+def hello():
+    print ('hello - modified 1')
+
+
+
+""",
+    # nbmodular/tests/first_folder/test_first.py
+    """
+
+
+
+# @%% auto 0
+__all__ = ['one_plus_one']
+
+# @%% ../../../nbs/first_folder/test_first.ipynb 1
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a, '- modified 1 test')
+
+
+
+""",
+    # nbmodular/second_folder/second.py
+    """
+
+
+
+# @%% auto 0
+__all__ = ['bye']
+
+# @%% ../../nbs/second_folder/second.ipynb 1
+#@@function bye
+def bye():
+    print ('bye - modified 2')
+
+
+
+""",
+]
+expected_py_paths = [
+    Path("nbmodular/first_folder/first.py"),
+    Path("nbmodular/tests/first_folder/test_first.py"),
+    Path("nbmodular/second_folder/second.py"),
+]
+expected_cell_types_lists = [
+    ["original", "code", "test"],
+    ["original", "code", "original"],
+]
+expected_cell_types_paths = [
+    Path(".nbmodular/first_folder/cell_types_first.pk"),
+    Path(".nbmodular/second_folder/cell_types_second.pk"),
+]
 
 # %%
-nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
-expected_nbs, expected_nbs_paths, expected_py_modules, expected_py_paths, cell_types_lists = tst.read_content_in_repo(
-    nb_paths,
-    "debug_tests/after_export_all/test_parse_argv_and_run_nbm_export_all_paths/",
-    print_as_list=True,
+tst.check_test_repo_content(
+    # nb_paths,
+    tst.multiple_exported_nb_paths,
+    expected_nbs=expected_nbs,
+    expected_py_modules=expected_py_modules,
+    current_root=current_root,
+    new_root=new_root,
+    clean=True,
+    keep_cwd=False,
 )
 # %%
