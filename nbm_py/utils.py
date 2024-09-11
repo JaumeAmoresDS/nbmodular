@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.2
+#       jupytext_version: 1.16.3
 #   kernelspec:
 #     display_name: python3
 #     language: python
@@ -19,7 +19,7 @@
 # > Exporting to python module
 
 # %%
-# | default_exp core.utils
+# | default_exp utils
 
 # %%
 # |export
