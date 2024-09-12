@@ -105,7 +105,7 @@ def import_jupytext_modules(nbm_path: str, jupytext_path: str) -> None:
     nbm_update_all_paths(nbm_path)
     shutil.copy(f"{nbm_path}/*.ipynb", jupytext_path)
     os.chdir(jupytext_path)
-    jupytext("--set-formats ipynb,py *.ipynb".split())
+    jupytext("--set-formats ipynb,py --format-options comment_magics=false *.ipynb".split())
     os.remove("*.ipynb")
     os.chdir(current_path)
 
@@ -137,5 +137,5 @@ def parse_argv_and_run_nbmjupy(argv: List[str]):
     import_jupytext_modules(args.nbm, args.jupytext)
 
 
-def jupynbm_import_cli():
+def nbmjupy_import_cli():
     parse_argv_and_run_nbmjupy(sys.argv)
