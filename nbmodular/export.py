@@ -300,6 +300,7 @@ class NbMagicProcessor(Processor):
             words = line.split()
             command = words[0][2:]
             if command in self.cell_processor.magic_commands_list:
+                # run %%function magic command with --not-run flag. This will store the code cell, but not run it.
                 self.cell_processor.process_function_call(
                     line=" ".join(*words[1:], ["--not-run"]),
                     cell="\n".join(source_lines[1:]) if len(source_lines) > 1 else "",
