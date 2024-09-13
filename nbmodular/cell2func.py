@@ -2090,6 +2090,9 @@ for arg, val in zip (args_with_defaults, default_values):
             kwarguments = {}
             return_values = []
 
+        # original cell will be used for evaluating default values of function keyword parameters
+        # since transformed cell removes header from function when it is defined
+        original_cell = cell 
         cell = update_cell_code(cell, defined and not permanent)
 
         if returns_bunch:
@@ -2138,7 +2141,7 @@ for arg, val in zip (args_with_defaults, default_values):
             # and assign default values to those variables.
             # This is only required if the function's code is run
             # (i.e., when this_function.run is True)
-            self._evaluate_kwargs_defaults(cell)
+            self._evaluate_kwargs_defaults(original_cell)
 
         return this_function
 
