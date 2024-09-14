@@ -664,6 +664,7 @@ keys = joblib.load ('function_processor_keys.pk')
         first_call=True,
         function_in_previous_cells=None,
         run=True,
+        ns_not_run=False,
     ):
         """
         Runs the code in the function, and collects local variables.
@@ -690,7 +691,7 @@ keys = joblib.load ('function_processor_keys.pk')
             cell_captures_path_to_folder=cell_processor.cell_captures_path_to_folder
         )
         joblib.dump(dict(self), "function_processor.pk")
-        self.cell_processor = self.cell_processor
+        self.cell_processor = cell_processor
 
         if not is_test_function:
             # pdb.no_set_trace()
@@ -727,6 +728,7 @@ keys = joblib.load ('function_processor_keys.pk')
             self.previous_values = {k: None for k in self.previous_variables}
             self.current_values = {k: None for k in self.created_variables}
 
+        if run or ns_not_run:
             self._create_function_info_object()
         self.match_variables_and_locals(
             function_in_previous_cells=function_in_previous_cells
@@ -2314,6 +2316,7 @@ for arg, val in zip (args_with_defaults, default_values):
             first_call=first_call,
             function_in_previous_cells=function_in_previous_cells,
             run=self.current_function.run,
+            ns_not_run=self.current_function.ns_not_run,
         )
 
         self.current_function = self.update_pipeline(
@@ -2467,6 +2470,7 @@ for arg, val in zip (args_with_defaults, default_values):
                 store_values=store_values,
                 first_call=first_call,
                 run=run,
+                ns_not_run=current_function.ns_not_run,
             )
 
         if current_function.test and not current_function.data:
