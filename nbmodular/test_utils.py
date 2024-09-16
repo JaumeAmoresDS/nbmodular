@@ -49,7 +49,7 @@ from typing import List, Tuple, Optional, Union, Dict
 import re
 
 # 3rd party
-from execnb.nbio import new_nb, write_nb, mk_cell, read_nb
+from execnb.nbio import new_nb, write_nb, mk_cell, read_nb, NbCell
 from nbdev.doclinks import nbglob
 from fastcore.basics import AttrDict
 import joblib
@@ -126,6 +126,32 @@ def g (z):
     return r
 """
 
+real_nb1 = """
+[code]
+['add_100_info.previous_variables']
+<output>
+[('two_plus_three',
+  "#|echo: false\na = 2\nb = 3\nc = a+b\nprint (f'The result of adding {a}+{b} is {c}')\n"),
+ ('add_100',
+  "#|echo: false\nmy_previous_variable = my_previous_variable + 100\nprint (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\n"),
+ ('add_100',
+  "#|echo: false\nmy_previous_variable = my_previous_variable + 100\nprint (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\n"),
+ ('hybrid', 'x = 3\nx = x + 4\nprint (x)\n'),
+ ('hybrid', 'x = 3\nx = x + 4\nprint (x)\n'),
+ ('multiply_by_two',
+  "#|echo: false\nd = c*2\nprint (f'Two times {c} is {d}')\n"),
+ ('get_my_previous_variable --position 0',
+  '#| echo: false\nmy_previous_variable = 100\n'),
+ ('add_100 --include-output my_previous_variable',
+  "#| echo: false\nmy_previous_variable = my_previous_variable + 100\nprint (f'The result of adding 100 to my_previous_variable is {my_previous_variable}')\n")]
+
+[markdown]
+['`my_previous_variable` is also included in the list of `created_variables`, since a new value for this variable has been generated:']
+
+[code]
+['%set default_write True\n', '%set default_test_write True']
+"""
+
 # %% ../nbs/test_utils.ipynb 12
 py1 = """
 def hello ():
@@ -173,11 +199,11 @@ def parse_nb_sections(nb):
             output_match = re.search(r"<output>(.*)", content, re.DOTALL)
             if output_match:
                 content, output = (
-                    content[: output_match.start()].strip(),
-                    output_match.group(1).strip(),
+                    content[: output_match.start()],
+                    output_match.group(1),
                 )
                 kwargs["output"] = output
-            result_with_output.append((cell_type, content, kwargs))
+        result_with_output.append((cell_type, content, kwargs))
 
     return result_with_output
 
@@ -209,9 +235,15 @@ def nb2text(nb: dict) -> str:
 def nb2text_with_output(nb: dict) -> str:
     output_cells = []
     for cell in nb["cells"]:
-        if "output" in cell:
+        if (
+            "outputs" in cell
+            and len(cell["outputs"]) > 0
+            and "data" in cell["outputs"][0]
+            and "text/plain" in cell["outputs"][0]["data"]
+        ):
+            output = "".join(cell["outputs"][0]["data"]["text/plain"])
             output_cells.append(
-                f"[{cell['cell_type']}]\n{cell['source']}\n<output>{cell['output']}"
+                f"[{cell['cell_type']}]\n{cell['source']}\n<output>\n{output}"
             )
         else:
             output_cells.append(f"[{cell['cell_type']}]\n{cell['source']}")
