@@ -1,11 +1,17 @@
 # %% imports
+# standard library
 from pathlib import Path
 import shutil
 import warnings
 from unittest.mock import patch, MagicMock
+from importlib import reload
 
+# 3rd party
 import pytest
+
+# ours
 from nbmodular.jupynbm import srcpaths_in_dst, rename_mfe_files, migrate_files
+import nbmodular.test_utils as tst
 
 
 # %%
@@ -212,3 +218,4 @@ with pytest.raises(FileExistsError):
 shutil.rmtree(tmp_path)
 
 # %%
+tst.create_test_content(tst.complete_nb1, "complete.ipynb", new_root="test_complete2")
