@@ -220,6 +220,22 @@ with pytest.raises(FileExistsError):
 shutil.rmtree(tmp_path)
 
 # %%
-tst.create_test_content(tst.complete_nb1, "complete.ipynb", new_root="test_complete2")
+reload(tst)
+new_root = "test_jupynbm"
+nb_folder = "nbm"
+nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
+current_root, nb_paths = tst.create_test_content(
+    nbs=[tst.nb1, tst.nb2],
+    nb_paths=nb_paths,
+    nb_folder=nb_folder,
+    new_root=new_root,
+)
+
+# %% [markdown]
+# #### Example usage
+
+# %%
+path_with_nb_folder = str(Path(os.getcwd()) / nb_folder)
+parse_argv_and_run_nbm_export_all_paths(["--path", path_with_nb_folder])
 
 # %%
