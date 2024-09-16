@@ -72,6 +72,20 @@ a=1+1
 print (a)
 """
 
+nb2 = """
+[markdown]
+# Second notebook
+
+[code]
+%%function bye
+print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+"""
+
 # %% ../nbs/test_utils.ipynb 9
 mixed_nb1 = """
 [code]
@@ -161,6 +175,267 @@ def one_plus_one ():
     a=1+1
     print (a)
 """
+
+py2 = """
+def bye ():
+    print ('bye')
+
+def two_plus_two ():
+    a=2+2
+    print (a)
+"""
+
+exported_nbs = [
+    # nbm/mixed/mixed_cells.ipynb
+    """
+[code]
+%%function
+def first():
+    pass
+
+[markdown]
+comment
+
+[code]
+%%function --test
+def second ():
+    pass
+""",
+    # nbs/mixed/mixed_cells.ipynb
+    """
+[code]
+#|export
+def first():
+    pass
+
+[markdown]
+comment
+
+[code]
+pass
+""",
+    # .nbs/mixed/mixed_cells.ipynb
+    """
+[code]
+#|default_exp mixed.mixed_cells
+
+[code]
+#|export
+#@@function
+def first():
+    pass
+""",
+    # .nbs/mixed/test_mixed_cells.ipynb
+    """
+[code]
+#|default_exp tests.mixed.test_mixed_cells
+
+[code]
+#|export
+#@@function --test
+def second():
+    pass
+""",
+]
+
+exported_nb_paths = [
+    "nbm/mixed/mixed_cells.ipynb",
+    "nbs/mixed/mixed_cells.ipynb",
+    ".nbs/mixed/mixed_cells.ipynb",
+    ".nbs/mixed/test_mixed_cells.ipynb",
+]
+
+updated_py_modules = [
+    # nbmodular/mixed/mixed_cells.py
+    """
+# @%% auto 0
+__all__ = ['first']
+
+# @%% ../../nbs/mixed/mixed_cells.ipynb 1
+#@@function
+def first():
+    x = 3 + 1
+""",
+    # nbmodular/tests/mixed/test_mixed_cells.py
+    """
+# @%% auto 0
+__all__ = ['second']
+
+# @%% ../../../nbs/mixed/test_mixed_cells.ipynb 1
+#@@function --test
+def second():
+    print("hello")
+""",
+]
+updated_py_paths = [
+    "nbmodular/mixed/mixed_cells.py",
+    "nbmodular/tests/mixed/test_mixed_cells.py",
+]
+updated_cell_types_lists = [
+    ["code", "original", "test"],
+]
+updated_cell_types_paths = [Path(".nbmodular/mixed/cell_types_mixed_cells.pk")]
+
+multiple_exported_nbs = [
+    # nbm/first_folder/first.ipynb
+    """
+[markdown]
+# First notebook
+
+[code]
+%%function hello
+print ('hello')
+
+[code]
+%%function one_plus_one --test
+a=1+1
+print (a)
+""",
+    # nbs/first_folder/first.ipynb
+    """
+[markdown]
+# First notebook
+
+[code]
+#|export
+def hello():
+    print ('hello')
+
+[code]
+a=1+1
+print (a)
+""",
+    # .nbs/first_folder/first.ipynb
+    """
+[code]
+#|default_exp first_folder.first
+
+[code]
+#|export
+#@@function hello
+def hello():
+    print ('hello')
+""",
+    # .nbs/first_folder/test_first.ipynb
+    """
+[code]
+#|default_exp tests.first_folder.test_first
+
+[code]
+#|export
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a)
+""",
+    # nbm/second_folder/second.ipynb
+    """
+[markdown]
+# Second notebook
+
+[code]
+%%function bye
+print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+""",
+    # nbs/second_folder/second.ipynb
+    """
+[markdown]
+# Second notebook
+
+[code]
+#|export
+def bye():
+    print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+""",
+    # .nbs/second_folder/second.ipynb
+    """
+[code]
+#|default_exp second_folder.second
+
+[code]
+#|export
+#@@function bye
+def bye():
+    print ('bye')
+""",
+]
+multiple_exported_nb_paths = [
+    Path("nbm/first_folder/first.ipynb"),
+    Path("nbs/first_folder/first.ipynb"),
+    Path(".nbs/first_folder/first.ipynb"),
+    Path(".nbs/first_folder/test_first.ipynb"),
+    Path("nbm/second_folder/second.ipynb"),
+    Path("nbs/second_folder/second.ipynb"),
+    Path(".nbs/second_folder/second.ipynb"),
+]
+multiple_updated_py_modules = [
+    # nbmodular/first_folder/first.py
+    """
+
+
+# @%% auto 0
+__all__ = ['hello']
+
+# @%% ../../nbs/first_folder/first.ipynb 1
+#@@function hello
+def hello():
+    print ('hello - modified 1')
+
+
+""",
+    # nbmodular/tests/first_folder/test_first.py
+    """
+
+
+# @%% auto 0
+__all__ = ['one_plus_one']
+
+# @%% ../../../nbs/first_folder/test_first.ipynb 1
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a, '- modified 1 test')
+
+
+""",
+    # nbmodular/second_folder/second.py
+    """
+
+
+# @%% auto 0
+__all__ = ['bye']
+
+# @%% ../../nbs/second_folder/second.ipynb 1
+#@@function bye
+def bye():
+    print ('bye - modified 2')
+
+
+""",
+]
+multiple_updated_py_paths = [
+    Path("nbmodular/first_folder/first.py"),
+    Path("nbmodular/tests/first_folder/test_first.py"),
+    Path("nbmodular/second_folder/second.py"),
+]
+multiple_updated_cell_types_lists = [
+    ["original", "code", "test"],
+    ["original", "code", "original"],
+]
+multiple_updated_cell_types_paths = [
+    Path(".nbmodular/first_folder/cell_types_first.pk"),
+    Path(".nbmodular/second_folder/cell_types_second.pk"),
+]
 
 
 # %% ../nbs/test_utils.ipynb 22
