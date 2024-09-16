@@ -194,7 +194,7 @@ def parse_nb_sections(nb):
     result = [(match[0], match[1].strip()) for match in matches]
     result_with_output = []
     for cell_type, content in result:
-        kwargs = {}
+        kwargs["metadata"] = {}
         if cell_type == "code":
             output_match = re.search(r"<output>(.*)", content, re.DOTALL)
             if output_match:
