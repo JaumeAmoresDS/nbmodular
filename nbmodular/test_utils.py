@@ -202,7 +202,10 @@ def parse_nb_sections(nb):
                     content[: output_match.start()],
                     output_match.group(1),
                 )
-                kwargs["output"] = output
+                kwargs["outputs"] = [output]
+            else:
+                kwargs["outputs"] = []
+            kwargs["execution_count"] = 0
         result_with_output.append((cell_type, content, kwargs))
 
     return result_with_output

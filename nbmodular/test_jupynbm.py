@@ -13,6 +13,8 @@ import pytest
 from nbmodular.jupynbm import srcpaths_in_dst, rename_mfe_files, migrate_files
 import nbmodular.test_utils as tst
 
+reload(tst)
+
 
 # %%
 # test_rename_mfe_files_triggers_warning
