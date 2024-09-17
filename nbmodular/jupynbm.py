@@ -30,25 +30,37 @@ from .export import nbm_export_all_paths, nbm_update_all_paths
 from .utils import create_or_get_logger, get_config
 
 
+# %%
+def update_jupytext_notebooks(jupytext_path: str, extension: str) -> None:
+    """update the notebooks in jupytext_path"""
+    for root, dirs, files in os.walk(jupytext_path):
+        current_path = os.getcwd()
+        os.chdir(root)
+        jupytext(
+            f"--set-formats ipynb,py:percent --format-options comment_magics=false *{extension}".split()
+        )
+        os.chdir(current_path)
+
+
+def sync_nbm_and_jupytext(jupytext_path: str, nbm_path: str, extension: str) -> None:
+    """Update notebooks from nbm to jupytext"""
+    # move notebooks to jupytext_path
+    migrate_files(nbm_path, jupytext_path, ".ipynb", ".py")
+
+    # update the notebooks in jupytext_path
+    update_jupytext_notebooks(jupytext_path, extension=extension)
+
+    # move updated notebooks to nbm_path
+    migrate_files(jupytext_path, nbm_path, ".ipynb", ".py")
+
+
 # %% ../nbs/jupynbm.ipynb 4
 def jupynbm(jupytext_path: str, nbm_path: str) -> None:
     """
     Export jupytext modules to nbmodular notebooks
     """
-    current_path = os.getcwd()
-
-    # move notebooks to jupytext_path
-    migrate_files(nbm_path, jupytext_path, ".ipynb", ".py")
-
-    # update the notebooks in jupytext_path
-    os.chdir(jupytext_path)
-    jupytext(
-        "--set-formats ipynb,py:percent --format-options comment_magics=false *.py".split()
-    )
-    os.chdir(current_path)
-
-    # move updated notebooks to nbm_path
-    migrate_files(jupytext_path, nbm_path, ".ipynb", ".py")
+    # update the notebooks in jupytext_path: nbm_path => jupytext_path
+    sync_nbm_and_jupytext(jupytext_path, nbm_path, extension=".py")
 
     # update:
     # - the doc files: nbm_path => nbs_path
@@ -157,24 +169,12 @@ def nbmjupy(nbm_path: str, jupytext_path: str) -> None:
 
     Moves the notebooks .ipynb to jupytext_path before converting to .py
     """
-    current_path = os.getcwd()
 
     # update the notebooks in nbm_path: lib_path => nbm_path
     nbm_update_all_paths(nbm_path)
 
-    # move updated notebooks to jupytext_path
-    migrate_files(nbm_path, jupytext_path, ".ipynb", ".py")
-
-    # convert notebooks to .py files
-    os.chdir(jupytext_path)
-    jupytext(
-        "--set-formats ipynb,py:percent --format-options comment_magics=false *.ipynb".split()
-    )
-
-    # move the .ipynb files back to nbm_path
-    migrate_files(jupytext_path, nbm_path, ".ipynb", ".py")
-
-    os.chdir(current_path)
+    # update the notebooks in nbm_path: jupytext_path => nbm_path
+    sync_nbm_and_jupytext(jupytext_path, nbm_path, extension=".ipynb")
 
 
 def parse_argv_and_run_nbmjupy(argv: List[str]):
