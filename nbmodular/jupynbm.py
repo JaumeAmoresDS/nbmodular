@@ -36,6 +36,9 @@ def update_jupytext_notebooks(jupytext_path: str, extension: str) -> None:
     for root, dirs, files in os.walk(jupytext_path):
         current_path = os.getcwd()
         os.chdir(root)
+        Path("./jupytext.toml").write_text(
+            'formats = "ipynb,py:percent"\ncomment_magics=false\n'
+        )
         jupytext(
             f"--set-formats ipynb,py:percent --format-options comment_magics=false *{extension}".split()
         )

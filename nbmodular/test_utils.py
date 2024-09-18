@@ -437,6 +437,60 @@ multiple_updated_cell_types_paths = [
     Path(".nbmodular/second_folder/cell_types_second.pk"),
 ]
 
+jupy1 = """
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.3
+# ---
+
+# %% [markdown]
+# # First notebook
+
+# %%
+%%function hello
+print ('hello')
+
+# %%
+%%function one_plus_one --test
+a=1+1
+print (a)
+
+"""
+
+jupy2 = """
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.2
+# ---
+
+# %% [markdown]
+# # Second notebook
+
+# %%
+%%function bye
+print ('bye')
+
+# %% [markdown]
+# %%function two_plus_two --test
+# a=2+2
+# print (a)
+
+"""
+
 
 # %% ../nbs/test_utils.ipynb 22
 def convert_nested_nb_cells_to_dicts(dict_like_with_nbcells: dict) -> dict:
@@ -786,9 +840,10 @@ def read_content_in_repo(
     nbs_folder: Optional[str] = "nbs",
     lib_folder: Optional[str] = "nbmodular",
     cell_types_folder: Optional[str] = ".nbmodular",
-    print_as_list: bool = False,
+    print_as_list: bool = True,
     display: bool = True,
     interactive_notebook: bool = True,
+    use_config_paths: bool = True,
 ):
     """
     Read the content in a repository.
@@ -824,14 +879,15 @@ def read_content_in_repo(
     if print_as_list:
         previous_text = "expected_nbs = "
     nbs, existing_nb_paths = read_nbs_in_repo(
-        nb_paths,
-        new_root,
-        nbm_folder,
-        tmp_folder,
-        nbs_folder,
-        print_as_list,
-        display,
+        nb_paths=nb_paths,
+        new_root=new_root,
+        nbm_folder=nbm_folder,
+        tmp_folder=tmp_folder,
+        nbs_folder=nbs_folder,
+        print_as_list=print_as_list,
+        display=display,
         previous_text=previous_text,
+        use_config_paths=use_config_paths,
     )
     if print_as_list:
         print(f"existing_nb_paths={existing_nb_paths}")
@@ -840,16 +896,16 @@ def read_content_in_repo(
         previous_text = "expected_py_modules = "
     py_modules, existing_py_paths = (
         read_pymodules_in_repo(
-            nb_paths,
-            new_root,
-            lib_folder,
-            print_as_list,
-            display,
+            nb_paths=nb_paths,
+            new_root=new_root,
+            lib_folder=lib_folder,
+            print_as_list=print_as_list,
+            display=display,
             previous_text=previous_text,
             interactive_notebook=interactive_notebook,
         )
         if lib_folder is not None
-        else []
+        else ([], [])
     )
 
     if print_as_list:
@@ -857,10 +913,10 @@ def read_content_in_repo(
 
     cell_types_lists = (
         read_cell_types_lists_in_repo(
-            nb_paths,
-            new_root,
-            cell_types_folder,
-            print_as_list,
+            nb_paths=nb_paths,
+            new_root=new_root,
+            cell_types_folder=cell_types_folder,
+            print_as_list=print_as_list,
         )
         if cell_types_folder is not None
         else []
@@ -1197,6 +1253,7 @@ def check_py_modules(
     new_root: str,  # type: ignore
     lib_folder: str = "nbmodular",
     interactive_notebook: bool = True,
+    convert_expected: bool = False,
 ):
     """
     Check if the Python modules in the given notebook paths match the expected modules.
@@ -1225,6 +1282,8 @@ def check_py_modules(
         lib_folder=lib_folder,
         interactive_notebook=interactive_notebook,
     )
+    if convert_expected:
+        expected = [x.replace("@%%", "%%") for x in expected]
     assert compare_texts(actual, expected)
 
 
