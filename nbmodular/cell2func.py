@@ -1391,6 +1391,7 @@ class CellProcessor:
         # Every time we want to add a new boolean parameter X we need to do the following steps:
         # 1. Add the parameter X in the list of arguments of __init__
         # 2. Add an attribute self.default_X = X in the body of __init__
+        # See self.add_opposite_actions () and self.set_function_action_and_io_args () for more details.
 
         self.logger = logging.getLogger("CellProcessor")
         self.set_log_level(log_level)
@@ -1807,6 +1808,12 @@ class CellProcessor:
             default=None,
             help="Restrict inputs to those specified.",
         )
+        self.add_opposite_actions()
+
+    def add_opposite_actions(self):
+        """
+        Adds opposite actions to the parser. See also `set_function_action_and_io_args`.
+        """
         # Take list of actions explicitly added above with add_argument.
         # From this list, include only those where we also added an attribute
         # `default_<parameter_name>`
@@ -1816,6 +1823,7 @@ class CellProcessor:
             if x.__class__.__name__ == "_StoreTrueAction"
             and hasattr(self, f"default_{x.dest}")
         ]
+        # for each action in self.list_of_parser_actions, add an opposite action
         for action_dest in self.list_of_parser_actions:
             self.parser.add_argument(
                 f"--not-{action_dest}",
