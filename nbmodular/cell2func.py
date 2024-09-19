@@ -1218,7 +1218,9 @@ class CellProcessor:
         code_cells_path=".nbmodular",
         export_always=True,
         path: Optional[str] = None,
+        load=False,
         test_load=True,
+        save=False,
         test_save=True,
         test_run=True,
         io_type="pickle",
@@ -1258,6 +1260,138 @@ class CellProcessor:
         restrict_inputs=False,
         **kwargs,
     ):
+        """
+        Initializes the CellProcessor class with various configuration parameters.
+
+        Parameters
+        ----------
+        tab_size : int, optional
+            The size of the tab for indentation. Default is 4.
+        log_level : str, optional
+            The logging level. Default is "INFO".
+        code_cells_path : str, optional
+            Path to the code cells. Default is ".nbmodular".
+        export_always : bool, optional
+            Whether to always export the code. Default is True.
+        path : Optional[str], optional
+            Path to the notebook. Default is None.
+        load : bool, optional
+            Default value for loading variables. Default is False.
+        test_load : bool, optional
+            Default value for test loading variables. Default is True.
+        save : bool, optional
+            Default value for saving variables. Default is False.
+        test_save : bool, optional
+            Default value for test saving variables. Default is True.
+        test_run : bool, optional
+            Default value for test running the function. Default is True.
+        io_type : str, optional
+            Default I/O type. Default is "pickle".
+        test_io_type : str, optional
+            Default test I/O type. Default is "pickle".
+        io_code : bool, optional
+            Default value for adding I/O code. Default is False.
+        test_io_code : bool, optional
+            Default value for adding test I/O code. Default is False.
+        io_locals : bool, optional
+            Default value for saving/loading local variables. Default is False.
+        test_io_locals : bool, optional
+            Default value for saving/loading test local variables. Default is True.
+        io_folder : Optional[str], optional
+            Default folder for I/O operations. Default is None.
+        test_io_folder : Optional[str], optional
+            Default folder for test I/O operations. Default is None.
+        io_locals_root_path : str, optional
+            Default root path for local variables. Default is "locals".
+        test_io_locals_root_path : str, optional
+            Default root path for test local variables. Default is "locals".
+        io_result_root_path : str, optional
+            Default root path for result variables. Default is "results".
+        test_io_result_root_path : str, optional
+            Default root path for test result variables. Default is "results".
+        load_args : dict, optional
+            Default arguments for loading. Default is {}.
+        test_load_args : dict, optional
+            Default arguments for test loading. Default is {}.
+        save_args : dict, optional
+            Default arguments for saving. Default is {}.
+        test_save_args : dict, optional
+            Default arguments for test saving. Default is {}.
+        load_arg : bool, optional
+            Default value for load argument. Default is False.
+        test_load_arg : bool, optional
+            Default value for test load argument. Default is True.
+        save_arg : bool, optional
+            Default value for save argument. Default is False.
+        test_save_arg : bool, optional
+            Default value for test save argument. Default is True.
+        run : bool, optional
+            Default value for running the function. Default is True.
+        pipe : bool, optional
+            Default value for piping the function. Default is True.
+        test_pipe : bool, optional
+            Default value for test piping the function. Default is False.
+        load_capture_disk : bool, optional
+            Default value for loading capture from disk. Default is False.
+        save_capture_disk : bool, optional
+            Default value for saving capture to disk. Default is False.
+        load_capture_memory : bool, optional
+            Default value for loading capture from memory. Default is False.
+        save_capture_memory : bool, optional
+            Default value for saving capture to memory. Default is False.
+        test_load_capture_disk : bool, optional
+            Default value for test loading capture from disk. Default is False.
+        test_save_capture_disk : bool, optional
+            Default value for test saving capture to disk. Default is False.
+        test_load_capture_memory : bool, optional
+            Default value for test loading capture from memory. Default is False.
+        test_save_capture_memory : bool, optional
+            Default value for test saving capture to memory. Default is False.
+        write : bool, optional
+            Default value for writing the function to a module. Default is False.
+        test_write : bool, optional
+            Default value for test writing the function to a module. Default is False.
+        pipe_name : Optional[str], optional
+            Default name for the pipeline. Default is None.
+        restrict_inputs : bool, optional
+            Default value for restricting inputs. Default is False.
+        **kwargs : dict
+            Additional keyword arguments.
+
+        Each boolean parameter can be passed as input or by command line. The function `set_function_action_and_io_args` will replace the None default values with either True or False depending on whether `--parameter` or `--not-parameter` was passed in the command line, and depending on `default_parameter` if none of these were passed.
+
+        Examples
+        --------
+        The parameter `run` has default value True in `__init__`. If we do:
+
+        >>> cell_processor = CellProcessor()
+
+        then we will have `cell_processor.default_run = True`, and all the `FunctionProcessor` objects created will be passed the value `run=cell_processor.default_run`, i.e., True.
+
+        However, if we do:
+
+        >>> cell_processor = CellProcessor(run=False)
+
+        then we will have `cell_processor.default_run = False`, and all the `FunctionProcessor` objects created will be passed the value `run=cell_processor.default_run`, i.e., False.
+
+        Another possibility is to pass it in the command line of the magic cell, as:
+
+        >>> %%function my_function --run
+
+        In this case, we are making sure that `cell_processor.default_run` is True, regardless of what was the initial default value, and therefore all the `FunctionProcessor` objects created will be True.
+
+        Instead of that, we can do:
+
+        >>> %%function my_function --not-run
+
+        In this case, we are making sure that `cell_processor.default_run` is False, regardless of what was the initial default value, and therefore all the `FunctionProcessor` objects created will be False.
+        """
+
+        # Developer note:
+        # Every time we want to add a new boolean parameter X we need to do the following steps:
+        # 1. Add the parameter X in the list of arguments of __init__
+        # 2. Add an attribute self.default_X = X in the body of __init__
+
         self.logger = logging.getLogger("CellProcessor")
         self.set_log_level(log_level)
         self.code_cells_path = Path(code_cells_path)
@@ -1353,59 +1487,47 @@ class CellProcessor:
 
         self.call_history = []
 
-        self.default_load = False
-        self.default_test_load = True
-
-        self.default_save = False
-        self.default_test_save = True
-
-        self.default_io_type = "pickle"
-        self.default_test_io_type = "pickle"
-
-        self.default_io_code = False
-        self.default_test_io_code = False
-
-        self.default_io_locals = False
-        self.default_test_io_locals = True
-
-        self.default_io_folder = self.file_name_without_extension
-        self.default_test_io_folder = self.file_name_without_extension
-
-        self.default_io_locals_root_path = "locals"
-        self.default_test_io_locals_root_path = "locals"
-
-        self.default_io_result_root_path = "results"
-        self.default_test_io_result_root_path = "results"
-
-        self.default_load_args = {}
-        self.default_test_load_args = {}
-        self.default_save_args = {}
-        self.default_test_save_args = {}
-
-        self.default_load_arg = False
-        self.default_test_load_arg = True
-        self.default_save_arg = False
-        self.default_test_save_arg = True
-
-        self.default_run = True
-        self.default_test_run = True
-
-        self.default_pipe = True
-        self.default_test_pipe = False
-
-        self.default_load_capture_disk = False
-        self.default_save_capture_disk = False
-        self.default_load_capture_memory = False
-        self.default_save_capture_memory = False
-        self.default_test_load_capture_disk = False
-        self.default_test_save_capture_disk = False
-        self.default_test_load_capture_memory = False
-        self.default_test_save_capture_memory = False
-
-        self.default_write = False
-        self.default_test_write = False
-
-        self.default_pipe_name = f"{self.file_name_without_extension}_pipeline"
+        self.default_load = load
+        self.default_test_load = test_load
+        self.default_save = save
+        self.default_test_save = test_save
+        self.default_io_type = io_type
+        self.default_test_io_type = test_io_type
+        self.default_io_code = io_code
+        self.default_test_io_code = test_io_code
+        self.default_io_locals = io_locals
+        self.default_test_io_locals = test_io_locals
+        self.default_io_folder = io_folder
+        self.default_test_io_folder = test_io_folder
+        self.default_io_locals_root_path = io_locals_root_path
+        self.default_test_io_locals_root_path = test_io_locals_root_path
+        self.default_io_result_root_path = io_result_root_path
+        self.default_test_io_result_root_path = test_io_result_root_path
+        self.default_load_args = load_args
+        self.default_test_load_args = test_load_args
+        self.default_save_args = save_args
+        self.default_test_save_args = test_save_args
+        self.default_load_arg = load_arg
+        self.default_test_load_arg = test_load_arg
+        self.default_save_arg = save_arg
+        self.default_test_save_arg = test_save_arg
+        self.default_run = run
+        self.default_test_run = test_run
+        self.default_pipe = pipe
+        self.default_test_pipe = test_pipe
+        self.default_load_capture_disk = load_capture_disk
+        self.default_save_capture_disk = save_capture_disk
+        self.default_load_capture_memory = load_capture_memory
+        self.default_save_capture_memory = save_capture_memory
+        self.default_test_load_capture_disk = test_load_capture_disk
+        self.default_test_save_capture_disk = test_save_capture_disk
+        self.default_test_load_capture_memory = test_load_capture_memory
+        self.default_test_save_capture_memory = test_save_capture_memory
+        self.default_write = write
+        self.default_test_write = test_write
+        self.default_pipe_name = (
+            pipe_name or f"{self.file_name_without_extension}_pipeline"
+        )
 
         self._added_io_imports = False
         self.variable_classifier = VariableClassifier()
