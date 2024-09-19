@@ -2346,7 +2346,7 @@ for arg, val in zip (args_with_defaults, default_values):
 
     def get_function_attr(self, attr, value, test):
         test_string = "test_" if test else ""
-        default_value = getattr(self, f"default_{test_string}{attr}")
+        default_value = getattr(self, f"default_{test_string}{attr}", None)
         value = default_value if value is None else value
         return value
 

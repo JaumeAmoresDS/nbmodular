@@ -278,12 +278,15 @@ class NbMagicProcessor(Processor):
         logger_name="nbmodular",
         log_level="INFO",
         from_notebook=False,
+        restrict_inputs=False,
     ):
         nb = read_nb(path) if nb is None else nb
         super().__init__(nb)
         self.logger = create_or_get_logger(logger_name, log_level)
         self.logger.info(f"Analyzing code from notebook {path}")
-        self.cell_processor = CellProcessor(path=path)
+        self.cell_processor = CellProcessor(
+            path=path, run=from_notebook, restrict_inputs=restrict_inputs
+        )
         self.cell_processor.set_run_tests(False)
         self.from_notebook = from_notebook
 
@@ -303,9 +306,6 @@ class NbMagicProcessor(Processor):
             command = words[0][2:]
             if command in self.cell_processor.magic_commands_list:
                 line = " ".join(words[1:])
-                if not self.from_notebook:
-                    # run %%function magic command with --not-run flag. This will store the code cell, but not run it.
-                    line += " --not-run"
                 self.cell_processor.process_function_call(
                     line=line,
                     cell="\n".join(source_lines[1:]) if len(source_lines) > 1 else "",
@@ -350,6 +350,7 @@ class NbMagicExporter(Processor):
         log_level="INFO",
         tab_size=4,
         from_notebook=False,
+        restrict_inputs=False,
     ):
         nb = read_nb(path) if nb is None else nb
         super().__init__(nb)
@@ -368,6 +369,7 @@ class NbMagicExporter(Processor):
             logger_name=logger_name,
             log_level=log_level,
             from_notebook=from_notebook,
+            restrict_inputs=restrict_inputs,
         )
         NBProcessor(path, self.nb_magic_processor, rm_directives=False, nb=nb).process()
 
@@ -562,12 +564,21 @@ def parse_argv_and_run_nbm_export_all_paths(argv: List[str]):
         action="store_true",
         help="Flag indicating whether the export is from a notebook.",
     )
+    parser.add_argument(
+        "--restrict-inputs",
+        action="store_true",
+        help="Flag indicating whether to restrict inputs.",
+    )
     args = parser.parse_args(argv)
     logger = create_or_get_logger()
     if args.path is None:
         args.path = str(Path(get_config()["nbm_path"]).resolve())
     logger.info(f"Exporting notebooks from path: {args.path}")
-    nbm_export_all_paths(args.path, from_notebook=args.from_notebook)
+    nbm_export_all_paths(
+        args.path,
+        from_notebook=args.from_notebook,
+        restrict_inputs=args.restrict_inputs,
+    )
 
 
 def nbm_export_cli():
