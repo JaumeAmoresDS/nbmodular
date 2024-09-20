@@ -58,7 +58,12 @@ def sync_nbm_and_jupytext(jupytext_path: str, nbm_path: str, extension: str) -> 
 
 
 # %% ../nbs/jupynbm.ipynb 4
-def jupynbm(jupytext_path: str, nbm_path: str) -> None:
+def jupynbm(
+    jupytext_path: str,
+    nbm_path: str,
+    from_notebook: bool = False,
+    restrict_inputs: bool = False,
+) -> None:
     """
     Export jupytext modules to nbmodular notebooks
     """
@@ -68,7 +73,11 @@ def jupynbm(jupytext_path: str, nbm_path: str) -> None:
     # update:
     # - the doc files: nbm_path => nbs_path
     # - the py files: nbm_path => lib_path
-    nbm_export_all_paths(nbm_path)
+    if not from_notebook:
+        restrict_inputs = True
+    nbm_export_all_paths(
+        nbm_path, from_notebook=from_notebook, restrict_inputs=restrict_inputs
+    )
 
 
 def parse_argv_and_run_jupynbm(argv: List[str]):
@@ -88,6 +97,18 @@ def parse_argv_and_run_jupynbm(argv: List[str]):
         default=None,
         help="Path to nbmodular notebooks",
     )
+    parser.add_argument(
+        "--restrict-inputs",
+        action="store_true",
+        default=None,
+        help="Restrict inputs to only those specified",
+    )
+    parser.add_argument(
+        "--from-notebook",
+        action="store_true",
+        default=None,
+        help="Indicate that the operation is from a notebook",
+    )
     args = parser.parse_args(argv)
     logger = create_or_get_logger()
     if args.jupytext is None:
@@ -95,7 +116,12 @@ def parse_argv_and_run_jupynbm(argv: List[str]):
     if args.nbm is None:
         args.nbm = str(Path(get_config()["nbm_path"]).resolve())
     logger.info(f"Exporting jupytext python modules from {args.jupytext} to {args.nbm}")
-    jupynbm(args.jupytext, args.nbm)
+    jupynbm(
+        args.jupytext,
+        args.nbm,
+        from_notebook=args.from_notebook,
+        restrict_inputs=args.restrict_inputs,
+    )
 
 
 def jupynbm_export_cli():

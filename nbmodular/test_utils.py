@@ -1610,21 +1610,24 @@ def create_test_content(
     current_root = os.getcwd()
 
     # Convert input texts into corresponding dicts with notebook structure
-    nbs = texts2nbs(nbs) if nbs is not None else []
+    if nbs is not None:
+        nbs = texts2nbs(nbs)
 
-    # Generate list of nb_paths if None
-    if nb_paths is None:
-        nb_paths = [f"f{idx}" for idx in range(len(nbs))]
+        # Generate list of nb_paths if None
+        if nb_paths is None:
+            nb_paths = [f"f{idx}" for idx in range(len(nbs))]
+        else:
+            if not isinstance(nb_paths, list):
+                nb_paths = [nb_paths]
+            if len(nb_paths) != len(nbs):
+                raise ValueError("nb_paths must have same number of items as nbs")
+
+        for nb, nb_path in zip(nbs, nb_paths):
+            full_nb_path = Path(new_root) / nb_folder / nb_path
+            full_nb_path.parent.mkdir(parents=True, exist_ok=True)
+            write_nb(nb, full_nb_path)
     else:
-        if not isinstance(nb_paths, list):
-            nb_paths = [nb_paths]
-        if len(nb_paths) != len(nbs):
-            raise ValueError("nb_paths must have same number of items as nbs")
-
-    for nb, nb_path in zip(nbs, nb_paths):
-        full_nb_path = Path(new_root) / nb_folder / nb_path
-        full_nb_path.parent.mkdir(parents=True, exist_ok=True)
-        write_nb(nb, full_nb_path)
+        nb_paths= []
 
     if py_modules is not None:
         py_modules = [py_modules] if isinstance(py_modules, str) else py_modules

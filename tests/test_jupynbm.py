@@ -230,57 +230,22 @@ shutil.rmtree(tmp_path)
 reload(tst)
 new_root = "test_jupynbm"
 nb_folder = "nbm"
-nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
+jupy_folder = "nbm_py"
+jupy_nb_paths = ["first_folder/first.py", "second_folder/second.py"]
 current_root, nb_paths = tst.create_test_content(
-    nbs=[tst.nb1, tst.nb2],
-    nb_paths=nb_paths,
-    nb_folder=nb_folder,
+    py_modules=[tst.jupy1, tst.jupy2],
+    py_paths=jupy_nb_paths,
+    lib_folder=jupy_folder,
     new_root=new_root,
 )
 
 
 # %%
-jupytext_path = "nbm_py"
-nbm_path = nb_folder
-jnbm.migrate_files(nbm_path, jupytext_path, ".ipynb", ".py")
-
-
-# %%
-reload(jnbm)
-jnbm.update_jupytext_notebooks(jupytext_path, extension=".ipynb")
-
-
-# %%
-jnbm.migrate_files(jupytext_path, nbm_path, ".ipynb", ".py")
-
-
-# %%
-nbs, existing_nb_paths, py_modules, existing_py_paths, cell_types_lists = (
-    tst.read_content_in_repo(
-        nb_paths=nb_paths,
-        tmp_folder=None,
-        nbs_folder=None,
-        lib_folder="nbm_py",
-        cell_types_folder=None,
-        use_config_paths=False,
-    )
-)
-
-
-# %%
-tst.check_py_modules(new_root=".", nb_paths=nb_paths, expected=[tst.jupy1, tst.jupy2])
-
-
-# %%
-reload(xp)
-# xp.nbm_export_all_paths(nbm_path)
-# xp.nbm_export_all_paths(nbm_path, from_notebook=True)
-xp.nbm_export_all_paths(nbm_path, restrict_inputs=True)
+jnbm.parse_argv_and_run_jupynbm()
 
 
 # %%
 # %%
-nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
 tst.check_test_repo_content(
     # nb_paths,
     nb_paths=nb_paths,
@@ -291,10 +256,6 @@ tst.check_test_repo_content(
     clean=True,
     keep_cwd=False,
 )
-
-
-# %%
-tst.check_py_modules(new_root=".", nb_paths=nb_paths, expected=[tst.jupy1, tst.jupy2])
 
 
 # %% [markdown]
