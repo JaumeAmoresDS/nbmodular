@@ -491,6 +491,167 @@ print ('bye')
 
 """
 
+nbs_after_jupynbm = [
+    # nbm/first_folder/first.ipynb
+    """
+[markdown]
+# First notebook
+
+[code]
+%%function hello
+print ('hello')
+
+[code]
+%%function one_plus_one --test
+a=1+1
+print (a)
+""",
+    # nbs/first_folder/first.ipynb
+    """
+[markdown]
+# First notebook
+
+[code]
+#|export
+def hello():
+    print ('hello')
+
+[code]
+a=1+1
+print (a)
+""",
+    # .nbs/first_folder/first.ipynb
+    """
+[code]
+#|default_exp first_folder.first
+
+[code]
+#|export
+#@@function hello
+def hello():
+    print ('hello')
+""",
+    # .nbs/first_folder/test_first.ipynb
+    """
+[code]
+#|default_exp tests.first_folder.test_first
+
+[code]
+#|export
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a)
+""",
+    # nbm/second_folder/second.ipynb
+    """
+[markdown]
+# Second notebook
+
+[code]
+%%function bye
+print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+""",
+    # nbs/second_folder/second.ipynb
+    """
+[markdown]
+# Second notebook
+
+[code]
+#|export
+def bye():
+    print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+""",
+    # .nbs/second_folder/second.ipynb
+    """
+[code]
+#|default_exp second_folder.second
+
+[code]
+#|export
+#@@function bye
+def bye():
+    print ('bye')
+""",
+]
+nb_paths_after_jupynbm = [
+    Path("nbm/first_folder/first.ipynb"),
+    Path("nbs/first_folder/first.ipynb"),
+    Path(".nbs/first_folder/first.ipynb"),
+    Path(".nbs/first_folder/test_first.ipynb"),
+    Path("nbm/second_folder/second.ipynb"),
+    Path("nbs/second_folder/second.ipynb"),
+    Path(".nbs/second_folder/second.ipynb"),
+]
+py_modules_after_jupynbm = [
+    # nbmodular/first_folder/first.py
+    """
+
+
+# @%% auto 0
+__all__ = ['hello']
+
+# @%% ../../nbs/first_folder/first.ipynb 1
+#@@function hello
+def hello():
+    print ('hello')
+
+
+""",
+    # nbmodular/tests/first_folder/test_first.py
+    """
+
+
+# @%% auto 0
+__all__ = ['one_plus_one']
+
+# @%% ../../../nbs/first_folder/test_first.ipynb 1
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a)
+
+
+""",
+    # nbmodular/second_folder/second.py
+    """
+
+
+# @%% auto 0
+__all__ = ['bye']
+
+# @%% ../../nbs/second_folder/second.ipynb 1
+#@@function bye
+def bye():
+    print ('bye')
+
+
+""",
+]
+py_paths_after_jupynbm = [
+    Path("nbmodular/first_folder/first.py"),
+    Path("nbmodular/tests/first_folder/test_first.py"),
+    Path("nbmodular/second_folder/second.py"),
+]
+cell_types_lists_after_jupynbm = [
+    ["original", "code", "test"],
+    ["original", "code", "original"],
+]
+cell_types_paths_after_jupynbm = [
+    Path(".nbmodular/first_folder/cell_types_first.pk"),
+    Path(".nbmodular/second_folder/cell_types_second.pk"),
+]
+
 
 # %% ../nbs/test_utils.ipynb 22
 def convert_nested_nb_cells_to_dicts(dict_like_with_nbcells: dict) -> dict:

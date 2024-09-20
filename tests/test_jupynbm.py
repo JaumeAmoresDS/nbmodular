@@ -277,6 +277,26 @@ reload(xp)
 # xp.nbm_export_all_paths(nbm_path, from_notebook=True)
 xp.nbm_export_all_paths(nbm_path, restrict_inputs=True)
 
+
+# %%
+# %%
+nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
+tst.check_test_repo_content(
+    # nb_paths,
+    nb_paths=nb_paths,
+    expected_nbs=tst.nbs_after_jupynbm,
+    expected_py_modules=tst.py_modules_after_jupynbm,
+    current_root=current_root,
+    new_root=new_root,
+    clean=True,
+    keep_cwd=False,
+)
+
+
+# %%
+tst.check_py_modules(new_root=".", nb_paths=nb_paths, expected=[tst.jupy1, tst.jupy2])
+
+
 # %% [markdown]
 # #### Example usage
 
@@ -291,3 +311,26 @@ xp.nbm_export_all_paths(nbm_path, restrict_inputs=True)
 # jnbm.sync_nbm_and_jupytext(jupytext_path, nbm_path, extension=".ipynb")
 
 # # %%
+
+
+# %%
+multiple_updated_py_modules = [
+    x.replace("@%%", "%%") for x in tst.multiple_updated_py_modules
+]
+new_root = "test_parse_argv_and_run_nbm_update_all_paths"
+nb_folder = "nbm"
+lib_folder = "nbmodular"
+cell_types_folder = ".nbmodular"
+# Create notebook in "new repo", and cd to it
+current_root, nb_paths = tst.create_test_content(
+    nbs=tst.nbs_after_jupynbm,
+    nb_paths=tst.nb_paths_after_jupynbm,
+    nb_folder="",
+    py_modules=tst.py_modules_after_jupynbm,
+    py_paths=tst.py_paths_after_jupynbm,
+    lib_folder="",
+    cell_types_lists=tst.cell_types_lists_after_jupynbm,
+    cell_types_paths=tst.cell_types_paths_after_jupynbm,  # type: ignore
+    cell_types_folder="",
+    new_root=new_root,
+)
