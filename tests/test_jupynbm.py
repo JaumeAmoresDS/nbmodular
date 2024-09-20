@@ -241,11 +241,10 @@ current_root, nb_paths = tst.create_test_content(
 
 
 # %%
-jnbm.parse_argv_and_run_jupynbm()
-
+jnbm.parse_argv_and_run_jupynbm([])
 
 # %%
-# %%
+nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
 tst.check_test_repo_content(
     # nb_paths,
     nb_paths=nb_paths,
