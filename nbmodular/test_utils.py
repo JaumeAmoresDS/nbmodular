@@ -771,13 +771,13 @@ def texts2nbs(nbs: List[str] | str) -> List[dict]:
 
 
 # %% ../nbs/test_utils.ipynb 36
-def nb2text(nb: dict) -> str:
+def nb2text_without_output(nb: dict) -> str:
     return "\n\n".join(
         [f"[{cell['cell_type']}]\n{cell['source']}" for cell in nb["cells"]]
     )
 
 
-def nb2text_with_output(nb: dict) -> str:
+def nb2text(nb: dict) -> str:
     output_cells = []
     for cell in nb["cells"]:
         if (
@@ -797,6 +797,9 @@ def nb2text_with_output(nb: dict) -> str:
 
 def nbs2text(nbs: List[dict]) -> List[str]:
     return [nb2text(nb) for nb in (nbs if isinstance(nbs, list) else [nbs])]
+
+def nbs2text_without_output(nbs: List[dict]) -> List[str]:
+    return [nb2text_without_output(nb) for nb in (nbs if isinstance(nbs, list) else [nbs])]
 
 
 # %% ../nbs/test_utils.ipynb 42
