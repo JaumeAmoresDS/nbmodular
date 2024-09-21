@@ -274,19 +274,19 @@ tst.check_test_repo_content(
 
 
 # %%
-multiple_updated_py_modules = [
+py_modules_after_jupynbm_after_udpate = [
     x.replace("@%%", "%%") for x in tst.multiple_updated_py_modules
 ]
-new_root = "test_parse_argv_and_run_nbm_update_all_paths"
+new_root = "test_nbmjupy"
 nb_folder = "nbm"
 lib_folder = "nbmodular"
 cell_types_folder = ".nbmodular"
 # Create notebook in "new repo", and cd to it
 current_root, nb_paths = tst.create_test_content(
-    nbs=tst.nbs_after_jupynbm,
+    nbs=tst.nbs_after_jupynbm_after_running,
     nb_paths=tst.nb_paths_after_jupynbm,
     nb_folder="",
-    py_modules=tst.py_modules_after_jupynbm,
+    py_modules=tst.py_modules_after_jupynbm_after_udpate,
     py_paths=tst.py_paths_after_jupynbm,
     lib_folder="",
     cell_types_lists=tst.cell_types_lists_after_jupynbm,

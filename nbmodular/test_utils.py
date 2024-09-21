@@ -704,6 +704,203 @@ cell_types_paths_after_jupynbm = [
     Path(".nbmodular/second_folder/cell_types_second.pk"),
 ]
 
+# insert outputs as if we executed the notebook
+nbs_after_jupynbm_after_running = [
+    # nbm/first_folder/first.ipynb
+    """
+[code]
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.3
+# ---
+
+[markdown]
+# First notebook
+
+[code]
+%%function hello
+print ('hello')
+<output>
+hello
+
+[code]
+%%function one_plus_one --test
+a=1+1
+print (a)
+<output>
+2
+""",
+    # nbs/first_folder/first.ipynb
+    """
+[code]
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.3
+# ---
+
+[markdown]
+# First notebook
+
+[code]
+#|export
+def hello():
+    print ('hello')
+
+[code]
+a=1+1
+print (a)
+""",
+    # .nbs/first_folder/first.ipynb
+    """
+[code]
+#|default_exp first_folder.first
+
+[code]
+#|export
+#@@function hello
+def hello():
+    print ('hello')
+""",
+    # .nbs/first_folder/test_first.ipynb
+    """
+[code]
+#|default_exp tests.first_folder.test_first
+
+[code]
+#|export
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a)
+""",
+    # nbm/second_folder/second.ipynb
+    """
+[code]
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.2
+# ---
+
+[markdown]
+# Second notebook
+
+[code]
+%%function bye
+print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+""",
+    # nbs/second_folder/second.ipynb
+    """
+[code]
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.2
+# ---
+
+[markdown]
+# Second notebook
+
+[code]
+#|export
+def bye():
+    print ('bye')
+
+[markdown]
+%%function two_plus_two --test
+a=2+2
+print (a)
+""",
+    # .nbs/second_folder/second.ipynb
+    """
+[code]
+#|default_exp second_folder.second
+
+[code]
+#|export
+#@@function bye
+def bye():
+    print ('bye')
+""",
+]
+
+py_modules_after_jupynbm_after_udpate = [
+    # nbmodular/first_folder/first.py
+    f"""
+
+
+# @%% auto 0
+__all__ = ['hello']
+
+# @%% ../../nbs/first_folder/first.ipynb 1
+#@@function hello
+def hello(name):
+    print ('hello', name) # update 1
+
+
+""",
+    # nbmodular/tests/first_folder/test_first.py
+    """
+
+
+# @%% auto 0
+__all__ = ['one_plus_one']
+
+# @%% ../../../nbs/first_folder/test_first.ipynb 1
+#@@function one_plus_one --test
+def one_plus_one():
+    a=1+1
+    print (a)
+
+
+""",
+    # nbmodular/second_folder/second.py
+    """
+
+
+# @%% auto 0
+__all__ = ['bye']
+
+# @%% ../../nbs/second_folder/second.ipynb 1
+#@@function bye
+def bye(name):
+    print ('bye', name) # update 2
+
+
+""",
+]
+
 
 # %% ../nbs/test_utils.ipynb 22
 def convert_nested_nb_cells_to_dicts(dict_like_with_nbcells: dict) -> dict:
@@ -798,8 +995,11 @@ def nb2text(nb: dict) -> str:
 def nbs2text(nbs: List[dict]) -> List[str]:
     return [nb2text(nb) for nb in (nbs if isinstance(nbs, list) else [nbs])]
 
+
 def nbs2text_without_output(nbs: List[dict]) -> List[str]:
-    return [nb2text_without_output(nb) for nb in (nbs if isinstance(nbs, list) else [nbs])]
+    return [
+        nb2text_without_output(nb) for nb in (nbs if isinstance(nbs, list) else [nbs])
+    ]
 
 
 # %% ../nbs/test_utils.ipynb 42
