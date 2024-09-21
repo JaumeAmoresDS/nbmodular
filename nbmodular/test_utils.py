@@ -494,6 +494,19 @@ print ('bye')
 nbs_after_jupynbm = [
     # nbm/first_folder/first.ipynb
     """
+[code]
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.3
+# ---
+
 [markdown]
 # First notebook
 
@@ -508,6 +521,19 @@ print (a)
 """,
     # nbs/first_folder/first.ipynb
     """
+[code]
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.3
+# ---
+
 [markdown]
 # First notebook
 
@@ -545,6 +571,19 @@ def one_plus_one():
 """,
     # nbm/second_folder/second.ipynb
     """
+[code]
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.2
+# ---
+
 [markdown]
 # Second notebook
 
@@ -559,6 +598,19 @@ print (a)
 """,
     # nbs/second_folder/second.ipynb
     """
+[code]
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.2
+# ---
+
 [markdown]
 # Second notebook
 
@@ -644,8 +696,8 @@ py_paths_after_jupynbm = [
     Path("nbmodular/second_folder/second.py"),
 ]
 cell_types_lists_after_jupynbm = [
-    ["original", "code", "test"],
-    ["original", "code", "original"],
+    ["original", "original", "code", "test"],
+    ["original", "original", "code", "original"],
 ]
 cell_types_paths_after_jupynbm = [
     Path(".nbmodular/first_folder/cell_types_first.pk"),
@@ -775,8 +827,8 @@ def strip_nb(nb: str) -> str:
 
 # %% ../nbs/test_utils.ipynb 50
 def read_nbs_in_repo(
-    nb_paths: Optional[List[str]] = None,  # type: ignore
-    new_root: Optional[str] = ".",
+    nb_paths: Optional[List[str | Path]] = None,  # type: ignore
+    new_root: str | Path = ".",
     nbm_folder: Optional[str] = "nbm",
     tmp_folder: Optional[str] = ".nbs",
     nbs_folder: Optional[str] = "nbs",
@@ -825,16 +877,25 @@ def read_nbs_in_repo(
         if nbs_folder is None:
             nbs_folder = config["nbs_path"]
     if nb_paths is None and nbm_folder is not None:
+        # If nb_paths is None, populate nb_paths with all ipynb notebooks found recursively
+        # in nbm_folder and its tree below.
         nb_paths = nbglob(path=nbm_folder, as_path=True).sorted("name")  # type: ignore
         # Remove the nbm_folder part from the paths, unless the nbm_folder is "."
         if Path(".").resolve() != Path(nbm_folder).resolve():
             nb_paths = [Path(*x.parts[1:]) for x in nb_paths]
+        logger.info(
+            f"nb_paths is None but obtained an nbm_folder which is {nbm_folder}. "
+            f"Populated nb_paths with notebooks under {nbm_folder}'s tree, and obtained:\n"
+            f"nb_paths={nb_paths}"
+        )
+        populated_nb_paths = nb_paths
     elif not isinstance(nb_paths, list):
         nb_paths = [nb_paths]  # type: ignore
-    if new_root is not None and not Path(new_root).exists():
+        populated_nb_paths = nb_paths
+    else:
+        populated_nb_paths = None
+    if not Path(new_root).exists():
         logger.warning(f"{new_root} does not exist. Replacing it with '.'")
-        new_root = "."
-    if new_root is None:
         new_root = "."
     if nbm_folder is not None and not (Path(new_root) / nbm_folder).exists():
         raise FileNotFoundError(f"{nbm_folder} does not exist in {new_root}")
@@ -857,13 +918,13 @@ def read_nbs_in_repo(
             previous_text=previous_text,
             posterior_text=posterior_text,
         )
-    return content, nb_paths
+    return content, nb_paths, populated_nb_paths
 
 
 # %% ../nbs/test_utils.ipynb 52
 def read_pymodules_in_repo(
-    nb_paths: List[str],  # type: ignore
-    new_root: str = "new_test",
+    nb_paths: List[str | Path],  # type: ignore
+    new_root: str | Path = "new_test",
     lib_folder: str = "nbmodular",
     print_as_list: bool = False,
     display: bool = False,
@@ -949,7 +1010,7 @@ def read_cell_types_lists(
 # %% ../nbs/test_utils.ipynb 56
 def read_cell_types_lists_in_repo(
     nb_paths: List[str],  # type: ignore
-    new_root: str = "new_test",
+    new_root: str | Path = "new_test",
     cell_types_folder: str = ".nbmodular",
     print_as_list: bool = False,
     tab_size: int = 4,
@@ -994,8 +1055,8 @@ def read_cell_types_lists_in_repo(
 
 # %% ../nbs/test_utils.ipynb 58
 def read_content_in_repo(
-    nb_paths: Optional[List[str]] = None,
-    new_root: Union[str, Path] = ".",
+    nb_paths: Optional[List[str | Path]] = None,
+    new_root: str | Path = ".",
     nbm_folder: Optional[str] = "nbm",
     tmp_folder: Optional[str] = ".nbs",
     nbs_folder: Optional[str] = "nbs",
@@ -1005,7 +1066,7 @@ def read_content_in_repo(
     display: bool = True,
     interactive_notebook: bool = True,
     use_config_paths: bool = True,
-):
+) -> Tuple[List[str], List[Path], List[str], List[Path], List[List[str]]]:
     """
     Read the content in a repository.
 
@@ -1030,8 +1091,13 @@ def read_content_in_repo(
 
     Returns:
     -------
-    Tuple[List[str], List[str]]
-        A tuple containing two lists - the nbs content and the py_modules content.
+    Tuple[List[str], List[Path], List[str], List[Path], List[List[str]]]
+        A tuple containing five elements:
+        - List of nbs content
+        - List of existing nb paths
+        - List of py_modules content
+        - List of existing py paths
+        - List of cell types lists
     """
     if interactive_notebook and not print_as_list:
         raise ValueError(
@@ -1039,7 +1105,12 @@ def read_content_in_repo(
         )
     if print_as_list:
         previous_text = "expected_nbs = "
-    nbs, existing_nb_paths = read_nbs_in_repo(
+
+    nb_paths_was_none = nb_paths is None
+    if nb_paths is not None and not isinstance(nb_paths, list):
+        nb_paths = [nb_paths]
+
+    nbs, existing_nb_paths, populated_nb_paths = read_nbs_in_repo(
         nb_paths=nb_paths,
         new_root=new_root,
         nbm_folder=nbm_folder,
@@ -1052,6 +1123,12 @@ def read_content_in_repo(
     )
     if print_as_list:
         print(f"existing_nb_paths={existing_nb_paths}")
+    if (
+        nb_paths_was_none
+        and populated_nb_paths is not None
+        and len(populated_nb_paths) > 0
+    ):
+        nb_paths = populated_nb_paths
 
     if print_as_list:
         previous_text = "expected_py_modules = "
@@ -1083,7 +1160,7 @@ def read_content_in_repo(
         else []
     )
 
-    return nbs, existing_nb_paths, py_modules, existing_py_paths, cell_types_lists
+    return nbs, existing_nb_paths, py_modules, existing_py_paths, cell_types_lists  # type: ignore
 
 
 # %% ../nbs/test_utils.ipynb 61
@@ -1397,7 +1474,7 @@ def check_nbs(
         If the actual notebooks do not match the expected notebooks.
 
     """
-    actual, _ = read_nbs_in_repo(
+    actual, _, _ = read_nbs_in_repo(
         nb_paths,
         new_root,
         nbm_folder=nbm_folder,
@@ -1627,7 +1704,7 @@ def create_test_content(
             full_nb_path.parent.mkdir(parents=True, exist_ok=True)
             write_nb(nb, full_nb_path)
     else:
-        nb_paths= []
+        nb_paths = []
 
     if py_modules is not None:
         py_modules = [py_modules] if isinstance(py_modules, str) else py_modules
