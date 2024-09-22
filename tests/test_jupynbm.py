@@ -243,6 +243,8 @@ current_root, nb_paths = tst.create_test_content(
 # %%
 jnbm.parse_argv_and_run_jupynbm([])
 
+x = tst.read_content_in_repo()
+
 # %%
 nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
 tst.check_test_repo_content(
@@ -275,7 +277,7 @@ tst.check_test_repo_content(
 
 # %%
 py_modules_after_jupynbm_after_udpate = [
-    x.replace("@%%", "%%") for x in tst.multiple_updated_py_modules
+    x.replace("@%%", "%%") for x in tst.py_modules_after_jupynbm_after_udpate
 ]
 new_root = "test_nbmjupy"
 nb_folder = "nbm"
@@ -293,4 +295,20 @@ current_root, nb_paths = tst.create_test_content(
     cell_types_paths=tst.cell_types_paths_after_jupynbm,  # type: ignore
     cell_types_folder="",
     new_root=new_root,
+)
+
+# %%
+jnbm.parse_argv_and_run_nbmjupy([])
+
+# %%
+nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
+tst.check_test_repo_content(
+    # nb_paths,
+    nb_paths=nb_paths,
+    expected_nbs=tst.nbs_after_jupynbm,
+    expected_py_modules=tst.py_modules_after_jupynbm,
+    current_root=current_root,
+    new_root=new_root,
+    clean=True,
+    keep_cwd=False,
 )

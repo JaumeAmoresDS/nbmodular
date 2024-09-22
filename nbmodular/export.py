@@ -26,6 +26,7 @@ import os
 import ast
 from pathlib import Path
 import logging
+from holidays import TR
 import joblib
 import warnings
 from typing import List
@@ -315,6 +316,26 @@ class NbMagicProcessor(Processor):
 
 
 # %% ../nbs/export.ipynb 33
+def is_jupytext_header(text: str) -> bool:
+    """Determine if the jupytext header has been written at beginning of notebook."""
+    lines = text.split("\n")
+    detected_starting_comment = False
+    detected_jupyter_header = False
+    in_jupyter_section = False
+
+    for i, line in enumerate(lines):
+        if line.strip() == "# ---" and not detected_starting_comment:
+            detected_starting_comment = True
+        if line.strip() == "# jupyter:" and detected_starting_comment:
+            in_jupyter_section = True
+            continue
+        if line.strip() == "# ---" and in_jupyter_section:
+            detected_jupyter_header = True
+            break
+
+    return detected_jupyter_header
+
+
 class NbMagicExporter(Processor):
     """
     Processor class for exporting notebooks with magic commands.
@@ -391,6 +412,8 @@ class NbMagicExporter(Processor):
         # other
         self.tab_size = tab_size
 
+        self.in_first_cell = True
+
     def cell(self, cell):
         """
         Process a cell.
@@ -400,9 +423,20 @@ class NbMagicExporter(Processor):
         cell : nbdev.NbCell
             The cell to process.
         """
+
+        # Filter specific for jupytext translated notebooks
+        if self.in_first_cell:
+            self.in_first_cell = False
+            if cell.cell_type == "code" and is_jupytext_header(cell.source):
+                nb = self.nb.copy()
+                nb.cells = self.nb.cells[1:]
+                write_nb(nb, self.path)
+                return
+
         source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
         is_test = False
         cell_type = "original"
+
         if len(source_lines) > 0 and source_lines[0].strip().startswith("%%"):
             line = source_lines[0]
             source = "\n".join(source_lines[1:])

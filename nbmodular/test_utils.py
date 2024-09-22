@@ -494,19 +494,6 @@ print ('bye')
 nbs_after_jupynbm = [
     # nbm/first_folder/first.ipynb
     """
-[code]
-# ---
-# jupyter:
-#   jupytext:
-#     comment_magics: false
-#     formats: ipynb,py:percent
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#       jupytext_version: 1.16.3
-# ---
-
 [markdown]
 # First notebook
 
@@ -571,19 +558,6 @@ def one_plus_one():
 """,
     # nbm/second_folder/second.ipynb
     """
-[code]
-# ---
-# jupyter:
-#   jupytext:
-#     comment_magics: false
-#     formats: ipynb,py:percent
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#       jupytext_version: 1.16.2
-# ---
-
 [markdown]
 # Second notebook
 
@@ -598,19 +572,6 @@ print (a)
 """,
     # nbs/second_folder/second.ipynb
     """
-[code]
-# ---
-# jupyter:
-#   jupytext:
-#     comment_magics: false
-#     formats: ipynb,py:percent
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#       jupytext_version: 1.16.2
-# ---
-
 [markdown]
 # Second notebook
 
@@ -708,19 +669,6 @@ cell_types_paths_after_jupynbm = [
 nbs_after_jupynbm_after_running = [
     # nbm/first_folder/first.ipynb
     """
-[code]
-# ---
-# jupyter:
-#   jupytext:
-#     comment_magics: false
-#     formats: ipynb,py:percent
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#       jupytext_version: 1.16.3
-# ---
-
 [markdown]
 # First notebook
 
@@ -739,19 +687,6 @@ print (a)
 """,
     # nbs/first_folder/first.ipynb
     """
-[code]
-# ---
-# jupyter:
-#   jupytext:
-#     comment_magics: false
-#     formats: ipynb,py:percent
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#       jupytext_version: 1.16.3
-# ---
-
 [markdown]
 # First notebook
 
@@ -789,19 +724,6 @@ def one_plus_one():
 """,
     # nbm/second_folder/second.ipynb
     """
-[code]
-# ---
-# jupyter:
-#   jupytext:
-#     comment_magics: false
-#     formats: ipynb,py:percent
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#       jupytext_version: 1.16.2
-# ---
-
 [markdown]
 # Second notebook
 
@@ -816,19 +738,6 @@ print (a)
 """,
     # nbs/second_folder/second.ipynb
     """
-[code]
-# ---
-# jupyter:
-#   jupytext:
-#     comment_magics: false
-#     formats: ipynb,py:percent
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#       jupytext_version: 1.16.2
-# ---
-
 [markdown]
 # Second notebook
 

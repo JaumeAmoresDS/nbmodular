@@ -31,6 +31,104 @@ from .utils import create_or_get_logger, get_config
 
 
 # %%
+# Standard
+import os
+from pathlib import Path
+import logging
+
+# 3rd party
+from nbdev.processors import Processor, NBProcessor
+from execnb.nbio import read_nb, write_nb
+
+
+def is_jupytext_header(text: str) -> bool:
+    """Determine if the jupytext header has been written at beginning of notebook."""
+    lines = text.split("\n")
+    detected_starting_comment = False
+    detected_jupyter_header = False
+    in_jupyter_section = False
+
+    for i, line in enumerate(lines):
+        if line.strip() == "# ---" and not detected_starting_comment:
+            detected_starting_comment = True
+        if line.strip() == "# jupyter:" and detected_starting_comment:
+            in_jupyter_section = True
+            continue
+        if line.strip() == "# ---" and in_jupyter_section:
+            detected_jupyter_header = True
+            break
+
+    return detected_jupyter_header
+
+
+class NbFilterer(Processor):
+    """
+    Processor class for exporting notebooks with magic commands.
+
+    Parameters:
+    ----------
+    path : str
+        The path to the notebook file.
+    nb : fastcore.basics.AttrDict, optional
+        The notebook object. If not provided, it will be read from the file specified by `path`.
+    code_cells_file_name : str, optional
+        The name of the file to store the code cells. If not provided, it will be set to the file name without extension.
+    code_cells_path : str, optional
+        The path to the directory where the code cells file will be stored. Default is ".nbmodular".
+    execute : bool, optional
+        Flag indicating whether to execute the notebook before exporting. Default is True.
+    logger : logging.Logger, optional
+        The logger object to use for logging. If not provided, a new logger will be created.
+    log_level : str, optional
+        The log level for the logger. Default is "INFO".
+    tab_size : int, optional
+        The number of spaces to use for indentation. Default is 4.
+    """
+
+    def __init__(
+        self,
+        path,
+        nb=None,
+    ):
+        nb = read_nb(path) if nb is None else nb
+        self.path = path
+        super().__init__(nb)
+        self.in_first_cell = True
+
+    def cell(self, cell):
+        """
+        Process a cell.
+
+        Parameters:
+        ----------
+        cell : nbdev.NbCell
+            The cell to process.
+        """
+
+        # Filter specific for jupytext translated notebooks
+        if self.in_first_cell:
+            self.in_first_cell = False
+            if cell.cell_type == "code" and is_jupytext_header(cell.source):
+                nb = self.nb.copy()
+                nb.cells = self.nb.cells[1:]
+                write_nb(nb, self.path)
+
+
+def nbm_filtering(
+    path,
+    **kwargs,
+):
+    """ """
+    path = Path(path)
+    nb = read_nb(path)
+    processor = NbFilterer(
+        path,
+        nb=nb,
+        **kwargs,
+    )
+    NBProcessor(path, processor, rm_directives=False, nb=nb).process()
+
+
 def update_jupytext_notebooks(jupytext_path: str, extension: str) -> None:
     """update the notebooks in jupytext_path"""
     for root, dirs, files in os.walk(jupytext_path):
@@ -42,6 +140,9 @@ def update_jupytext_notebooks(jupytext_path: str, extension: str) -> None:
         jupytext(
             f"--set-formats ipynb,py:percent --format-options comment_magics=false *{extension}".split()
         )
+        # nb_paths = glob.glob ("*.ipynb")
+        # for nb_path in nb_paths:
+        #     nbm_filtering (nb_path)
         os.chdir(current_path)
 
 
