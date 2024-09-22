@@ -941,7 +941,14 @@ def parse_nb_sections(nb):
                     content[: output_match.start()],
                     output_match.group(1),
                 )
-                kwargs["outputs"] = [output]  # type: ignore
+                kwargs["outputs"] = [
+                    {
+                        "data": {"text/plain": [output]},
+                        "execution_count": None,
+                        "metadata": {},
+                        "output_type": "execute_result",
+                    }
+                ]  # type: ignore
             else:
                 kwargs["outputs"] = []  # type: ignore
             kwargs["execution_count"] = 0  # type: ignore
@@ -984,6 +991,7 @@ def nb2text(nb: dict) -> str:
             and "text/plain" in cell["outputs"][0]["data"]
         ):
             output = "".join(cell["outputs"][0]["data"]["text/plain"])
+            output = output.strip()
             output_cells.append(
                 f"[{cell['cell_type']}]\n{cell['source']}\n<output>\n{output}"
             )
