@@ -259,6 +259,15 @@ tst.check_test_repo_content(
 )
 
 
+# %%
+x = tst.read_pymodules_in_repo (
+    nb_paths=["first_folder/first.ipynb", "second_folder/second.ipynb"], 
+    new_root=".", 
+    lib_folder=jupy_folder, 
+    print_as_list=True, 
+    display=True
+)
+
 # %% [markdown]
 # #### Example usage
 
@@ -296,6 +305,18 @@ current_root, nb_paths = tst.create_test_content(
     cell_types_folder="",
     new_root=new_root,
 )
+
+new_root = "."
+nb_folder = "nbm"
+jupy_folder = "nbm_py"
+jupy_nb_paths = ["first_folder/first.py", "second_folder/second.py"]
+current_root, nb_paths = tst.create_test_content(
+    py_modules=[tst.jupy1, tst.jupy2],
+    py_paths=jupy_nb_paths,
+    lib_folder=jupy_folder,
+    new_root=new_root,
+)
+
 
 # %%
 jnbm.parse_argv_and_run_nbmjupy([])

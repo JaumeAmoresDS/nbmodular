@@ -140,9 +140,9 @@ def update_jupytext_notebooks(jupytext_path: str, extension: str) -> None:
         jupytext(
             f"--set-formats ipynb,py:percent --format-options comment_magics=false *{extension}".split()
         )
-        # nb_paths = glob.glob ("*.ipynb")
-        # for nb_path in nb_paths:
-        #     nbm_filtering (nb_path)
+        nb_paths = glob.glob("*.ipynb")
+        for nb_path in nb_paths:
+            nbm_filtering(nb_path)
         os.chdir(current_path)
 
 

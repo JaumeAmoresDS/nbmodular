@@ -2,12 +2,13 @@
 # jupyter:
 #   jupytext:
 #     cell_metadata_filter: -all
-#     formats: ipynb,py:light
+#     comment_magics: false
+#     formats: ipynb,py:percent
 #     text_representation:
 #       extension: .py
-#       format_name: light
-#       format_version: '1.5'
-#       jupytext_version: 1.16.3
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.2
 # ---
 
-
+# %%

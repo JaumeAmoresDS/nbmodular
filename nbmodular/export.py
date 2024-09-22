@@ -425,13 +425,13 @@ class NbMagicExporter(Processor):
         """
 
         # Filter specific for jupytext translated notebooks
-        if self.in_first_cell:
-            self.in_first_cell = False
-            if cell.cell_type == "code" and is_jupytext_header(cell.source):
-                nb = self.nb.copy()
-                nb.cells = self.nb.cells[1:]
-                write_nb(nb, self.path)
-                return
+        # if self.in_first_cell:
+        #     self.in_first_cell = False
+        #     if cell.cell_type == "code" and is_jupytext_header(cell.source):
+        #         nb = self.nb.copy()
+        #         nb.cells = self.nb.cells[1:]
+        #         write_nb(nb, self.path)
+        #         return
 
         source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
         is_test = False

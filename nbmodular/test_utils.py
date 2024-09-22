@@ -508,19 +508,6 @@ print (a)
 """,
     # nbs/first_folder/first.ipynb
     """
-[code]
-# ---
-# jupyter:
-#   jupytext:
-#     comment_magics: false
-#     formats: ipynb,py:percent
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#       jupytext_version: 1.16.3
-# ---
-
 [markdown]
 # First notebook
 
@@ -1767,7 +1754,8 @@ def create_and_cd_to_new_root_folder(
     config_path = Path(config_path)
     root_folder = Path(root_folder).absolute()
     root_folder.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(config_path, root_folder / config_path.name)
+    if not config_path.samefile (root_folder / config_path.name):
+        shutil.copyfile(config_path, root_folder / config_path.name)
     os.chdir(root_folder)
 
     return root_folder
