@@ -25,8 +25,6 @@ import shlex
 import os
 import ast
 from pathlib import Path
-import logging
-from holidays import TR
 import joblib
 import warnings
 from typing import List
@@ -684,6 +682,8 @@ def nbm_update(
         nb_processor.tmp_test_dest_nb_path.rename(nb_processor.test_dest_nb_path)
 
     # step 5 in diagram: nbdev_update
+    # import pdb
+    # pdb.set_trace()
     if nb_processor.dest_python_path.exists():
         _update_mod(
             nb_processor.dest_python_path,

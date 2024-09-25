@@ -450,14 +450,14 @@ jupy1 = """
 #       jupytext_version: 1.16.3
 # ---
 
-# %% [markdown]
+# @%% [markdown]
 # # First notebook
 
-# %%
+# @%%
 %%function hello
 print ('hello')
 
-# %%
+# @%%
 %%function one_plus_one --test
 a=1+1
 print (a)
@@ -477,14 +477,14 @@ jupy2 = """
 #       jupytext_version: 1.16.2
 # ---
 
-# %% [markdown]
+# @%% [markdown]
 # # Second notebook
 
-# %%
+# @%%
 %%function bye
 print ('bye')
 
-# %% [markdown]
+# @%% [markdown]
 # %%function two_plus_two --test
 # a=2+2
 # print (a)
@@ -644,8 +644,8 @@ py_paths_after_jupynbm = [
     Path("nbmodular/second_folder/second.py"),
 ]
 cell_types_lists_after_jupynbm = [
-    ["original", "original", "code", "test"],
-    ["original", "original", "code", "original"],
+    ["original", "code", "test"],
+    ["original", "code", "original"],
 ]
 cell_types_paths_after_jupynbm = [
     Path(".nbmodular/first_folder/cell_types_first.pk"),
@@ -1592,6 +1592,10 @@ def check_nbs(
 
 
 # %% ../nbs/test_utils.ipynb 94
+def convert_py_modules_to_original_format(expected: List[str]) -> List[str]:
+    return [x.replace("@%%", "%%") for x in expected]
+
+
 def check_py_modules(
     nb_paths: List[str],  # type: ignore
     expected: List[str],
@@ -1628,7 +1632,7 @@ def check_py_modules(
         interactive_notebook=interactive_notebook,
     )
     if convert_expected:
-        expected = [x.replace("@%%", "%%") for x in expected]
+        expected = convert_py_modules_to_original_format(expected)
     assert compare_texts(actual, expected)
 
 
@@ -1754,8 +1758,9 @@ def create_and_cd_to_new_root_folder(
     config_path = Path(config_path)
     root_folder = Path(root_folder).absolute()
     root_folder.mkdir(parents=True, exist_ok=True)
-    if not config_path.samefile (root_folder / config_path.name):
-        shutil.copyfile(config_path, root_folder / config_path.name)
+    dst_file = root_folder / config_path.name
+    if not dst_file.exists() or not config_path.samefile(dst_file):
+        shutil.copyfile(config_path, dst_file)
     os.chdir(root_folder)
 
     return root_folder
@@ -1767,6 +1772,7 @@ def create_test_content(
     nb_paths: Optional[List[str] | List[Path] | str | Path] = None,
     nb_folder: str = "nbm",
     py_modules: List[str] | str | None = None,
+    original_py_modules: bool = False,
     py_paths: Optional[List[str] | List[Path] | str | Path] = None,
     lib_folder: Optional[str] = "nbmodular",
     cell_types_lists: List[List[str]] | None = None,
@@ -1816,6 +1822,8 @@ def create_test_content(
 
     if py_modules is not None:
         py_modules = [py_modules] if isinstance(py_modules, str) else py_modules
+        if not original_py_modules:
+            py_modules = convert_py_modules_to_original_format(py_modules)
         if py_paths is None:
             py_paths = [f"f{idx}" for idx in range(len(py_modules))]
         else:
