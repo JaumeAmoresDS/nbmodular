@@ -320,6 +320,16 @@ _, nb_paths = tst.create_test_content(
 # %%
 jnbm.parse_argv_and_run_nbmjupy([])
 
+
+# %%
+x = tst.read_pymodules_in_repo(
+    nb_paths=["first_folder/first.ipynb", "second_folder/second.ipynb"],
+    new_root=".",
+    lib_folder=jupy_folder,
+    print_as_list=True,
+    display=True,
+)
+
 # %%
 nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
 tst.check_test_repo_content(

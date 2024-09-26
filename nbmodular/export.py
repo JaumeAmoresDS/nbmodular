@@ -619,6 +619,29 @@ def nbm_export_cli():
 
 # %% ../nbs/export.ipynb 55
 def process_cell_for_nbm_update(cell: NbCell):
+    """
+    Processes a Jupyter notebook cell to update it for nbmodular.
+    This function checks the source of a notebook cell for specific directives and magic lines.
+    It ensures that the cell contains the required directives and updates the cell's source
+    accordingly. If the required directives or magic lines are not found, it raises an error.
+    Parameters
+    ----------
+    cell : NbCell
+        The notebook cell to be processed. It is expected to have attributes `source` and `cell_type`.
+    Raises
+    ------
+    ValueError
+        If the directive line or magic line is not found in the cell.
+    warnings.warn
+        If a line starting with `#@@` or `# @@` is found with a word that is not in
+        ['function', 'method', 'include', 'class'].
+    Notes
+    -----
+    - The function looks for lines starting with `#|` as directives.
+    - It then expects a line starting with `#@@` or `# @@` to follow the directive.
+    - The function modifies the cell's source by replacing the `#@@` or `# @@` line with a magic line (`%%`).
+    """
+
     source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
     found_directive = False
     found_magic = False
@@ -718,13 +741,16 @@ def nbm_update(
     code_idx, test_idx = 1, 1
     for original_idx, cell_type in enumerate(nb_processor.cell_types):
         cell = None
+        original_cell = original_nb.cells[original_idx]
         if cell_type == "original":
-            cell = original_nb.cells[original_idx]
+            cell = original_cell
         elif cell_type == "code":
             cell = dest_nb.cells[code_idx]
+            cell["outputs"] = original_cell["outputs"]
             code_idx += 1
         elif cell_type == "test":
             cell = test_dest_nb.cells[test_idx]
+            cell["outputs"] = original_cell["outputs"]
             test_idx += 1
         if cell is not None:
             if cell_type in ["code", "test"]:
