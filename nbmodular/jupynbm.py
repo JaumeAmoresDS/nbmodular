@@ -15,9 +15,8 @@ __all__ = [
 import argparse
 from logging import warn
 import sys
-import shutil
 from pathlib import Path
-from typing import List, Tuple
+from typing import Tuple, Optional
 import os
 import glob
 import warnings
@@ -164,10 +163,13 @@ def jupynbm(
     nbm_path: str,
     from_notebook: bool = False,
     restrict_inputs: bool = False,
+    logger_name: str = "nbmodular",
+    log_level: Optional[str] = "INFO",
 ) -> None:
     """
     Export jupytext modules to nbmodular notebooks
     """
+    logger = create_or_get_logger(name=logger_name, log_level=log_level)
     # update the notebooks in jupytext_path: nbm_path => jupytext_path
     sync_nbm_and_jupytext(jupytext_path, nbm_path, extension=".py")
 
@@ -175,6 +177,7 @@ def jupynbm(
     # - the doc files: nbm_path => nbs_path
     # - the py files: nbm_path => lib_path
     if not from_notebook:
+        logger.info("Setting restrict_inputs to True")
         restrict_inputs = True
     nbm_export_all_paths(
         nbm_path, from_notebook=from_notebook, restrict_inputs=restrict_inputs

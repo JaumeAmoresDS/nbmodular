@@ -1153,8 +1153,8 @@ def read_nbs_in_repo(
     use_config_paths: bool = True,
     print_as_list: bool = False,
     display: bool = False,
-    logger: logging.Logger = None,
     logger_name: str = "nbmodular",
+    log_level: Optional[str] = "INFO",
     previous_text: str = "",
     posterior_text: str = "",
 ):
@@ -1187,7 +1187,7 @@ def read_nbs_in_repo(
     content : dict
         Dictionary containing the content of the notebooks.
     """
-    logger = create_or_get_logger(logger_name)
+    logger = create_or_get_logger(name=logger_name, log_level=log_level)
     if use_config_paths:
         config = get_config()
         if nbm_folder is None:
