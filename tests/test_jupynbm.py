@@ -330,13 +330,30 @@ x = tst.read_pymodules_in_repo(
     display=True,
 )
 
+
+# %%
+x = tst.read_content_in_repo()
+
+# %%
+reload(tst)
+
+# %%
+tst.check_py_modules(
+    nb_paths=nb_paths,
+    expected=tst.jupy_after_nbmjupy,
+    new_root=".",
+    lib_folder=jupy_folder,
+    interactive_notebook=True,
+    convert_expected=True,
+)
+
 # %%
 nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
 tst.check_test_repo_content(
     # nb_paths,
     nb_paths=nb_paths,
-    expected_nbs=tst.nbs_after_jupynbm,
-    expected_py_modules=tst.py_modules_after_jupynbm,
+    expected_nbs=tst.nbs_after_nbmjupy,
+    expected_py_modules=tst.py_modules_after_nbmjupy,
     current_root=current_root,
     new_root=new_root,
     clean=True,
