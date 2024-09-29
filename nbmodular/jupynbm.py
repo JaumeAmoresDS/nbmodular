@@ -16,7 +16,7 @@ import argparse
 from logging import warn
 import sys
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import List, Tuple, Optional
 import os
 import glob
 import warnings
@@ -229,6 +229,8 @@ def parse_argv_and_run_jupynbm(argv: List[str]):
 
 
 def jupynbm_export_cli():
+    # import pdb
+    # pdb.set_trace()
     parse_argv_and_run_jupynbm(sys.argv[1:])
 
 

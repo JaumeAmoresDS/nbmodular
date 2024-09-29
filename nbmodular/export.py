@@ -150,6 +150,7 @@ def set_paths_nb_processor(
     nb_processor: "NbMagicExporter | Bunch",
     path: str | Path,
     code_cells_path: str | Path = ".nbmodular",
+    changed_path: str | Path | None = None,
 ) -> None:
     """
     Set the paths for the notebook processor.
@@ -278,14 +279,16 @@ class NbMagicProcessor(Processor):
         log_level="INFO",
         from_notebook=False,
         restrict_inputs=False,
+        api=True,
     ):
         nb = read_nb(path) if nb is None else nb
         super().__init__(nb)
         self.logger = create_or_get_logger(logger_name, log_level)
         self.logger.info(f"Analyzing code from notebook {path}")
         self.cell_processor = CellProcessor(
-            path=path, run=from_notebook, restrict_inputs=restrict_inputs
+            path=path, run=from_notebook, restrict_inputs=restrict_inputs, api=api
         )
+        self.cell_processor.change_file_name = False
         self.cell_processor.set_run_tests(False)
         self.from_notebook = from_notebook
 
@@ -311,6 +314,16 @@ class NbMagicProcessor(Processor):
                     add_call=True,
                     is_class=command == "class",
                 )
+        elif len(source_lines) > 0 and source_lines[0].strip().startswith("%"):
+            line = source_lines[0]
+            source = "\n".join(source_lines[1:])
+            command, remaining_line = line.split()[0]
+            # function_name, kwargs = self.cell_processor.parse_signature(remaining_line)
+            if command == "keep_original":
+                self.cell_processor.api = False
+            elif command == "file_path":
+                self.cell_processor.set_file_path(remaining_line)
+                self.cell_processor.change_file_name = True
 
 
 # %% ../nbs/export.ipynb 33
@@ -370,18 +383,13 @@ class NbMagicExporter(Processor):
         tab_size=4,
         from_notebook=False,
         restrict_inputs=False,
+        api=True,
     ):
         nb = read_nb(path) if nb is None else nb
         super().__init__(nb)
         self.logger = create_or_get_logger(logger_name, log_level)
-        set_paths_nb_processor(self, path, code_cells_path=code_cells_path)
-        code_cells_file_name = (
-            self.file_name_without_extension
-            if code_cells_file_name is None
-            else code_cells_file_name
-        )
 
-        self.logger.info(f"Analyzing code from notebook {self.path}")
+        self.logger.info(f"Analyzing code from notebook {path}")
         self.nb_magic_processor = NbMagicProcessor(
             path,
             nb=nb,
@@ -389,7 +397,24 @@ class NbMagicExporter(Processor):
             log_level=log_level,
             from_notebook=from_notebook,
             restrict_inputs=restrict_inputs,
+            api=api,
         )
+        set_paths_nb_processor(
+            self,
+            path,
+            code_cells_path=code_cells_path,
+            changed_path=(
+                self.nb_magic_processor.file_path
+                if self.nb_magic_processor.change_file_name
+                else None
+            ),
+        )
+        code_cells_file_name = (
+            self.file_name_without_extension
+            if code_cells_file_name is None
+            else code_cells_file_name
+        )
+
         NBProcessor(path, self.nb_magic_processor, rm_directives=False, nb=nb).process()
 
         self.function_names = {}
@@ -434,8 +459,12 @@ class NbMagicExporter(Processor):
         source_lines = cell.source.splitlines() if cell.cell_type == "code" else []
         is_test = False
         cell_type = "original"
-
-        if len(source_lines) > 0 and source_lines[0].strip().startswith("%%"):
+        keep_original_in_documentation = False
+        if (
+            self.nb_magic_processor.api
+            and len(source_lines) > 0
+            and source_lines[0].strip().startswith("%%")
+        ):
             line = source_lines[0]
             source = "\n".join(source_lines[1:])
             to_export = False
@@ -470,7 +499,10 @@ class NbMagicExporter(Processor):
                 code_cell = code_cells[idx]
                 self.logger.debug("code:")
                 self.logger.debug(f"{code_cell.code}valid: {code_cell.valid}")
-                if code_cell.valid:
+                keep_original_in_documentation = (
+                    code_cell.keep_original_in_documentation
+                )
+                if code_cell.valid and code_cell.api:
                     source = code_cell.code
                     to_export = True
             elif line.startswith("%%include") or line.startswith("%%class"):
@@ -491,7 +523,10 @@ class NbMagicExporter(Processor):
                     self.cells.append(new_cell)
                     cell_type = "code"
             else:
-                doc_source = source  # doc_source does not include first line with %% (? to think about)
+                if keep_original_in_documentation:
+                    doc_source = cell.source
+                else:
+                    doc_source = source  # doc_source does not include first line with %% (? to think about)
             if is_test:
                 doc_source = transform_test_source_for_docs(
                     code_cell.code, idx, self.tab_size

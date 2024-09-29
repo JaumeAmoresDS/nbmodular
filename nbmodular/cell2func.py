@@ -252,6 +252,8 @@ class FunctionProcessor(Bunch):
         self.is_class = False
         self.is_pipeline = False
         self.pipeline_name_or_default = None
+        self.api = True
+        self.keep_original_in_documentation = False
         super().__init__(
             **kwargs,
         )
@@ -1808,6 +1810,18 @@ class CellProcessor:
             default=None,
             help="Restrict inputs to those specified.",
         )
+        self.parser.add_argument(
+            "--api",
+            action="store_true",
+            default=None,
+            help="Export the function as a library (API) function.",
+        )
+        self.parser.add_argument(
+            "--keep-original-in-documentation",
+            action="store_true",
+            default=None,
+            help="Keep the original cell text in the documentation.",
+        )
         self.add_opposite_actions()
 
     def add_opposite_actions(self):
@@ -1925,6 +1939,10 @@ except NameError:
             raise ValueError(
                 f"Cell processor has no attribute {attr}. Existing attributes are:\n{list_of_attributes}"
             )
+
+    def set_api (self, value):
+        self.api = value
+        self.default_api = value
 
     def debug_function(
         self, call_history=None, idx=None, name=None, test=False, data=False, **kwargs
@@ -3474,6 +3492,10 @@ class CellProcessorMagic(Magics):
         attr, value = values
         self.processor.set_value(attr, value)
 
+    @line_magic
+    def keep_original(self, line):
+        self.processor.set_api (False)
+    
 
 # %% ../nbs/cell2func.ipynb 74
 def load_ipython_extension(ipython):
