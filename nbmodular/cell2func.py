@@ -1260,6 +1260,8 @@ class CellProcessor:
         test_write=False,
         pipe_name=None,
         restrict_inputs=False,
+        api=True,
+        keep_original_in_documentation=False,
         **kwargs,
     ):
         """
@@ -1360,7 +1362,11 @@ class CellProcessor:
         **kwargs : dict
             Additional keyword arguments.
 
-        Each boolean parameter can be passed as input or by command line. The function `set_function_action_and_io_args` will replace the None default values with either True or False depending on whether `--parameter` or `--not-parameter` was passed in the command line, and depending on `default_parameter` if none of these were passed.
+        Each boolean parameter can be passed as input or by command line. 
+        The function `set_function_action_and_io_args` will replace the None 
+        default values with either True or False depending on whether 
+        `--parameter` or `--not-parameter` was passed in the command line, 
+        and depending on `default_parameter` if none of these were passed.
 
         Examples
         --------
@@ -1400,6 +1406,8 @@ class CellProcessor:
         self.code_cells_path = Path(code_cells_path)
         self.code_cells_path.mkdir(parents=True, exist_ok=True)
 
+        self.api = api # do we need this?
+        self.keep_original_in_documentation = keep_original_in_documentation
         self.restrict_inputs = restrict_inputs
         self.current_function = Bunch()
 
@@ -1538,6 +1546,8 @@ class CellProcessor:
         self.export_always = export_always
 
         self.default_restrict_inputs = self.restrict_inputs
+        self.default_api = self.api
+        self.default_keep_original_in_documentation = self.keep_original_in_documentation
 
         self.parser = argparse.ArgumentParser(
             description="Arguments to `function` magic cell."

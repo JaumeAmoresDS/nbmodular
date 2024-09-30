@@ -1008,6 +1008,97 @@ cell_types_paths_after_nbmjupy = [
     Path(".nbmodular/second_folder/cell_types_second.pk"),
 ]
 
+py_modules_real_example = [
+# jupy/00_core.py
+"""
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.3
+#   kernelspec:
+#     display_name: python3
+#     language: python
+#     name: python3
+# ---
+
+# @%% [markdown]
+# # core
+#
+# > Fill in a module description here
+
+# @%%
+%load_ext nbmodular.cell2func
+
+# @%%
+@%%function
+def foo(): 
+    pass
+
+""",
+# jupy/index.py
+"""
+# ---
+# jupyter:
+#   jupytext:
+#     comment_magics: false
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.16.3
+#   kernelspec:
+#     display_name: python3
+#     language: python
+#     name: python3
+# ---
+
+# @%% [markdown]
+# # test_nbmodular
+#
+# > Testing the use of nbmodular on new repo
+
+# @%% [markdown]
+# Load ipython extension:
+
+# @%%
+%load_ext nbmodular.cell2func
+
+# @%%
+#| hide
+%set file_name "demo.py"
+
+# @%%
+@%%function two_plus_three
+def two_plus_three():
+    a = 2
+    b = 3
+    c = a+b
+    print (f'The result of adding {a}+{b} is {c}')
+
+
+# @%%
+(a, b, c)
+
+# @%%
+two_plus_three?
+
+# @%% [markdown]
+# Small update
+
+# @%% [markdown]
+#
+
+"""
+]
+existing_py_paths_real_example=[Path('00_core.py'), Path('index.py')]
+
 
 # %% ../nbs/test_utils.ipynb 22
 def convert_nested_nb_cells_to_dicts(dict_like_with_nbcells: dict) -> dict:

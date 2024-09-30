@@ -361,3 +361,33 @@ tst.check_test_repo_content(
 )
 
 # %%
+reload(tst)
+new_root = "test_jupynbm_real"
+nb_folder = "nbm"
+jupy_folder = "jupy"
+jupy_nb_paths = tst.existing_py_paths_real_example
+current_root, nb_paths = tst.create_test_content(
+    py_modules=tst.py_modules_real_example,
+    py_paths=jupy_nb_paths,
+    lib_folder=jupy_folder,
+    new_root=new_root,
+)
+
+
+# %%
+jnbm.parse_argv_and_run_jupynbm([])
+
+x = tst.read_content_in_repo()
+
+# %%
+# nb_paths = ["first_folder/first.ipynb", "second_folder/second.ipynb"]
+# tst.check_test_repo_content(
+#     # nb_paths,
+#     nb_paths=nb_paths,
+#     expected_nbs=tst.nbs_after_jupynbm,
+#     expected_py_modules=tst.py_modules_after_jupynbm,
+#     current_root=current_root,
+#     new_root=new_root,
+#     clean=True,
+#     keep_cwd=False,
+# )

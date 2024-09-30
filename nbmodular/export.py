@@ -315,9 +315,9 @@ class NbMagicProcessor(Processor):
                     is_class=command == "class",
                 )
         elif len(source_lines) > 0 and source_lines[0].strip().startswith("%"):
-            line = source_lines[0]
-            source = "\n".join(source_lines[1:])
-            command, remaining_line = line.split()[0]
+            line = source_lines[0].strip()[1:]
+            #source = "\n".join(source_lines[1:])
+            command, remaining_line = line.split()
             # function_name, kwargs = self.cell_processor.parse_signature(remaining_line)
             if command == "keep_original":
                 self.cell_processor.api = False
@@ -404,8 +404,8 @@ class NbMagicExporter(Processor):
             path,
             code_cells_path=code_cells_path,
             changed_path=(
-                self.nb_magic_processor.file_path
-                if self.nb_magic_processor.change_file_name
+                self.nb_magic_processor.cell_processor.file_path
+                if self.nb_magic_processor.cell_processor.change_file_name
                 else None
             ),
         )
@@ -461,7 +461,7 @@ class NbMagicExporter(Processor):
         cell_type = "original"
         keep_original_in_documentation = False
         if (
-            self.nb_magic_processor.api
+            self.nb_magic_processor.cell_processor.api
             and len(source_lines) > 0
             and source_lines[0].strip().startswith("%%")
         ):
@@ -499,9 +499,9 @@ class NbMagicExporter(Processor):
                 code_cell = code_cells[idx]
                 self.logger.debug("code:")
                 self.logger.debug(f"{code_cell.code}valid: {code_cell.valid}")
-                keep_original_in_documentation = (
-                    code_cell.keep_original_in_documentation
-                )
+                # keep_original_in_documentation = (
+                #     code_cell.keep_original_in_documentation
+                # )
                 if code_cell.valid and code_cell.api:
                     source = code_cell.code
                     to_export = True
@@ -523,16 +523,24 @@ class NbMagicExporter(Processor):
                     self.cells.append(new_cell)
                     cell_type = "code"
             else:
-                if keep_original_in_documentation:
-                    doc_source = cell.source
-                else:
-                    doc_source = source  # doc_source does not include first line with %% (? to think about)
+                # if keep_original_in_documentation:
+                #     doc_source = cell.source
+                # else:
+                #     doc_source = source  # doc_source does not include first line with %% (? to think about)
+                doc_source = source  # doc_source does not include first line with %% (? to think about)
             if is_test:
                 doc_source = transform_test_source_for_docs(
                     code_cell.code, idx, self.tab_size
                 )
             cell["source"] = doc_source
             self.doc_cells.append(cell)
+        elif (
+            self.nb_magic_processor.cell_processor.api
+            and len(source_lines) > 0
+            and source_lines[0].strip().startswith("%")
+            and "--keep" in source_lines[0].strip()
+        ):
+            self.nb_magic_processor.cell_processor.code_cells.append (cell)
 
         self.cell_types.append(cell_type)
 
