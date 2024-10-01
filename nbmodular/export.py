@@ -36,6 +36,7 @@ import argparse
 import sys
 
 # 3rd party
+from matplotlib.pylab import f
 from sklearn.utils import Bunch
 from nbdev.processors import Processor, NBProcessor
 from nbdev.export import nb_export
@@ -315,8 +316,13 @@ class NbMagicProcessor(Processor):
                     is_class=command == "class",
                 )
         elif len(source_lines) > 0 and source_lines[0].strip().startswith("%"):
+            # We process here those cells that start with a line magic command.
+            # Those are not processed when calling self.cell_processor.process_function_call
+            # And they *usually* affect the whole cell_processor, not just one of its functions
+            # Therefore, they are used here to update the state of self.cell_processor
+            # By adding / modifying attributes modified by these line magics.
             line = source_lines[0].strip()[1:]
-            #source = "\n".join(source_lines[1:])
+            # source = "\n".join(source_lines[1:])
             command, remaining_line = line.split()
             # function_name, kwargs = self.cell_processor.parse_signature(remaining_line)
             if command == "keep_original":
@@ -487,10 +493,16 @@ class NbMagicExporter(Processor):
                     if is_test
                     else self.nb_magic_processor.cell_processor.code_cells
                 )
+                function_info = (
+                    self.nb_magic_processor.cell_processor.function_info
+                    if is_test
+                    else self.nb_magic_processor.cell_processor.function_info
+                )
                 if function_name not in code_cells:
                     raise RuntimeError(
                         f"Function {function_name} not found in code_cells dictionary with keys {code_cells.keys()}"
                     )
+                function_info = function_info[function_name]
                 code_cells = code_cells[function_name]
                 if len(code_cells) <= idx:
                     raise RuntimeError(
@@ -498,11 +510,14 @@ class NbMagicExporter(Processor):
                     )
                 code_cell = code_cells[idx]
                 self.logger.debug("code:")
+                # should we use code_cell for storing valid flag, or function_info?
+                # (this depends on whether the valid flag needs to be saved as part
+                # of the pickle file for code_cells)
                 self.logger.debug(f"{code_cell.code}valid: {code_cell.valid}")
-                # keep_original_in_documentation = (
-                #     code_cell.keep_original_in_documentation
-                # )
-                if code_cell.valid and code_cell.api:
+                keep_original_in_documentation = (
+                    function_info.keep_original_in_documentation
+                )
+                if code_cell.valid and function_info.api:
                     source = code_cell.code
                     to_export = True
             elif line.startswith("%%include") or line.startswith("%%class"):
@@ -523,11 +538,11 @@ class NbMagicExporter(Processor):
                     self.cells.append(new_cell)
                     cell_type = "code"
             else:
-                # if keep_original_in_documentation:
-                #     doc_source = cell.source
-                # else:
-                #     doc_source = source  # doc_source does not include first line with %% (? to think about)
-                doc_source = source  # doc_source does not include first line with %% (? to think about)
+                if keep_original_in_documentation:
+                    doc_source = cell.source
+                else:
+                    doc_source = source  # doc_source does not include first line with %% (? to think about)
+                # doc_source = source  # doc_source does not include first line with %% (? to think about)
             if is_test:
                 doc_source = transform_test_source_for_docs(
                     code_cell.code, idx, self.tab_size
@@ -540,7 +555,7 @@ class NbMagicExporter(Processor):
             and source_lines[0].strip().startswith("%")
             and "--keep" in source_lines[0].strip()
         ):
-            self.nb_magic_processor.cell_processor.code_cells.append (cell)
+            self.nb_magic_processor.cell_processor.code_cells.append(cell)
 
         self.cell_types.append(cell_type)
 

@@ -252,8 +252,8 @@ class FunctionProcessor(Bunch):
         self.is_class = False
         self.is_pipeline = False
         self.pipeline_name_or_default = None
-        self.api = True
-        self.keep_original_in_documentation = False
+        # self.api = True
+        # self.keep_original_in_documentation = False
         super().__init__(
             **kwargs,
         )
@@ -1362,10 +1362,10 @@ class CellProcessor:
         **kwargs : dict
             Additional keyword arguments.
 
-        Each boolean parameter can be passed as input or by command line. 
-        The function `set_function_action_and_io_args` will replace the None 
-        default values with either True or False depending on whether 
-        `--parameter` or `--not-parameter` was passed in the command line, 
+        Each boolean parameter can be passed as input or by command line.
+        The function `set_function_action_and_io_args` will replace the None
+        default values with either True or False depending on whether
+        `--parameter` or `--not-parameter` was passed in the command line,
         and depending on `default_parameter` if none of these were passed.
 
         Examples
@@ -1406,7 +1406,7 @@ class CellProcessor:
         self.code_cells_path = Path(code_cells_path)
         self.code_cells_path.mkdir(parents=True, exist_ok=True)
 
-        self.api = api # do we need this?
+        self.api = api  # do we need this?
         self.keep_original_in_documentation = keep_original_in_documentation
         self.restrict_inputs = restrict_inputs
         self.current_function = Bunch()
@@ -1547,7 +1547,9 @@ class CellProcessor:
 
         self.default_restrict_inputs = self.restrict_inputs
         self.default_api = self.api
-        self.default_keep_original_in_documentation = self.keep_original_in_documentation
+        self.default_keep_original_in_documentation = (
+            self.keep_original_in_documentation
+        )
 
         self.parser = argparse.ArgumentParser(
             description="Arguments to `function` magic cell."
@@ -1950,7 +1952,7 @@ except NameError:
                 f"Cell processor has no attribute {attr}. Existing attributes are:\n{list_of_attributes}"
             )
 
-    def set_api (self, value):
+    def set_api(self, value):
         self.api = value
         self.default_api = value
 
@@ -3504,8 +3506,8 @@ class CellProcessorMagic(Magics):
 
     @line_magic
     def keep_original(self, line):
-        self.processor.set_api (False)
-    
+        self.processor.set_api(False)
+
 
 # %% ../nbs/cell2func.ipynb 74
 def load_ipython_extension(ipython):
