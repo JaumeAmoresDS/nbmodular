@@ -280,14 +280,21 @@ class NbMagicProcessor(Processor):
         log_level="INFO",
         from_notebook=False,
         restrict_inputs=False,
-        api=True,
+        include_magic=False,
+        include_in_code=True,
+        include_in_docs=True,
     ):
         nb = read_nb(path) if nb is None else nb
         super().__init__(nb)
         self.logger = create_or_get_logger(logger_name, log_level)
         self.logger.info(f"Analyzing code from notebook {path}")
         self.cell_processor = CellProcessor(
-            path=path, run=from_notebook, restrict_inputs=restrict_inputs, api=api
+            path=path,
+            run=from_notebook,
+            restrict_inputs=restrict_inputs,
+            include_magic=include_magic,
+            include_in_code=include_in_code,
+            include_in_docs=include_in_docs,
         )
         self.cell_processor.change_file_name = False
         self.cell_processor.set_run_tests(False)

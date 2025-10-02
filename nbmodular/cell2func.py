@@ -1260,8 +1260,9 @@ class CellProcessor:
         test_write=False,
         pipe_name=None,
         restrict_inputs=False,
-        api=True,
-        keep_original_in_documentation=False,
+        include_magic=False,
+        include_in_code=True,
+        include_in_docs=True,
         **kwargs,
     ):
         """
@@ -1406,8 +1407,11 @@ class CellProcessor:
         self.code_cells_path = Path(code_cells_path)
         self.code_cells_path.mkdir(parents=True, exist_ok=True)
 
-        self.api = api  # do we need this?
-        self.keep_original_in_documentation = keep_original_in_documentation
+        # do we need this?
+        self.include_magic = include_magic
+        self.include_in_code = include_in_code
+        self.include_in_docs = include_in_docs
+
         self.restrict_inputs = restrict_inputs
         self.current_function = Bunch()
 
@@ -1546,10 +1550,9 @@ class CellProcessor:
         self.export_always = export_always
 
         self.default_restrict_inputs = self.restrict_inputs
-        self.default_api = self.api
-        self.default_keep_original_in_documentation = (
-            self.keep_original_in_documentation
-        )
+        self.default_include_magic = include_magic
+        self.default_include_in_code = include_in_code
+        self.default_include_in_docs = include_in_docs
 
         self.parser = argparse.ArgumentParser(
             description="Arguments to `function` magic cell."
