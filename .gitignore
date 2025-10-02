@@ -167,7 +167,6 @@ nbmodular/tutorials/__init__.py
 nbs/*.pk
 nbs/*/*.pk
 *.pk
-tests
 
 locals/
 nbmodular/dest/
@@ -195,3 +194,4 @@ nbs/test_structured/
 results/
 .nbs/
 nbs/test_nbs
+other
